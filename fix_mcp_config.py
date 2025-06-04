@@ -5,6 +5,7 @@ Script to properly format and fix the MCP server configuration
 
 import json
 from pathlib import Path
+import os
 
 def fix_mcp_config():
     """Fix and properly format the MCP server configuration"""
@@ -20,7 +21,7 @@ def fix_mcp_config():
         {
             "name": "supabase", 
             "command": "npx",
-            "args": ["-y", "@supabase/mcp-server-supabase@latest", "--access-token", "sbp_0ca16d22bd617b07b50e4eb99a2059deeec14c56"],
+            "args": ["-y", "@supabase/mcp-server-supabase@latest", "--access-token", ""],
             "disabled": False
         },
         {
@@ -28,14 +29,14 @@ def fix_mcp_config():
             "command": "npx", 
             "args": ["-y", "@modelcontextprotocol/server-github"],
             "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "***REMOVED***"
+                "GITHUB_PERSONAL_ACCESS_TOKEN": os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
             },
             "disabled": False
         },
         {
             "name": "21st_dev_magic",
             "command": "npx",
-            "args": ["-y", "@21st-dev/magic@latest", "API_KEY=\"918a77a5a110cffce131d3b1c671032a210c59e664b5472cbf08cf0c9cd82613\""],
+            "args": ["-y", "@21st-dev/magic@latest", "API_KEY="],
             "disabled": False
         },
         {
