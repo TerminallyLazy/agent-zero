@@ -690,12 +690,14 @@ class MCPConfig(BaseModel):
                             tool_args += f'            "{key}": "...",\n'
                             examples = ""
                             description = ""
+                            # Get the type, defaulting to "any" if not specified
+                            param_type = value.get('type', 'any')
                             if "examples" in value:
                                 examples = f"(examples: {value['examples']})"
                             if "description" in value:
                                 description = f": {value['description']}"
                             prompt += (
-                                f" * {key} ({value['type']}){description} {examples}\n"
+                                f" * {key} ({param_type}){description} {examples}\n"
                             )
                         prompt += "\n"
 
