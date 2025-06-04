@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="css/settings.css">
     <link rel="stylesheet" href="css/file_browser.css">
     <link rel="stylesheet" href="css/modals.css">
-    <link rel="stylesheet" href="css/modals2.css">
     <link rel="stylesheet" href="css/speech.css">
     <link rel="stylesheet" href="css/history.css">
     <link rel="stylesheet" href="css/scheduler-datepicker.css">
@@ -105,8 +104,7 @@
 
     <!-- Then load Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.3/dist/cdn.min.js"></script>
-    <!-- <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script> -->
-    <script type="module" src="js/initFw.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.36.5/src-noconflict/ace.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/ace-builds@1.36.5/css/ace.min.css" rel="stylesheet">
@@ -125,7 +123,7 @@
     <script type="text/javascript" src="js/tunnel.js"></script>
 </head>
 
-<body class="dark-mode">
+<body>
     <div class="container">
         <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
         <div class="icons-section" id="hide-button" x-data="{ connected: true }">
@@ -586,10 +584,6 @@
                                      @click="switchTab('external')"
                                      title="External Services">External Services</div>
                                 <div class="settings-tab"
-                                     :class="{'active': activeTab === 'mcp'}"
-                                     @click="switchTab('mcp')"
-                                     title="MCP">MCP</div>
-                                <div class="settings-tab"
                                      :class="{'active': activeTab === 'developer'}"
                                      @click="switchTab('developer')"
                                      title="Developer">Developer</div>
@@ -628,7 +622,7 @@
                                     <div class="section-title" x-text="section.title"></div>
                                     <div class="section-description" x-html="section.description"></div>
 
-                                    <template x-for="(field, fieldIndex) in section.fields.filter(f => !f.hidden)" :key="fieldIndex">
+                                    <template x-for="(field, fieldIndex) in section.fields" :key="fieldIndex">
                                         <div :class="{'field': true, 'field-full': field.type === 'textarea'}">
                                             <div class="field-label">
                                                 <div class="field-title" x-text="field.title"></div>
