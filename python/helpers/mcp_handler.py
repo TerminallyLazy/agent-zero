@@ -427,8 +427,10 @@ class MCPConfig(BaseModel):
                                 examples = f"(examples: {value['examples']})"
                             if "description" in value:
                                 description = f": {value['description']}"
+                            # Handle missing 'type' field gracefully
+                            type_info = value.get('type', 'unknown')
                             prompt += (
-                                f" * {key} ({value['type']}){description} {examples}\n"
+                                f" * {key} ({type_info}){description} {examples}\n"
                             )
                         prompt += "\n"
 

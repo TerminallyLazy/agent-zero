@@ -66,17 +66,25 @@ async def call_development_function(func: Callable[..., T], *args, **kwargs) -> 
 
 async def call_development_function(func: Union[Callable[..., T], Callable[..., Awaitable[T]]], *args, **kwargs) -> T:
     if is_development():
-        url = _get_rfc_url()
-        password = _get_rfc_password()
-        result = await rfc.call_rfc(
-            url=url,
-            password=password,
-            module=func.__module__,
-            function_name=func.__name__,
-            args=list(args),
-            kwargs=kwargs,
-        )
-        return cast(T, result)
+        # Check if RFC password is available before attempting RFC call
+        try:
+            password = _get_rfc_password()
+            url = _get_rfc_url()
+            result = await rfc.call_rfc(
+                url=url,
+                password=password,
+                module=func.__module__,
+                function_name=func.__name__,
+                args=list(args),
+                kwargs=kwargs,
+            )
+            return cast(T, result)
+        except Exception:
+            # If RFC fails (no password, no connection, etc.), fall back to local execution
+            if inspect.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs) # type: ignore
     else:
         if inspect.iscoroutinefunction(func):
             return await func(*args, **kwargs)

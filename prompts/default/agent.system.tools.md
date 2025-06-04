@@ -19,3 +19,10 @@
 {{ include './agent.system.tool.browser.md' }}
 
 {{ include './agent.system.tool.scheduler.md' }}
+
+{{ include './agent.system.tool.dashboard_tool.md' }}
+
+{{ include './agent.system.tool.complete_dashboard_tool.md' }}
+
+{{ include './agent.system.tool.analysis_generator_tool.md' }}
+

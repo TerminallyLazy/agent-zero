@@ -1,0 +1,33 @@
+.dashboard-container {  
+    padding: 20px;  
+    background: var(--color-background);  
+}  
+  
+.dashboard-controls {  
+    margin-bottom: 20px;  
+    padding: 15px;  
+    border: 1px solid var(--color-border);  
+    border-radius: 8px;  
+}  
+  
+.dashboard-chart {  
+    text-align: center;  
+    margin: 20px 0;  
+}  
+  
+.dashboard-insights {  
+    background: var(--color-background-secondary);  
+    padding: 15px;  
+    border-radius: 8px;  
+    margin-top: 20px;  
+}  
+  
+.insight-section {  
+    margin-bottom: 15px;  
+}  
+  
+.insight-title {  
+    font-weight: bold;  
+    color: var(--color-accent);  
+    margin-bottom: 5px;  
+}

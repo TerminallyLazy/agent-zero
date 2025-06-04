@@ -36,3 +36,5 @@ unstructured-client==0.25.9
 webcolors==24.6.0
 nest-asyncio==1.6.0
 crontab==1.0.1
+pandas==2.2.3
+matplotlib==3.10.0

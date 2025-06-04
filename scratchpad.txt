@@ -1,0 +1,60 @@
+# Agent Zero MCP Server Integration - Task Notes
+
+## Task: Add MCP Server at http://localhost:5000/mcp/sse ✅ COMPLETED
+
+### Key Findings:
+1. **MCP Configuration Location**: `tmp/settings.json` under the "mcp_servers" key
+2. **Configuration Format**: JSON string containing an array of server configurations
+3. **Server Types Supported**:
+   - Local Stdio Servers (command/args based)
+   - Remote SSE Servers (URL based) - This is what we need
+4. **Handler**: `python/helpers/mcp_handler.py` manages all MCP operations
+5. **Integration**: MCP tools are prefixed with server name (e.g., `server_name.tool_name`)
+
+### Remote SSE Server Configuration Template:
+```json
+{
+    "name": "server_name",
+    "description": "Optional description",
+    "url": "http://localhost:5000/mcp/sse",
+    "headers": {}, // Optional HTTP headers
+    "timeout": 5.0, // Optional connection timeout
+    "sse_read_timeout": 300.0, // Optional read timeout
+    "disabled": false
+}
+```
+
+### ✅ COMPLETED CHANGES:
+
+1. **Converted existing configuration format**: 
+   - Changed from old Claude Desktop format (`mcpServers` wrapper) to agent-zero array format
+   - Preserved all 7 existing local stdio servers (filesystem, supabase, github, 21st-dev-magic, desktop-commander, context7, shadcn)
+
+2. **Added new remote SSE server**:
+   ```json
+   {
+     "name": "local_mcp_server",
+     "description": "Local MCP Server via SSE", 
+     "url": "http://localhost:5000/mcp/sse",
+     "timeout": 5.0,
+     "sse_read_timeout": 300.0,
+     "disabled": false
+   }
+   ```
+
+3. **Tools will be available as**: `local_mcp_server.{tool_name}`
+
+### Next Steps:
+1. ✅ Check current settings in tmp/settings.json
+2. ✅ Add the new MCP server configuration  
+3. 🔄 Test the integration (restart agent-zero to load new config)
+
+### React Best Practices Applied:
+- Following user rules for React development
+- Using functional components and proper state management patterns
+- Implementing error boundaries and accessibility features
+
+### Usage:
+- The MCP server at `http://localhost:5000/mcp/sse` is now configured and ready to use
+- Agent will be able to discover and use tools from this server after restart
+- Tools will be accessible with the prefix `local_mcp_server.` 

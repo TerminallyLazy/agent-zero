@@ -1,0 +1,10 @@
+# Use the original image as base
+FROM frdel/agent-zero-run:development
+
+# Install your additional library
+SHELL ["/bin/bash", "-c"]
+RUN source /ins/setup_venv.sh && \
+    pip install litellm==1.39.3 && \
+    pip install pandas==2.2.3 && \
+    pip install matplotlib==3.10.0 && \
+    pip install langgraph==0.3.1

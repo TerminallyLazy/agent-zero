@@ -9,6 +9,8 @@ if [ -z "$1" ]; then
 fi
 BRANCH="$1"
 
+pip install litellm==1.39.3
+
 # Copy all contents from persistent /per to root directory (/) without overwriting
 cp -r --no-preserve=ownership,mode /per/* /
 
