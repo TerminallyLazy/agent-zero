@@ -5,6 +5,7 @@ from typing import (
     Dict,
     Optional,
     Any,
+    TextIO,
     Union,
     Literal,
     Annotated,
@@ -260,6 +261,7 @@ class MCPServerRemote(BaseModel):
                     "name",
                     "description",
                     "url",
+                    "serverUrl",
                     "headers",
                     "init_timeout",
                     "tool_timeout",
@@ -267,6 +269,9 @@ class MCPServerRemote(BaseModel):
                 ]:
                     if key == "name":
                         value = normalize_name(value)
+                    if key == "serverUrl":
+                        key = "url" # remap serverUrl to url
+                    
                     setattr(self, key, value)
             # We already run in an event loop, dont believe Pylance
             return asyncio.run(self.__on_update())
@@ -371,6 +376,11 @@ class MCPConfig(BaseModel):
         if cls.__instance is None:
             cls.__instance = cls(servers_list=[])
         return cls.__instance
+
+    @classmethod
+    def wait_for_lock(cls):
+        with cls.__lock:
+            return
 
     @classmethod
     def update(cls, config_str: str) -> Any:
@@ -579,7 +589,7 @@ class MCPConfig(BaseModel):
 
             try:
                 # not generic MCPServer because: "Annotated can not be instatioated"
-                if server_item.get("url", None):
+                if server_item.get("url", None) or server_item.get("serverUrl", None):
                     self.servers.append(MCPServerRemote(server_item))
                 else:
                     self.servers.append(MCPServerLocal(server_item))
@@ -619,6 +629,8 @@ class MCPConfig(BaseModel):
                 connected = True # tool_count > 0
                 # get error message if any
                 error = server.get_error()
+                # get log bool
+                has_log = server.get_log() != ""
 
                 # add server status to result
                 result.append(
@@ -627,6 +639,7 @@ class MCPConfig(BaseModel):
                         "connected": connected,
                         "error": error,
                         "tool_count": tool_count,
+                        "has_log": has_log,
                     }
                 )
 
@@ -638,10 +651,26 @@ class MCPConfig(BaseModel):
                         "connected": False,
                         "error": disconnected["error"],
                         "tool_count": 0,
+                        "has_log": False,
                     }
                 )
 
         return result
+
+    def get_server_detail(self, server_name: str) -> dict[str, Any]:
+        with self.__lock:
+            for server in self.servers:
+                if server.name == server_name:
+                    try:
+                        tools = server.get_tools()
+                    except Exception as e:
+                        tools = []
+                    return {
+                        "name": server.name,
+                        "description": server.description,
+                        "tools": tools,
+                    }
+            return {}
 
     def is_initialized(self) -> bool:
         """Check if the client is initialized"""
@@ -673,33 +702,52 @@ class MCPConfig(BaseModel):
         for server in self.servers:
             if server.name in server_names:
                 server_name = server.name
+                prompt += f"### {server_name}\n"
+                prompt += f"{server.description}\n\n"
+
                 for tool in server.get_tools():
                     prompt += (
                         f"### {server_name}.{tool['name']}:\n"
                         f"{tool['description']}\n\n"
-                        f"#### Categories:\n"
-                        f"* kind: MCP Server Tool\n"
-                        f'* server: "{server_name}" ({server.description})\n\n'
+                        # f"#### Categories:\n"
+                        # f"* kind: MCP Server Tool\n"
+                        # f'* server: "{server_name}" ({server.description})\n\n'
                         f"#### Arguments:\n"
                     )
 
                     tool_args = ""
-                    if "input_schema" in tool and "properties" in tool["input_schema"]:
-                        properties: dict[str, Any] = tool["input_schema"]["properties"]
-                        for key, value in properties.items():
-                            tool_args += f'            "{key}": "...",\n'
-                            examples = ""
-                            description = ""
-                            # Get the type, defaulting to "any" if not specified
-                            param_type = value.get('type', 'any')
-                            if "examples" in value:
-                                examples = f"(examples: {value['examples']})"
-                            if "description" in value:
-                                description = f": {value['description']}"
-                            prompt += (
-                                f" * {key} ({param_type}){description} {examples}\n"
-                            )
-                        prompt += "\n"
+                    properties: dict[str, Any] = tool["input_schema"]["properties"]
+                    for key, value in properties.items():
+                        optional = False
+                        examples = ""
+                        description = ""
+                        type = ""
+                        if "anyOf" in value:
+                            for nested_value in value["anyOf"]:
+                                if "type" in nested_value and nested_value["type"] != "null":
+                                    optional = True
+                                    value = nested_value
+                                    break
+                        tool_args += f"            \"{key}\": \"...\",\n"
+                        if "examples" in value:
+                            examples = f"(examples: {value['examples']})"
+                        if "description" in value:
+                            description = f": {value['description']}"
+                        if "type" in value:
+                            if optional:
+                                type = f"{value['type']}, optional"
+                            else:
+                                type = f"{value['type']}"
+                        else:
+                            if optional:
+                                type = "string, optional"
+                            else:
+                                type = "string"
+                        prompt += (
+                            f" * {key} ({type}){description} {examples}\n"
+                        )
+
+                    prompt += "\n"
 
                     prompt += (
                         f"#### Usage:\n"
@@ -763,6 +811,7 @@ class MCPClientBase(ABC):
         self.tools: List[dict[str, Any]] = []  # Tools are cached on the client instance
         self.error: str = ""
         self.log: List[str] = []
+        self.log_file: Optional[TextIO] = None
 
     # Protected method
     @abstractmethod
@@ -791,9 +840,6 @@ class MCPClientBase(ABC):
         try:
             async with AsyncExitStack() as temp_stack:
                 try:
-                    async def log_callback(params):
-                        msg = getattr(params, "message", str(params))
-                        self.log.append(f"[{self.server.name}] [session]: {msg}")
 
                     stdio, write = await self._create_stdio_transport(temp_stack)
                     # PrintStyle(font_color="cyan").print(f"MCPClientBase ({self.server.name} - {operation_name}): Transport created. Initializing session...")
@@ -802,19 +848,20 @@ class MCPClientBase(ABC):
                             stdio,  # type: ignore
                             write,  # type: ignore
                             read_timeout_seconds=timedelta(seconds=read_timeout_seconds),
-                            # logging_callback=log_callback,
                         )
                     )
                     await session.initialize()
-                    # PrintStyle(font_color="green").print(f"MCPClientBase ({self.server.name} - {operation_name}): Session initialized.")
 
                     result = await coro_func(session)
 
-                    # PrintStyle(font_color="green").print(f"MCPClientBase ({self.server.name} - {operation_name}): Operation successful.")
                     return result
                 except Exception as e:
                     # Store the original exception and raise a dummy exception
-                    original_exception = e
+                    excs = getattr(e, "exceptions", None) # Python 3.11+ ExceptionGroup
+                    if excs:
+                        original_exception = excs[0]
+                    else:
+                        original_exception = e
                     # Create a dummy exception to break out of the async block
                     raise RuntimeError("Dummy exception to break out of async block")
         except Exception as e:
@@ -928,8 +975,6 @@ class MCPClientBase(ABC):
                 f"MCPClientBase::Failed to call tool '{tool_name}' on server '{self.server.name}'. Original error: {type(e).__name__}: {e}"
             )
 
-
-class MCPClientLocal(MCPClientBase):
     def get_log(self):
         # read and return lines from self.log_file, do not close it
         if not hasattr(self, 'log_file') or self.log_file is None:
@@ -941,6 +986,8 @@ class MCPClientLocal(MCPClientBase):
             log = ""
         return log
 
+
+class MCPClientLocal(MCPClientBase):
     def __del__(self):
         # close the log file if it exists
         if hasattr(self, 'log_file') and self.log_file is not None:
@@ -987,9 +1034,6 @@ class MCPClientLocal(MCPClientBase):
 
 
 class MCPClientRemote(MCPClientBase):
-
-    def get_log(self):
-        return "Logging not implemented for remote servers yet"
 
     async def _create_stdio_transport(
         self, current_exit_stack: AsyncExitStack

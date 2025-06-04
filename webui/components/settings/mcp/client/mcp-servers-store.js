@@ -6,7 +6,7 @@ import * as API from "/js/api.js";
 const model = {
   editor: null,
   servers: [],
-  loading: false,
+  loading: true,
   statusCheck: false,
   serverLog: "",
 
@@ -72,9 +72,14 @@ const model = {
 
   async startStatusCheck() {
     this.statusCheck = true;
+    let firstLoad = true;
 
     while (this.statusCheck) {
       await this._statusCheck();
+      if (firstLoad) {
+        this.loading = false;
+        firstLoad = false;
+      }
       await sleep(3000);
     }
   },
@@ -96,11 +101,16 @@ const model = {
     this.loading = true;
     try {
       scrollModal("mcp-servers-status");
-      await API.callJsonApi("mcp_servers_apply", {
+      const resp = await API.callJsonApi("mcp_servers_apply", {
         mcp_servers: this.getEditorValue(),
       });
-      await sleep(5000); // just to prevent user from clicking apply multiple times
-      // scrollModal("mcp-servers-status");
+      if (resp.success) {
+        this.servers = resp.status;
+        this.servers.sort((a, b) => a.name.localeCompare(b.name));
+      }
+      this.loading = false;
+      await sleep(100); // wait for ui and scroll
+      scrollModal("mcp-servers-status");
     } catch (error) {
       console.error("Failed to apply MCP servers:", error);
       alert("Failed to apply MCP servers: " + error.message);
@@ -115,7 +125,27 @@ const model = {
     });
     if (resp.success) {
       this.serverLog = resp.log;
-      openModal("settings/mcp/client/mcp-servers-log.html")
+      openModal("settings/mcp/client/mcp-servers-log.html");
+    }
+  },
+
+  async onServerClick(serverName) {
+    const resp = await API.callJsonApi("mcp_server_get_detail", {
+      server_name: serverName,
+    });
+    if (resp.success) {
+      this.serverDetail = resp.detail;
+      openModal("settings/mcp/client/mcp-server-description.html");
+    }
+  },
+
+  async onToolCountClick(serverName) {
+    const resp = await API.callJsonApi("mcp_server_get_detail", {
+      server_name: serverName,
+    });
+    if (resp.success) {
+      this.serverDetail = resp.detail;
+      openModal("settings/mcp/client/mcp-server-tools.html");
     }
   },
 };
