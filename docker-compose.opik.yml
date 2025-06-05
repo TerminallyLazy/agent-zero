@@ -1,0 +1,32 @@
+
+
+version: '3.8'  
+services:  
+  agent-zero:  
+    # Your existing Agent Zero service  
+    environment:  
+      - OPIK_ENABLED=true  
+      - OPIK_USE_LOCAL=true  
+      - OPIK_ENDPOINT=http://opik:5173  
+    depends_on:  
+      - opik  
+    networks:  
+      - agent-zero-network  
+  
+  opik:  
+    image: comet-ml/opik:latest  
+    ports:  
+      - "5173:5173"  
+    environment:  
+      - OPIK_DATABASE_URL=sqlite:///opik.db  
+    volumes:  
+      - opik_data:/app/data  
+    networks:  
+      - agent-zero-network  
+  
+volumes:  
+  opik_data:  
+  
+networks:  
+  agent-zero-network:  
+    driver: bridge
