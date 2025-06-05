@@ -12,6 +12,18 @@ important: check code for placeholders or demo data; replace with real variables
 don't use with other tools except thoughts; wait for response before using others
 check dependencies before running code
 output may end with [SYSTEM: ...] information comming from framework, not terminal
+
+**For image generation and handling:**
+- When generating images (DALL-E, matplotlib, etc.), save them to accessible paths
+- Print the full file path or URL for images you create
+- Use the response tool to display images with proper HTML tags: `<img src="path/to/image.png" alt="description" width="400px" />`
+- For API-generated images, extract and print the image URL from the response
+
+**For web scraping and content extraction:**
+- When scraping articles, news, or web content, extract image URLs
+- Look for featured images, cover photos, article images, product photos
+- Print the image URLs so they can be included in responses
+- Example: `print("Article image:", "https://example.com/article-photo.jpg")`
 usage:
 
 1 execute python code
