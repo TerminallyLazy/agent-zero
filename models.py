@@ -1,7 +1,7 @@
 from enum import Enum
 import os
-from typing import Any, List, Optional, AsyncIterator
 
+from typing import Any, List, Optional, Iterator, AsyncIterator
 from litellm import completion, acompletion, embedding
 from python.helpers import dotenv
 from python.helpers.dotenv import load_dotenv
@@ -104,6 +104,10 @@ class LiteLLMChatWrapper(SimpleChatModel):
         self.model = f"{provider}/{model}" if provider != "openai" else model
         self.kwargs = kwargs
 
+    @property
+    def _llm_type(self) -> str:
+        return "litellm-chat"
+
     def _convert_messages(self, messages: List[BaseMessage]) -> List[dict]:
         result = []
         for m in messages:
@@ -131,9 +135,28 @@ class LiteLLMChatWrapper(SimpleChatModel):
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[ChatGenerationChunk]:
+    ) -> Iterator[ChatGenerationChunk]:
         msgs = self._convert_messages(messages)
         for chunk in completion(
+            model=self.model,
+            messages=msgs,
+            stream=True,
+            stop=stop,
+            **{**self.kwargs, **kwargs},
+        ):
+            delta = chunk["choices"][0].get("delta", {})
+            content = delta.get("content", "") if isinstance(delta, dict) else getattr(delta, "content", "")
+            yield ChatGenerationChunk(message=AIMessageChunk(content=content))
+
+    async def _astream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        msgs = self._convert_messages(messages)
+        async for chunk in acompletion(
             model=self.model,
             messages=msgs,
             stream=True,
