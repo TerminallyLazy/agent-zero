@@ -6,6 +6,7 @@ from litellm import completion, acompletion, embedding
 from python.helpers import dotenv
 from python.helpers.dotenv import load_dotenv
 from python.helpers.rate_limiter import RateLimiter
+from python.helpers.secrets import SecretsManager
 
 from langchain_core.language_models.chat_models import SimpleChatModel, ChatGenerationChunk
 from langchain_core.callbacks.manager import (
@@ -80,7 +81,9 @@ def configure_litellm_environment():
     for a0, llm in env_mappings.items():
         val = dotenv.get_dotenv_value(a0)
         if val and not os.getenv(llm):
-            os.environ[llm] = val
+            # Resolve placeholders before setting environment variables
+            resolved_val = SecretsManager.replace_placeholders_in_text_silent(val)
+            os.environ[llm] = resolved_val
     for a0_base, llm_base in base_url_mappings.items():
         val = dotenv.get_dotenv_value(a0_base)
         if val and not os.getenv(llm_base):
@@ -88,12 +91,19 @@ def configure_litellm_environment():
 
 
 def get_api_key(service: str) -> str:
-    return (
+    # Get the value from dotenv (might be a placeholder)
+    api_key = (
         dotenv.get_dotenv_value(f"API_KEY_{service.upper()}")
         or dotenv.get_dotenv_value(f"{service.upper()}_API_KEY")
         or dotenv.get_dotenv_value(f"{service.upper()}_API_TOKEN")
         or "None"
     )
+    
+    # If it's a placeholder, substitute with real value from secrets
+    if api_key and api_key.startswith("§§") and api_key.endswith("§§"):
+        api_key = SecretsManager.replace_placeholders_in_text_silent(api_key)
+    
+    return api_key
 
 def get_rate_limiter(
     provider: ModelProvider, name: str, requests: int, input: int, output: int
@@ -361,13 +371,27 @@ class BrowserCompatibleChatWrapper(LiteLLMChatWrapper):
         async for chunk in super()._astream(messages, stop, run_manager, **kwargs):
             yield chunk
 
-def get_browser_compatible_chat(**kwargs: Any) -> Any:
+def get_browser_compatible_chat(model_name: str, provider: str, original_provider: str = None, **kwargs: Any) -> Any:
     """
     Returns a browser-compatible chat model instance.
     This factory allows for substituting the model wrapper if needed.
     """
-    if 'model_name' in kwargs and 'model' not in kwargs:
-        kwargs['model'] = kwargs.pop('model_name')
-    return BrowserCompatibleChatWrapper(**kwargs)
+    configure_litellm_environment()
+    # Use original provider name for API key lookup, fallback to mapped provider name
+    api_key_provider = original_provider or provider
+    api_key = kwargs.pop("api_key", None) or get_api_key(api_key_provider)
+    
+    # litellm will pick up base_url from env. We just need to control the api_key.
+    base_url = dotenv.get_dotenv_value(f"{provider.upper()}_BASE_URL")
+
+    # If a base_url is set, ensure api_key is not passed to litellm
+    if base_url:
+        if "api_key" in kwargs:
+            del kwargs["api_key"]
+    # Only pass API key if no base_url is set and key is not a placeholder
+    elif api_key and api_key not in ("None", "NA"):
+        kwargs["api_key"] = api_key
+        
+    return BrowserCompatibleChatWrapper(model=model_name, provider=provider, **kwargs)
 
 # ==== Browser Agent Shim Overrides END ====
