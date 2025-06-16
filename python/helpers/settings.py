@@ -867,6 +867,14 @@ def get_settings() -> Settings:
         _settings = _read_settings_file()
     if not _settings:
         _settings = get_default_settings()
+    
+    # Auto-migrate secrets if needed
+    try:
+        from python.helpers.secrets_migration import auto_migrate_if_needed
+        auto_migrate_if_needed()
+    except Exception:
+        pass  # Fail silently to avoid breaking settings loading
+    
     norm = normalize_settings(_settings)
     return norm
 
