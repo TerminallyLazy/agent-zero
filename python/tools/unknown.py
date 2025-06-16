@@ -5,7 +5,7 @@ from python.extensions.system_prompt._10_system_prompt import (
 
 
 class Unknown(Tool):
-    async def _execute_impl(self, **kwargs):
+    async def execute(self, **kwargs):
         tools = get_tools_prompt(self.agent)
         return Response(
             message=self.agent.read_prompt(

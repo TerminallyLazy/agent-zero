@@ -11,7 +11,7 @@ SEARCH_ENGINE_RESULTS = 10
 
 
 class Knowledge(Tool):
-    async def _execute_impl(self, question="", **kwargs):
+    async def execute(self, question="", **kwargs):
         # Create tasks for all three search methods
         tasks = [
             self.searxng_search(question),

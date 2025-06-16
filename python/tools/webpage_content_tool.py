@@ -7,7 +7,7 @@ from python.helpers.errors import handle_error
 
 
 class WebpageContentTool(Tool):
-    async def _execute_impl(self, url="", **kwargs):
+    async def execute(self, url="", **kwargs):
         if not url:
             return Response(message="Error: No URL provided.", break_loop=False)
 

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from agent import Agent
 from python.helpers.print_style import PrintStyle
 from python.helpers.strings import sanitize_string
-from python.helpers.secrets import SecretsManager
 
 
 @dataclass
@@ -21,23 +20,8 @@ class Tool:
         self.args = args
         self.message = message
 
-    async def execute(self, **kwargs) -> Response:
-        """Main execute method with secrets placeholder substitution"""
-        # Replace placeholders in kwargs with actual secret values
-        processed_kwargs = SecretsManager.replace_placeholders_in_dict(kwargs)
-        
-        # Execute the actual tool implementation
-        response = await self._execute_impl(**processed_kwargs)
-        
-        # Replace any secret values in the response message with placeholders for logging
-        if response and response.message:
-            response.message = SecretsManager.replace_values_with_placeholders(response.message)
-        
-        return response
-
     @abstractmethod
-    async def _execute_impl(self, **kwargs) -> Response:
-        """Tool implementation - override this method in subclasses"""
+    async def execute(self,**kwargs) -> Response:
         pass
 
     async def before_execution(self, **kwargs):
@@ -51,6 +35,15 @@ class Tool:
 
     async def after_execution(self, response: Response, **kwargs):
         text = sanitize_string(response.message.strip())
+        
+        # Sanitize tool output before adding to agent history
+        try:
+            from python.helpers.secrets import SecretsManager
+            text = SecretsManager.replace_values_with_placeholders(text)
+        except:
+            # Fail silently to avoid breaking tool execution
+            pass
+            
         self.agent.hist_add_tool_result(self.name, text)
         PrintStyle(font_color="#1B4F72", background_color="white", padding=True, bold=True).print(f"{self.agent.agent_name}: Response from tool '{self.name}'")
         PrintStyle(font_color="#85C1E9").print(text)

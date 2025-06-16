@@ -2,7 +2,7 @@ from python.helpers.tool import Tool, Response
 
 class TaskDone(Tool):
 
-    async def _execute_impl(self,**kwargs):
+    async def execute(self,**kwargs):
         self.agent.set_data("timeout", 0)
         return Response(message=self.args["text"], break_loop=True)
 
