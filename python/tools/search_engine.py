@@ -10,7 +10,7 @@ SEARCH_ENGINE_RESULTS = 10
 
 
 class SearchEngine(Tool):
-    async def execute(self, query="", **kwargs):
+    async def _execute_impl(self, query="", **kwargs):
 
 
         searxng_result = await self.searxng_search(query)

@@ -137,6 +137,27 @@ class State:
             enable_memory=False,  # Disable memory to avoid state conflicts
             # available_file_paths=[],
         )
+        try:
+            # Inject secrets as sensitive_data for browser agent
+            from python.helpers.secrets import SecretsManager
+            sensitive_data = SecretsManager.load_secrets_dict()
+            
+            self.use_agent = browser_use.Agent(
+                task=task,
+                browser_session=self.browser_session,
+                llm=model,
+                use_vision=self.agent.config.browser_model.vision,
+                extend_system_message=self.agent.read_prompt(
+                    "prompts/browser_agent.system.md"
+                ),
+                controller=controller,
+                enable_memory=False,  # Disable memory to avoid state conflicts
+                sensitive_data=sensitive_data,  # Inject secrets for runtime substitution
+                # available_file_paths=[],
+            )
+        except Exception as e:
+            logging.error(f"Failed to create browser_use.Agent: {e}")
+            raise Exception(f"Browser agent initialization failed. This might be due to model compatibility issues. Error: {e}") from e
 
         self.iter_no = get_iter_no(self.agent)
 
@@ -196,7 +217,7 @@ class State:
 
 class BrowserAgent(Tool):
 
-    async def execute(self, message="", reset="", **kwargs):
+    async def _execute_impl(self, message="", reset="", **kwargs):
         self.guid = str(uuid.uuid4())
         reset = str(reset).lower().strip() == "true"
         await self.prepare_state(reset=reset)

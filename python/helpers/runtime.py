@@ -2,6 +2,7 @@ import argparse
 import inspect
 from typing import TypeVar, Callable, Awaitable, Union, overload, cast
 from python.helpers import dotenv, rfc, settings
+from python.helpers.secrets import SecretsManager
 import asyncio
 import threading
 import queue
@@ -90,6 +91,8 @@ async def handle_rfc(rfc_call: rfc.RFCCall):
 
 def _get_rfc_password() -> str:
     password = dotenv.get_dotenv_value(dotenv.KEY_RFC_PASSWORD)
+    if password and password.startswith("§§") and password.endswith("§§"):
+        password = SecretsManager.replace_placeholders_in_text_silent(password)
     if not password:
         raise Exception("No RFC password, cannot handle RFC calls.")
     return password

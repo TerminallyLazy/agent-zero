@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from agent import Agent
 from python.helpers.print_style import PrintStyle
 from python.helpers.strings import sanitize_string
+from python.helpers.secrets import SecretsManager
 
 
 @dataclass
@@ -20,8 +21,23 @@ class Tool:
         self.args = args
         self.message = message
 
+    async def execute(self, **kwargs) -> Response:
+        """Main execute method with secrets placeholder substitution"""
+        # Replace placeholders in kwargs with actual secret values
+        processed_kwargs = SecretsManager.replace_placeholders_in_dict(kwargs)
+        
+        # Execute the actual tool implementation
+        response = await self._execute_impl(**processed_kwargs)
+        
+        # Replace any secret values in the response message with placeholders for logging
+        if response and response.message:
+            response.message = SecretsManager.replace_values_with_placeholders(response.message)
+        
+        return response
+
     @abstractmethod
-    async def execute(self,**kwargs) -> Response:
+    async def _execute_impl(self, **kwargs) -> Response:
+        """Tool implementation - override this method in subclasses"""
         pass
 
     async def before_execution(self, **kwargs):

@@ -16,7 +16,7 @@ DEFAULT_WAIT_TIMEOUT = 300
 
 class SchedulerTool(Tool):
 
-    async def execute(self, **kwargs):
+    async def _execute_impl(self, **kwargs):
         if self.method == "list_tasks":
             return await self.list_tasks(**kwargs)
         elif self.method == "find_task_by_name":

@@ -5,7 +5,7 @@ from python.tools.code_execution_tool import CodeExecution
 
 class Input(Tool):
 
-    async def execute(self, keyboard="", **kwargs):
+    async def _execute_impl(self, keyboard="", **kwargs):
         # normalize keyboard input
         keyboard = keyboard.rstrip()
         keyboard += "\n"

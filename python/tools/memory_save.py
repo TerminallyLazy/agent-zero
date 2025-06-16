@@ -4,7 +4,7 @@ from python.helpers.tool import Tool, Response
 
 class MemorySave(Tool):
 
-    async def execute(self, text="", area="", **kwargs):
+    async def _execute_impl(self, text="", area="", **kwargs):
 
         if not area:
             area = Memory.Area.MAIN.value
