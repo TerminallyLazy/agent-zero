@@ -95,6 +95,18 @@ class Log:
         self.updates: list[int] = []
         self.logs: list[LogItem] = []
         self.set_initial_progress()
+    
+    def _sanitize_content(self, content: str | None) -> str | None:
+        """Sanitize content by replacing secret values with placeholders"""
+        if content is None:
+            return None
+        
+        try:
+            from python.helpers.secrets import SecretsManager
+            return SecretsManager.replace_values_with_placeholders(content)
+        except:
+            # If secrets module fails, return content unchanged to avoid breaking logs
+            return content
 
     def log(
         self,
@@ -110,12 +122,15 @@ class Log:
         # Use OrderedDict if kvps is provided
         if kvps is not None:
             kvps = OrderedDict(kvps)
+        # Sanitize content before creating log item
+        sanitized_content = self._sanitize_content(content) or ""
+        
         item = LogItem(
             log=self,
             no=len(self.logs),
             type=type,
             heading=heading or "",
-            content=content or "",
+            content=sanitized_content,
             kvps=OrderedDict({**(kvps or {}), **(kwargs or {})}),
             update_progress=(
                 update_progress if update_progress is not None else "persistent"
@@ -147,7 +162,8 @@ class Log:
         if heading is not None:
             item.heading = heading
         if content is not None:
-            item.content = content
+            # Sanitize content before updating
+            item.content = self._sanitize_content(content) or ""
         if kvps is not None:
             item.kvps = OrderedDict(kvps)  # Use OrderedDict to keep the order
 
