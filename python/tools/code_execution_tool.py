@@ -20,7 +20,7 @@ class State:
 
 class CodeExecution(Tool):
 
-    async def _execute_impl(self, **kwargs):
+    async def execute(self, **kwargs):
 
         await self.agent.handle_intervention()  # wait for intervention and handle it, if paused
 

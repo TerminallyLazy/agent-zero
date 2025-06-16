@@ -217,7 +217,7 @@ class State:
 
 class BrowserAgent(Tool):
 
-    async def _execute_impl(self, message="", reset="", **kwargs):
+    async def execute(self, message="", reset="", **kwargs):
         self.guid = str(uuid.uuid4())
         reset = str(reset).lower().strip() == "true"
         await self.prepare_state(reset=reset)

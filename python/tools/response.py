@@ -2,7 +2,7 @@ from python.helpers.tool import Tool, Response
 
 class ResponseTool(Tool):
 
-    async def _execute_impl(self,**kwargs):
+    async def execute(self,**kwargs):
         return Response(message=self.args["text"], break_loop=True)
 
     async def before_execution(self, **kwargs):

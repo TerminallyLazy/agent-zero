@@ -7,7 +7,7 @@ DEFAULT_LIMIT = 10
 
 class MemoryLoad(Tool):
 
-    async def _execute_impl(self, query="", threshold=DEFAULT_THRESHOLD, limit=DEFAULT_LIMIT, filter="", **kwargs):
+    async def execute(self, query="", threshold=DEFAULT_THRESHOLD, limit=DEFAULT_LIMIT, filter="", **kwargs):
         db = await Memory.get(self.agent)
         docs = await db.search_similarity_threshold(query=query, limit=limit, threshold=threshold, filter=filter)
 

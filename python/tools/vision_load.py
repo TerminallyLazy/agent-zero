@@ -12,7 +12,7 @@ TOKENS_ESTIMATE = 1500
 
 
 class VisionLoad(Tool):
-    async def _execute_impl(self, paths: list[str] = [], **kwargs) -> Response:
+    async def execute(self, paths: list[str] = [], **kwargs) -> Response:
 
         self.images_dict = {}
         template: list[dict[str, str]] = []  # type: ignore
