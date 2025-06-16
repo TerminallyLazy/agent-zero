@@ -1,5 +1,6 @@
 a2wsgi==1.10.8
 ansio==0.0.1
+beautifulsoup4==4.12.3
 browser-use==0.2.5
 docker==7.1.0
 duckduckgo-search==6.1.12
@@ -35,3 +36,4 @@ unstructured-client==0.25.9
 webcolors==24.6.0
 nest-asyncio==1.6.0
 crontab==1.0.1
+opik==1.7.30
