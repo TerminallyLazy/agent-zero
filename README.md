@@ -161,6 +161,17 @@ docker run -p 50001:80 frdel/agent-zero-run
 
 ## 🎯 Changelog
 
+### v0.8.6 - **Advanced Secrets Management**
+
+- **Secure Secrets Handling**: Implemented placeholder substitution system using `§§SECRET_NAME§§` syntax
+- **Runtime Security**: Real credentials never appear in prompts, logs, or front-end memory
+- **Automatic Substitution**: Tools and LiteLLM providers receive plaintext values seamlessly at runtime
+- **Browser Agent Integration**: Secrets automatically injected into browser-use agents as sensitive_data
+- **Settings UI Integration**: Added secrets management section with masked value display
+- **Comprehensive Testing**: Full unit and integration test coverage for security validation
+- **Developer Tools**: Validation helpers, cache management, and programmatic API for secrets
+- **Documentation**: Complete usage guide and migration documentation in `docs/secrets.md`
+
 ### v0.8.5 - **MCP Server + Client**
 [Release video](https://youtu.be/pM5f4Vz3_IQ)
 

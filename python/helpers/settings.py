@@ -8,8 +8,9 @@ from typing import Any, Literal, TypedDict
 
 import models
 from python.helpers import runtime, whisper, defer
-from . import files, dotenv
+from . import files, dotenv, secrets
 from python.helpers.print_style import PrintStyle
+from python.helpers.secrets import SecretsManager
 
 
 class Settings(TypedDict):
@@ -71,6 +72,8 @@ class Settings(TypedDict):
     mcp_server_enabled: bool
     mcp_server_token: str
 
+    secrets_env: dict[str, str]
+
 
 class PartialSettings(Settings, total=False):
     pass
@@ -113,6 +116,14 @@ PASSWORD_PLACEHOLDER = "****PSWD****"
 
 SETTINGS_FILE = files.get_abs_path("tmp/settings.json")
 _settings: Settings | None = None
+
+
+def get_dotenv_value_with_secrets(key: str, default: str = "") -> str:
+    """Get dotenv value and resolve secrets placeholders if present (silent mode for config)"""
+    value = dotenv.get_dotenv_value(key, default)
+    if value and value.startswith("§§") and value.endswith("§§"):
+        value = SecretsManager.replace_placeholders_in_text_silent(value)
+    return value
 
 
 def convert_out(settings: Settings) -> SettingsOutput:
@@ -433,7 +444,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "title": "UI Login",
             "description": "Set user name for web UI",
             "type": "text",
-            "value": dotenv.get_dotenv_value(dotenv.KEY_AUTH_LOGIN) or "",
+            "value": get_dotenv_value_with_secrets(dotenv.KEY_AUTH_LOGIN) or "",
         }
     )
 
@@ -445,7 +456,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "type": "password",
             "value": (
                 PASSWORD_PLACEHOLDER
-                if dotenv.get_dotenv_value(dotenv.KEY_AUTH_PASSWORD)
+                if get_dotenv_value_with_secrets(dotenv.KEY_AUTH_PASSWORD)
                 else ""
             ),
         }
@@ -585,7 +596,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "type": "password",
             "value": (
                 PASSWORD_PLACEHOLDER
-                if dotenv.get_dotenv_value(dotenv.KEY_RFC_PASSWORD)
+                if get_dotenv_value_with_secrets(dotenv.KEY_RFC_PASSWORD)
                 else ""
             ),
         }
@@ -775,6 +786,37 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "mcp",
     }
 
+    # Secrets management section
+    secrets_fields: list[SettingsField] = []
+    
+    # Get current secrets in .env format, with values masked
+    current_secrets = secrets.SecretsManager.load_secrets_dict()
+    masked_secrets_env = ""
+    for key, value in current_secrets.items():
+        if value:
+            masked_secrets_env += f"{key}=***\n"
+        else:
+            masked_secrets_env += f"{key}=\n"
+    
+    secrets_fields.append(
+        {
+            "id": "secrets_env",
+            "title": "Secrets Configuration",
+            "description": "Enter secrets in .env format (KEY=value). Values are masked with *** for security. Use this to add, modify, or remove secrets. Changes are saved to /tmp/secrets.env with secure permissions.",
+            "type": "textarea",
+            "value": masked_secrets_env.strip(),
+            "attributes": {"rows": "10", "placeholder": "API_KEY_OPENAI=your-openai-key-here\nAPI_KEY_ANTHROPIC=your-anthropic-key-here"},
+        }
+    )
+
+    secrets_section: SettingsSection = {
+        "id": "secrets",
+        "title": "Secrets Management",
+        "description": "Secure storage and management of sensitive credentials using placeholder substitution.",
+        "fields": secrets_fields,
+        "tab": "security",
+    }
+
     # Add the section to the result
     result: SettingsOutput = {
         "sections": [
@@ -787,6 +829,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             stt_section,
             api_keys_section,
             auth_section,
+            secrets_section,
             mcp_client_section,
             mcp_server_section,
             dev_section,
@@ -815,6 +858,9 @@ def convert_in(settings: dict) -> Settings:
                         current[field["id"]] = _env_to_dict(field["value"])
                     elif field["id"].startswith("api_key_"):
                         current["api_keys"][field["id"]] = field["value"]
+                    elif field["id"] == "secrets_env":
+                        # Handle secrets input - parse and save to secrets.env
+                        _handle_secrets_input(field["value"])
                     else:
                         current[field["id"]] = field["value"]
     return current
@@ -893,6 +939,7 @@ def _remove_sensitive_settings(settings: Settings):
     settings["rfc_password"] = ""
     settings["root_password"] = ""
     settings["mcp_server_token"] = ""
+    settings["secrets_env"] = secrets.SecretsManager.get_masked_secrets_dict()
 
 
 def _write_sensitive_settings(settings: Settings):
@@ -963,6 +1010,7 @@ def get_default_settings() -> Settings:
         mcp_client_tool_timeout=120,
         mcp_server_enabled=False,
         mcp_server_token=create_auth_token(),
+        secrets_env=secrets.SecretsManager.get_masked_secrets_dict(),
     )
 
 
@@ -1085,6 +1133,68 @@ def _dict_to_env(data_dict):
     return "\n".join(lines)
 
 
+def _handle_secrets_input(input_text: str):
+    """Handle secrets input from UI and update the secrets.env file"""
+    if not input_text:
+        return
+        
+    lines = input_text.strip().split('\n')
+    current_secrets = secrets.SecretsManager.load_secrets_dict()
+    new_secrets = {}
+    
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+            
+        if '=' not in line:
+            continue
+            
+        key, value = line.split('=', 1)
+        key = key.strip().upper()
+        value = value.strip()
+        
+        # Remove quotes if present
+        if (value.startswith('"') and value.endswith('"')) or \
+           (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+        
+        # If value is *** or empty, keep existing value (don't overwrite)
+        if value == "***":
+            if key in current_secrets:
+                new_secrets[key] = current_secrets[key]
+        elif value:
+            # New or updated value
+            new_secrets[key] = value
+        # If value is empty, remove the key (don't add to new_secrets)
+    
+    # Save the updated secrets
+    secrets_path = files.get_abs_path(secrets.SecretsManager.SECRETS_FILE)
+    
+    try:
+        import os
+        os.makedirs(os.path.dirname(secrets_path), exist_ok=True)
+        
+        with open(secrets_path, 'w', encoding='utf-8') as f:
+            f.write("# Agent Zero Secrets Configuration\n")
+            f.write("# This file contains sensitive credentials that should never appear in prompts, logs, or front-end\n")
+            f.write("# Use placeholder syntax §§SECRET_NAME§§ in your configurations\n\n")
+            
+            for key, value in new_secrets.items():
+                f.write(f"{key}={value}\n")
+        
+        # Ensure proper permissions
+        os.chmod(secrets_path, 0o600)
+        
+        # Clear cache to force reload
+        secrets.SecretsManager.clear_cache()
+        
+    except Exception as e:
+        PrintStyle(background_color="red", font_color="white", padding=True).print(
+            f"Error saving secrets to {secrets_path}: {e}"
+        )
+
+
 def set_root_password(password: str):
     if not runtime.is_dockerized():
         raise Exception("root password can only be set in dockerized environments")
@@ -1117,8 +1227,8 @@ def get_runtime_config(set: Settings):
 
 
 def create_auth_token() -> str:
-    username = dotenv.get_dotenv_value(dotenv.KEY_AUTH_LOGIN) or ""
-    password = dotenv.get_dotenv_value(dotenv.KEY_AUTH_PASSWORD) or ""
+    username = get_dotenv_value_with_secrets(dotenv.KEY_AUTH_LOGIN) or ""
+    password = get_dotenv_value_with_secrets(dotenv.KEY_AUTH_PASSWORD) or ""
     if not username or not password:
         return "0"
     # use base64 encoding for a more compact token with alphanumeric chars

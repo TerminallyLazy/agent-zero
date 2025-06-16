@@ -5,7 +5,7 @@ from python.tools.memory_load import DEFAULT_THRESHOLD
 
 class MemoryForget(Tool):
 
-    async def execute(self, query="", threshold=DEFAULT_THRESHOLD, filter="", **kwargs):
+    async def _execute_impl(self, query="", threshold=DEFAULT_THRESHOLD, filter="", **kwargs):
         db = await Memory.get(self.agent)
         dels = await db.delete_documents_by_query(query=query, threshold=threshold, filter=filter)
 

@@ -155,6 +155,10 @@ class State:
             )
 
         try:
+            # Inject secrets as sensitive_data for browser agent
+            from python.helpers.secrets import SecretsManager
+            sensitive_data = SecretsManager.load_secrets_dict()
+            
             self.use_agent = browser_use.Agent(
                 task=task,
                 browser_session=self.browser_session,
@@ -165,6 +169,7 @@ class State:
                 ),
                 controller=controller,
                 enable_memory=False,  # Disable memory to avoid state conflicts
+                sensitive_data=sensitive_data,  # Inject secrets for runtime substitution
                 # available_file_paths=[],
             )
         except Exception as e:
@@ -229,7 +234,7 @@ class State:
 
 class BrowserAgent(Tool):
 
-    async def execute(self, message="", reset="", **kwargs):
+    async def _execute_impl(self, message="", reset="", **kwargs):
         self.guid = str(uuid.uuid4())
         reset = str(reset).lower().strip() == "true"
         await self.prepare_state(reset=reset)

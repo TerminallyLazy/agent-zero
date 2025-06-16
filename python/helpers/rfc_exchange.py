@@ -1,4 +1,5 @@
 from python.helpers import runtime, crypto, dotenv
+from python.helpers.secrets import SecretsManager
 
 async def get_root_password():
     if runtime.is_dockerized():
@@ -16,4 +17,7 @@ def _provide_root_password(public_key_pem: str):
     return enc
 
 def _get_root_password():
-    return dotenv.get_dotenv_value(dotenv.KEY_ROOT_PASSWORD) or ""
+    password = dotenv.get_dotenv_value(dotenv.KEY_ROOT_PASSWORD) or ""
+    if password and password.startswith("§§") and password.endswith("§§"):
+        password = SecretsManager.replace_placeholders_in_text_silent(password)
+    return password

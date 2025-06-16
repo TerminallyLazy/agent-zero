@@ -6,7 +6,7 @@ from python.helpers.log import LogItem
 
 class UpdateBehaviour(Tool):
 
-    async def execute(self, adjustments="", **kwargs):
+    async def _execute_impl(self, adjustments="", **kwargs):
 
         # stringify adjustments if needed
         if not isinstance(adjustments, str):
