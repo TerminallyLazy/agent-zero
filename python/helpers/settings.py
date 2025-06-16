@@ -868,12 +868,7 @@ def get_settings() -> Settings:
     if not _settings:
         _settings = get_default_settings()
     
-    # Auto-migrate secrets if needed
-    try:
-        from python.helpers.secrets_migration import auto_migrate_if_needed
-        auto_migrate_if_needed()
-    except Exception:
-        pass  # Fail silently to avoid breaking settings loading
+    # Note: Secrets management is handled separately via /tmp/secrets.env
     
     norm = normalize_settings(_settings)
     return norm
