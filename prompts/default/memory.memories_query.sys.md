@@ -3,9 +3,23 @@
 2. AI analyzes the MESSAGE and HISTORY for CONTEXT
 3. AI provide a search query for search engine where previous memories are stored based on CONTEXT
 
+{{#if memory_backend}}
+# Memory Backend: {{memory_backend}}
+{{#if enhanced_features}}
+- Available enhanced features: {{enhanced_features}}
+- Consider using metadata-specific terms for better filtering
+{{/if}}
+{{/if}}
+
 # Format
 - The response format is a plain text string containing the query
 - No other text, no formatting
+{{#if memory_backend}}
+{{#eq memory_backend "MemOS"}}
+- For MemOS: Include specific entities, names, or categories that can leverage metadata filtering
+- Focus on searchable terms that benefit from enhanced relevance scoring
+{{/eq}}
+{{/if}}
 
 # Example
 ```json

@@ -60,6 +60,20 @@ class Memory:
 
     @staticmethod
     async def get(agent: Agent):
+        backend_type = getattr(agent.config, 'memory_backend', 'faiss')
+        
+        # Check if hybrid or dual backend is requested
+        if backend_type in ['hybrid', 'dual']:
+            from python.helpers.memory_hybrid import HybridMemory
+            return await HybridMemory.get(agent)
+        
+        # Check if MemoryOS backend is requested
+        elif backend_type == 'memos':
+            # Use MemoryOS backend
+            from python.helpers.memory_memos import MemOSMemory
+            return await MemOSMemory.get(agent)
+        
+        # Use FAISS backend (default)
         memory_subdir = agent.config.memory_subdir or "default"
         if Memory.index.get(memory_subdir) is None:
             log_item = agent.context.log.log(
@@ -88,6 +102,20 @@ class Memory:
 
     @staticmethod
     async def reload(agent: Agent):
+        backend_type = getattr(agent.config, 'memory_backend', 'faiss')
+        
+        # Check if hybrid or dual backend is requested
+        if backend_type in ['hybrid', 'dual']:
+            # For hybrid/dual, just reinitialize
+            return await Memory.get(agent)
+        
+        # Check if MemoryOS backend is requested
+        elif backend_type == 'memos':
+            # Use MemoryOS backend
+            from python.helpers.memory_memos import MemOSMemory
+            return await MemOSMemory.reload(agent)
+        
+        # Use FAISS backend (default)
         memory_subdir = agent.config.memory_subdir or "default"
         if Memory.index.get(memory_subdir):
             del Memory.index[memory_subdir]

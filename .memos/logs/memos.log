@@ -1,0 +1,135 @@
+2025-07-12 01:40:43,900 - memos.mem_user.user_manager - INFO - user_manager.py:140 - _init_root_user - Root user created successfully
+2025-07-12 01:40:43,901 - memos.mem_user.user_manager - INFO - user_manager.py:124 - __init__ - UserManager initialized with database at /home/lazy/Documents/agent-zero/.memos/memos_users.db
+2025-07-12 01:40:43,963 - memos.mem_user.user_manager - INFO - user_manager.py:175 - create_user - User 'agent_zero' created with ID: agent_zero
+2025-07-12 01:40:43,963 - memos.api.start_api - INFO - start_api.py:221 - set_config - Created default user: agent_zero
+2025-07-12 01:40:43,983 - sentence_transformers.SentenceTransformer - INFO - SentenceTransformer.py:211 - __init__ - Use pytorch device_name: cpu
+2025-07-12 01:40:43,983 - sentence_transformers.SentenceTransformer - INFO - SentenceTransformer.py:219 - __init__ - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-07-12 01:40:46,288 - memos.chunkers.sentence_chunker - INFO - sentence_chunker.py:23 - __init__ - Initialized SentenceChunker with config: model_schema='memos.configs.chunker.SentenceChunkerConfig' tokenizer_or_token_counter='gpt2' chunk_size=512 chunk_overlap=50 min_sentences_per_chunk=1
+2025-07-12 01:40:46,292 - memos.mem_user.user_manager - INFO - user_manager.py:170 - create_user - User with name 'agent_zero' already exists
+2025-07-12 01:40:46,292 - memos.mem_user.user_manager - INFO - user_manager.py:124 - __init__ - UserManager initialized with database at /home/lazy/Documents/agent-zero/.memos/memos_users.db
+2025-07-12 01:40:46,293 - memos.mem_os.core - INFO - core.py:54 - __init__ - MOS initialized for user: agent_zero
+2025-07-12 02:19:14,460 - memos.mem_user.user_manager - INFO - user_manager.py:179 - create_user - failed to create user with name 'Agent Zero System' already exists
+2025-07-12 02:19:27,872 - memos.mem_os.core - WARNING - core.py:388 - register_mem_cube - MemCube agent_zero_main does not exist, try to init from remote repo.
+2025-07-12 02:32:16,920 - memos.api.start_api - ERROR - start_api.py:416 - global_exception_handler - Unhandled error:
+Traceback (most recent call last):
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/middleware/errors.py", line 165, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 714, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 734, in app
+    await route.handle(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 288, in handle
+    await self.app(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 76, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 73, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 301, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 212, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/api/start_api.py", line 259, in register_mem_cube
+    mos_instance.register_mem_cube(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        mem_cube_name_or_path=mem_cube.mem_cube_name_or_path,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        mem_cube_id=mem_cube.mem_cube_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        user_id=mem_cube.user_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/mem_os/core.py", line 391, in register_mem_cube
+    self.mem_cubes[mem_cube_id] = GeneralMemCube.init_from_remote_repo(
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        mem_cube_name_or_path
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/mem_cube/general.py", line 103, in init_from_remote_repo
+    dir = download_repo(cube_id, base_url)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/mem_cube/utils.py", line 22, in download_repo
+    subprocess.run(["git", "clone", repo_url, dir], check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['git', 'clone', 'https://huggingface.co/datasets/agent_zero_main', '/tmp/tmplvotdn3d']' returned non-zero exit status 128.
+2025-07-12 02:45:09,770 - memos.mem_os.core - WARNING - core.py:388 - register_mem_cube - MemCube test_cube does not exist, try to init from remote repo.
+2025-07-12 02:50:33,246 - memos.api.start_api - ERROR - start_api.py:416 - global_exception_handler - Unhandled error:
+Traceback (most recent call last):
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/middleware/errors.py", line 165, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 714, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 734, in app
+    await route.handle(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 288, in handle
+    await self.app(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 76, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/starlette/routing.py", line 73, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 301, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 212, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/api/start_api.py", line 259, in register_mem_cube
+    mos_instance.register_mem_cube(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        mem_cube_name_or_path=mem_cube.mem_cube_name_or_path,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        mem_cube_id=mem_cube.mem_cube_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        user_id=mem_cube.user_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/mem_os/core.py", line 391, in register_mem_cube
+    self.mem_cubes[mem_cube_id] = GeneralMemCube.init_from_remote_repo(
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        mem_cube_name_or_path
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/mem_cube/general.py", line 103, in init_from_remote_repo
+    dir = download_repo(cube_id, base_url)
+  File "/home/lazy/Documents/agent-zero/.venv/lib/python3.13/site-packages/memos/mem_cube/utils.py", line 22, in download_repo
+    subprocess.run(["git", "clone", repo_url, dir], check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['git', 'clone', 'https://huggingface.co/datasets/test_cube', '/tmp/tmpa85c965e']' returned non-zero exit status 128.

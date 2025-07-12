@@ -77,6 +77,32 @@ class Settings(TypedDict):
     mcp_server_enabled: bool
     mcp_server_token: str
 
+    # MemOS Configuration
+    memory_backend: str  # "faiss", "memos", "hybrid", "dual"
+    memos_host: str
+    memos_config_path: str
+    memos_user_id: str
+    memos_chat_model: str  # "huggingface", "ollama", "openai"
+    memos_model_name: str
+    memory_auto_sync: bool  # Enable automatic synchronization
+    
+    # Memory Types and Configuration
+    memos_memory_type: str  # "GeneralTextMemory", "TreeTextualMemory", "NaiveTextMemory"
+    memos_vector_db_host: str  # Qdrant vector database host
+    memos_graph_db_host: str  # Neo4j graph database host
+    memos_scheduler_enabled: bool  # Enable MemScheduler for concurrent operations
+    memos_memory_capacity: int  # Memory capacity limit
+    
+    # MemCube Configuration
+    memos_enable_textual_memory: bool
+    memos_enable_activation_memory: bool
+    memos_enable_parametric_memory: bool
+    
+    # MemReader Configuration
+    memos_reader_enabled: bool  # Enable MemReader for memory extraction
+    memos_reader_mode: str  # "simple", "detailed", "hierarchical"
+    memos_reader_threshold: float  # Extraction threshold for relevance
+
 
 class PartialSettings(Settings, total=False):
     pass
@@ -807,6 +833,153 @@ def convert_out(settings: Settings) -> SettingsOutput:
         }
     )
 
+    # MemOS Configuration Section
+    memos_fields = []
+
+    memos_fields.append(
+        {
+            "id": "memory_backend",
+            "title": "Memory Backend",
+            "description": "Choose memory backend: FAISS (local), MemoryOS (MemOS - advanced memory system), Hybrid (different areas), or Dual (both active simultaneously).",
+            "type": "select",
+            "value": settings["memory_backend"],
+            "options": [
+                {"value": "faiss", "label": "FAISS (Default)"},
+                {"value": "memos", "label": "MemOS"},
+                {"value": "hybrid", "label": "Hybrid (Area-based)"},
+                {"value": "dual", "label": "Dual Backend (Both Active)"}
+            ],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_host",
+            "title": "MemoryOS Host URL",
+            "description": "Host URL for local MemoryOS server (default: http://localhost:8080).",
+            "type": "text",
+            "value": settings["memos_host"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_config_path",
+            "title": "Configuration File Path",
+            "description": "Path to MemoryOS JSON configuration file (optional - will use defaults if empty).",
+            "type": "text",
+            "value": settings["memos_config_path"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_user_id",
+            "title": "MemoryOS User ID",
+            "description": "User identifier for MemoryOS sessions (default: agent_zero).",
+            "type": "text",
+            "value": settings["memos_user_id"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_memory_type",
+            "title": "Memory Type",
+            "description": "Choose memory structure: GeneralTextMemory (vector-based, conversational) or TreeTextualMemory (graph-based, hierarchical).",
+            "type": "select",
+            "value": settings["memos_memory_type"],
+            "options": [
+                {"value": "general", "label": "GeneralTextMemory (Vector/Qdrant)"},
+                {"value": "tree", "label": "TreeTextualMemory (Graph/Neo4j)"},
+                {"value": "naive", "label": "NaiveTextMemory (Simple)"}
+            ],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_chat_model",
+            "title": "Chat Model Backend",
+            "description": "Select LLM backend for MemoryOS (huggingface, ollama, openai).",
+            "type": "select",
+            "value": settings["memos_chat_model"],
+            "options": [
+                {"value": "huggingface", "label": "HuggingFace (Local)"},
+                {"value": "ollama", "label": "Ollama (Local)"},
+                {"value": "openai", "label": "OpenAI (API)"}
+            ],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_model_name",
+            "title": "Model Name",
+            "description": "Specific model identifier (e.g., llama2, gpt-3.5-turbo, microsoft/DialoGPT-medium).",
+            "type": "text",
+            "value": settings["memos_model_name"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_vector_db_host",
+            "title": "Vector Database Host",
+            "description": "Qdrant host URL for GeneralTextMemory (default: http://localhost:6333).",
+            "type": "text",
+            "value": settings["memos_vector_db_host"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_graph_db_host",
+            "title": "Graph Database Host",
+            "description": "Neo4j host URL for TreeTextualMemory (default: bolt://localhost:7687).",
+            "type": "text",
+            "value": settings["memos_graph_db_host"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_scheduler_enabled",
+            "title": "Enable Memory Scheduler",
+            "description": "Enable MemScheduler for concurrent memory management and capacity control.",
+            "type": "switch",
+            "value": settings["memos_scheduler_enabled"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memos_memory_capacity",
+            "title": "Memory Capacity",
+            "description": "Maximum number of memories to store (0 = unlimited). Scheduler will manage capacity.",
+            "type": "number",
+            "value": settings["memos_memory_capacity"],
+        }
+    )
+
+    memos_fields.append(
+        {
+            "id": "memory_auto_sync",
+            "title": "Auto Synchronization",
+            "description": "Automatically synchronize memories between backends when using Dual mode.",
+            "type": "switch",
+            "value": settings["memory_auto_sync"],
+        }
+    )
+
+    memos_section: SettingsSection = {
+        "id": "memos",
+        "title": "MemOS Configuration",
+        "description": "Configure MemoryOS advanced memory system integration with MOS (Memory Operating System) capabilities.",
+        "fields": memos_fields,
+        "tab": "agent",
+    }
+
     backup_section: SettingsSection = {
         "id": "backup_restore",
         "title": "Backup & Restore",
@@ -824,6 +997,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             util_model_section,
             browser_model_section,
             embed_model_section,
+            memos_section,
             stt_section,
             api_keys_section,
             auth_section,
@@ -1021,6 +1195,32 @@ def get_default_settings() -> Settings:
         mcp_client_tool_timeout=120,
         mcp_server_enabled=False,
         mcp_server_token=create_auth_token(),
+        
+        # MemOS defaults
+        memory_backend="memos",
+        memos_host="http://localhost:8080",
+        memos_config_path="",
+        memos_user_id="agent_zero",
+        memos_chat_model="openai",
+        memos_model_name="gpt-4.1",
+        memory_auto_sync=False,
+        
+        # Memory Types and Configuration
+        memos_memory_type="GeneralTextMemory",
+        memos_vector_db_host="http://localhost:6333",
+        memos_graph_db_host="bolt://localhost:7687",
+        memos_scheduler_enabled=True,
+        memos_memory_capacity=10000,
+        
+        # MemCube Configuration
+        memos_enable_textual_memory=True,
+        memos_enable_activation_memory=True,
+        memos_enable_parametric_memory=True,
+        
+        # MemReader Configuration
+        memos_reader_enabled=True,
+        memos_reader_mode="detailed",
+        memos_reader_threshold=0.7,
     )
 
 

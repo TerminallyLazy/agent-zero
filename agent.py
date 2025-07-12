@@ -230,6 +230,33 @@ class AgentConfig:
     code_exec_ssh_port: int = 55022
     code_exec_ssh_user: str = "root"
     code_exec_ssh_pass: str = ""
+    
+    # MemOS Configuration
+    memory_backend: str = "memos"  # "faiss", "memos", "hybrid", "dual"
+    memos_host: str = "http://localhost:8080"
+    memos_config_path: str = ""
+    memos_user_id: str = "agent_zero"
+    memos_chat_model: str = "openai"  # "huggingface", "ollama", "openai"
+    memos_model_name: str = "gpt-4.1"
+    memory_auto_sync: bool = False  # Enable automatic synchronization
+    
+    # Memory Types and Configuration
+    memos_memory_type: str = "GeneralTextMemory"  # "GeneralTextMemory", "TreeTextualMemory", "NaiveTextMemory"
+    memos_vector_db_host: str = "http://localhost:6333"  # Qdrant vector database host
+    memos_graph_db_host: str = "bolt://localhost:7687"  # Neo4j graph database host
+    memos_scheduler_enabled: bool = True  # Enable MemScheduler for concurrent operations
+    memos_memory_capacity: int = 10000  # Memory capacity limit
+    
+    # MemCube Configuration
+    memos_enable_textual_memory: bool = True
+    memos_enable_activation_memory: bool = True
+    memos_enable_parametric_memory: bool = True
+    
+    # MemReader Configuration
+    memos_reader_enabled: bool = True  # Enable MemReader for memory extraction
+    memos_reader_mode: str = "detailed"  # "simple", "detailed", "hierarchical"
+    memos_reader_threshold: float = 0.7  # Extraction threshold for relevance
+    
     additional: Dict[str, Any] = field(default_factory=dict)
 
 
