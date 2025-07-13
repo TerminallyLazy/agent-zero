@@ -29,7 +29,7 @@ class OAuthManager(Tool):
         action: str = "",
         client_id: str = "",
         client_secret: str = "",
-        redirect_uri: str = "http://localhost:8080/callback",
+        redirect_uri: str = "http://inbox-agent.xyz/callback", # localhost:8080/callback
         scopes: Optional[List[str]] = None,
         authorization_code: str = "",
         **kwargs

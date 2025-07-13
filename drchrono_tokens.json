@@ -1,0 +1,8 @@
+{
+  "access_token": "7fAej09h65s21Jj8POzD7WzJbmEYrs",
+  "token_type": "Bearer",
+  "expires_in": 172800,
+  "refresh_token": "HqoDjDaXuC3TmnwUz7EeQpZlO3RqeF",
+  "scope": "user:read user:write calendar:read calendar:write patients:read patients:write patients:summary:read billing:read billing:write clinical:read clinical:write labs:read labs:write",
+  "expires_at": "2025-07-15T17:03:54.237707"
+}

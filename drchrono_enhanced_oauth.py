@@ -19,9 +19,9 @@ from flask import Flask, redirect, url_for, request, jsonify, render_template_st
 from typing import Dict, List, Optional, Any
 
 # DrChrono OAuth2 Configuration
-CLIENT_ID = os.environ.get('DRCHRONO_CLIENT_ID', '')
-CLIENT_SECRET = os.environ.get('DRCHRONO_CLIENT_SECRET', '')
-REDIRECT_URI = os.environ.get('DRCHRONO_REDIRECT_URI', 'http://localhost:8080/callback')
+CLIENT_ID = os.environ.get('DRCHRONO_CLIENT_ID', 'kWzevEWcIvT1Ih12csjmzxoCIsbt09clOJ48vHhU')
+CLIENT_SECRET = os.environ.get('DRCHRONO_CLIENT_SECRET', 'tCF9oArAfBYbxafeauUYWnoLXTqpjPzbrJQH1hCJuLy2jkI22M4Ai9RnaeBLqgFT6ff3fBQLMNgYK5dWlyWs1Pp1EBNYzyV1GfNTn8X4Vd2EVNpOWOCoAJxA9x7aFQoN')
+REDIRECT_URI = os.environ.get('DRCHRONO_REDIRECT_URI', 'https://inbox-agent.xyz/callback')
 BASE_URL = 'https://drchrono.com'
 TOKENS_FILE = 'drchrono_tokens.json'
 
@@ -532,7 +532,7 @@ def test_endpoint_route():
 def agent_config():
     """Generate Agent Zero configuration"""
     tokens = load_tokens()
-    
+
     config = {
         'drchrono_config': {
             'client_id': CLIENT_ID,
@@ -541,7 +541,7 @@ def agent_config():
             'base_url': BASE_URL
         }
     }
-    
+
     if tokens:
         config['drchrono_tokens'] = {
             'access_token': tokens.get('access_token'),
@@ -550,22 +550,94 @@ def agent_config():
             'token_type': tokens.get('token_type', 'Bearer'),
             'scope': tokens.get('scope', '')
         }
-    
+
     return jsonify(config)
+
+@app.route('/test_redirect_uri')
+def test_redirect_uri_endpoint():
+    """Test if a redirect URI is valid"""
+    test_uri = request.args.get('uri', REDIRECT_URI)
+
+    if not CLIENT_ID:
+        return jsonify({'error': 'Client ID not configured'})
+
+    result = test_redirect_uri(test_uri)
+
+    return jsonify({
+        'uri': test_uri,
+        'valid': result['valid'],
+        'status_code': result['status'],
+        'error': result['error'],
+        'message': f"Redirect URI {'is valid' if result['valid'] else 'appears invalid: ' + str(result['error'])}"
+    })
+
+def test_redirect_uri(test_uri: str) -> dict:
+    """Test if a redirect URI is valid by making a test OAuth request"""
+    params = {
+        'client_id': CLIENT_ID,
+        'response_type': 'code',
+        'redirect_uri': test_uri,
+        'scope': 'user:read',  # Minimal scope for testing
+        'state': 'test_state'
+    }
+
+    test_url = f"{BASE_URL}/o/authorize/?{urlencode(params)}"
+
+    try:
+        # Make a GET request to check the response
+        response = requests.get(test_url, allow_redirects=False, timeout=10)
+
+        # Check if response contains error indicators
+        response_text = response.text.lower()
+
+        if 'mismatching redirect uri' in response_text or 'invalid_request' in response_text:
+            return {'valid': False, 'status': response.status_code, 'error': 'Redirect URI mismatch'}
+        elif response.status_code == 200 and ('authorize' in response_text or 'login' in response_text):
+            return {'valid': True, 'status': response.status_code, 'error': None}
+        else:
+            return {'valid': False, 'status': response.status_code, 'error': f'Unexpected response: {response.status_code}'}
+
+    except Exception as e:
+        return {'valid': False, 'status': None, 'error': str(e)}
 
 def main():
     """Run the OAuth client"""
     print("🏥 DrChrono Enhanced OAuth2 Client")
     print("=" * 40)
     print(f"Client ID: {CLIENT_ID[:8] + '...' if CLIENT_ID else 'Not configured'}")
-    print(f"Redirect URI: {REDIRECT_URI}")
+    print(f"Current Redirect URI: {REDIRECT_URI}")
     print(f"Available Scopes: {sum(len(scopes) for scopes in AVAILABLE_SCOPES.values())}")
     print()
-    print("Starting web server on http://localhost:8080")
+
+    # Test common redirect URIs
+    test_uris = [
+        REDIRECT_URI,
+        'http://localhost:8181/callback',
+        'http://127.0.0.1:8181/callback',
+        'http://localhost:8080/callback',
+        'https://inbox-agent.xyz/callback',
+        'http://inbox-agent.xyz/oauth/callback',
+        'http://localhost/callback'
+    ]
+
+    print("Testing redirect URIs...")
+    for uri in test_uris:
+        if CLIENT_ID:  # Only test if we have a client ID
+            result = test_redirect_uri(uri)
+            if result['valid']:
+                status = "✅ VALID"
+            else:
+                status = f"❌ INVALID ({result['error']})"
+            print(f"  {status}: {uri}")
+        else:
+            print(f"  ⚠️  SKIPPED: {uri} (no client ID)")
+
+    print()
+    print("Starting web server on http://localhost:8182")
     print("Open your browser to begin OAuth configuration")
     print()
-    
-    app.run(host='0.0.0.0', port=8080, debug=True)
+
+    app.run(host='0.0.0.0', port=8182, debug=True)
 
 if __name__ == '__main__':
     main()
