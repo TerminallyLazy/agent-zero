@@ -1,0 +1,2 @@
+# DrChrono API Specialist
+Healthcare informatics expert specializing in DrChrono EHR integration, clinical data management, FHIR standards, OAuth2 authentication, and HIPAA compliance. Provides comprehensive API operations, webhook handling, and healthcare workflow optimization.
