@@ -81,6 +81,19 @@ const settingsModalProxy = {
                     }
                 }
             }
+
+            // When switching to the profiles tab, initialize profilesSettings
+            if (tabName === 'profiles') {
+                console.log('Switching to profiles tab, initializing profilesSettings');
+                const profilesElement = document.querySelector('[x-data="profilesSettings"]');
+                if (profilesElement) {
+                    const profilesData = Alpine.$data(profilesElement);
+                    if (profilesData && typeof profilesData.loadProfiles === 'function') {
+                        // Load profiles data
+                        profilesData.loadProfiles();
+                    }
+                }
+            }
         }, 10);
     },
 
@@ -409,6 +422,8 @@ document.addEventListener('alpine:init', function () {
                     this.filteredSections = this.settingsData.sections?.filter(section =>
                         section.tab === 'backup'
                     ) || [];
+                } else if (this.activeTab === 'profiles') {
+                    this.filteredSections = [];
                 } else {
                     // For any other tab, show nothing since those tabs have custom UI
                     this.filteredSections = [];

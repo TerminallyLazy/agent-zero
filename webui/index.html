@@ -126,6 +126,7 @@
     <script type="text/javascript" src="js/settings.js"></script>
     <script type="text/javascript" src="js/file_browser.js"></script>
     <script type="text/javascript" src="js/modal.js"></script>
+    <script type="text/javascript" src="js/profiles.js?v=2"></script>
     <script type="module" src="js/tunnel.js"></script>
 </head>
 
@@ -553,11 +554,15 @@
                                      :class="{'active': activeTab === 'backup'}"
                                      @click="switchTab('backup')"
                                      title="Backup & Restore">Backup & Restore</div>
+                                <div class="settings-tab"
+                                     :class="{'active': activeTab === 'profiles'}"
+                                     @click="switchTab('profiles')"
+                                     title="Agent Profiles">Agent Profiles</div>
                             </div>
                         </div>
 
-                        <!-- Display settings sections for agent, external, developer, mcp, backup tabs -->
-                        <div id="settings-sections" x-show="activeTab !== 'scheduler'">
+                        <!-- Display settings sections for agent, external, developer, mcp tabs -->
+                        <div id="settings-sections" x-show="activeTab !== 'scheduler' && activeTab !== 'backup' && activeTab !== 'profiles'">
                             <nav>
                                 <ul>
                                     <template x-for="(section, index) in filteredSections" :key="section.title">
@@ -1416,6 +1421,223 @@
                                 </div>
                             </div>
                         </div>
+
+
+                        <!-- Backup & Restore Tab Content -->
+                        <div id="backup-tab-content" x-show="activeTab === 'backup'">
+                            <nav>
+                                <ul>
+                                    <li>
+                                        <a href="#section-backup-restore">
+                                            <img src="/public/backup_restore.svg" alt="Backup & Restore">
+                                            <span>Backup & Restore</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+
+                            <div id="section-backup-restore" class="section">
+                                <div class="section-title">Backup & Restore</div>
+                                <div class="section-description">Backup and restore Agent Zero data and configurations using glob pattern-based file selection.</div>
+
+                                <!-- Backup Section -->
+                                <div class="field">
+                                    <div class="field-label">
+                                        <div class="field-title">Create Backup</div>
+                                        <div class="field-description">Create a backup archive of selected files and configurations using customizable patterns.</div>
+                                    </div>
+                                    <div class="field-control">
+                                        <button class="btn btn-field" onclick="openModal('settings/backup/backup.html')">
+                                            Create Backup
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Restore Section -->
+                                <div class="field">
+                                    <div class="field-label">
+                                        <div class="field-title">Restore from Backup</div>
+                                        <div class="field-description">Restore files and configurations from a backup archive with pattern-based selection.</div>
+                                    </div>
+                                    <div class="field-control">
+                                        <button class="btn btn-field" onclick="openModal('settings/backup/restore.html')">
+                                            Restore Backup
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                        <!-- Agent Profiles Tab Content -->
+                        <div id="profiles-tab-content" x-show="activeTab === 'profiles'" x-cloak x-data="profilesSettings">
+                            <!-- Settings section structure for profiles -->
+                            <nav>
+                                <ul>
+                                    <li>
+                                        <a href="#section-profile-manager">
+                                            <img src="/public/settings.svg" alt="Profile Manager">
+                                            <span>Profile Manager</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+
+                            <div id="section-profile-manager" class="section">
+                                <div class="section-title">Agent Profile Manager</div>
+                                <div class="section-description">Create, manage, and switch between different agent profiles. Each profile can have unique prompts, memory, and configurations.</div>
+
+                                <!-- Current Active Profile -->
+                                <div class="profile-current" x-show="activeProfile">
+                                    <div class="profile-current-header">
+                                        <h3>Current Active Profile</h3>
+                                    </div>
+                                    <div class="profile-card active" x-show="activeProfile">
+                                        <div class="profile-avatar" x-text="activeProfile?.avatar || '🤖'"></div>
+                                        <div class="profile-info">
+                                            <div class="profile-name" x-text="activeProfile?.name || 'Default'"></div>
+                                            <div class="profile-description" x-text="activeProfile?.description || 'No description'"></div>
+                                        </div>
+                                        <div class="profile-badge">Active</div>
+                                    </div>
+                                </div>
+
+                                <!-- Available Profiles -->
+                                <div class="profiles-section">
+                                    <div class="profiles-header">
+                                        <h3>Available Profiles</h3>
+                                        <div class="profiles-actions">
+                                            <button class="btn btn-field" @click="createProfile()">
+                                                <span>+ Create Profile</span>
+                                            </button>
+                                            <button class="btn btn-field" @click="importProfile()">
+                                                <span>📥 Import</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Profiles Grid -->
+                                    <div class="profiles-grid" x-show="profiles.length > 0">
+                                        <template x-for="profile in profiles" :key="profile.id">
+                                            <div class="profile-card" :class="{'active': profile.id === activeProfileId}">
+                                                <div class="profile-avatar" x-text="profile.avatar || '🤖'"></div>
+                                                <div class="profile-info">
+                                                    <div class="profile-name" x-text="profile.name"></div>
+                                                    <div class="profile-description" x-text="profile.description || 'No description'"></div>
+                                                    <div class="profile-meta">
+                                                        <span x-show="profile.is_template" class="profile-template-badge">Template</span>
+                                                        <span class="profile-created">Created: <span x-text="formatDate(profile.created_at)"></span></span>
+                                                    </div>
+                                                </div>
+                                                <div class="profile-actions">
+                                                    <button class="btn btn-small" @click="switchProfile(profile.id)" 
+                                                            x-show="profile.id !== activeProfileId && !profile.is_template">
+                                                        Activate
+                                                    </button>
+                                                    <button class="btn btn-small" @click="editProfile(profile)" 
+                                                            x-show="!profile.is_template">
+                                                        Edit
+                                                    </button>
+                                                    <button class="btn btn-small" @click="exportProfile(profile.id)">
+                                                        Export
+                                                    </button>
+                                                    <button class="btn btn-small btn-danger" @click="deleteProfile(profile.id)" 
+                                                            x-show="profile.id !== 'default' && !profile.is_template">
+                                                        Delete
+                                                    </button>
+                                                    <button class="btn btn-small" @click="createFromTemplate(profile)" 
+                                                            x-show="profile.is_template">
+                                                        Use Template
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Empty State -->
+                                    <div class="profiles-empty" x-show="profiles.length === 0">
+                                        <div class="empty-icon">📁</div>
+                                        <div class="empty-title">No Profiles Found</div>
+                                        <div class="empty-description">Create your first profile to get started</div>
+                                        <button class="btn btn-field" @click="createProfile()">
+                                            Create Profile
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Profile Creation/Edit Modal -->
+                                <div class="profile-modal" x-show="showProfileModal" x-cloak>
+                                    <div class="profile-modal-overlay" @click="cancelProfileEdit()"></div>
+                                    <div class="profile-modal-content">
+                                        <div class="profile-modal-header">
+                                            <h3 x-text="editingProfile?.id ? 'Edit Profile' : 'Create Profile'"></h3>
+                                            <button class="modal-close" @click="cancelProfileEdit()">&times;</button>
+                                        </div>
+                                        <div class="profile-modal-body">
+                                            <div class="profile-form">
+                                                <div class="profile-form-field">
+                                                    <label>Profile Name</label>
+                                                    <input type="text" x-model="editingProfile.name" placeholder="Enter profile name">
+                                                </div>
+                                                <div class="profile-form-field">
+                                                    <label>Description</label>
+                                                    <textarea x-model="editingProfile.description" placeholder="Enter profile description"></textarea>
+                                                </div>
+                                                <div class="profile-form-field">
+                                                    <label>Avatar</label>
+                                                    <input type="text" x-model="editingProfile.avatar" placeholder="Enter emoji or character">
+                                                </div>
+                                                <div class="profile-form-field">
+                                                    <label>Prompts Subdirectory</label>
+                                                    <input type="text" x-model="editingProfile.prompts_subdir" placeholder="prompts subdirectory">
+                                                </div>
+                                                <div class="profile-form-field">
+                                                    <label>Memory Subdirectory</label>
+                                                    <input type="text" x-model="editingProfile.memory_subdir" placeholder="memory subdirectory">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="profile-modal-footer">
+                                            <button class="btn btn-ok" @click="saveProfile()">
+                                                <span x-text="editingProfile?.id ? 'Update' : 'Create'"></span>
+                                            </button>
+                                            <button class="btn btn-cancel" @click="cancelProfileEdit()">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- File Import Modal -->
+                                <div class="import-modal" x-show="showImportModal" x-cloak>
+                                    <div class="import-modal-overlay" @click="cancelImport()"></div>
+                                    <div class="import-modal-content">
+                                        <div class="import-modal-header">
+                                            <h3>Import Profile</h3>
+                                            <button class="modal-close" @click="cancelImport()">&times;</button>
+                                        </div>
+                                        <div class="import-modal-body">
+                                            <div class="import-dropzone" 
+                                                 @drop.prevent="handleFileDrop($event)"
+                                                 @dragover.prevent
+                                                 @dragenter.prevent>
+                                                <div class="import-icon">📁</div>
+                                                <div class="import-text">Drop ZIP file here or click to browse</div>
+                                                <input type="file" accept=".zip" @change="handleFileSelect($event)" style="display: none;" x-ref="fileInput">
+                                                <button class="btn btn-field" @click="$refs.fileInput.click()">
+                                                    Browse Files
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="import-modal-footer">
+                                            <button class="btn btn-cancel" @click="cancelImport()">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="modal-footer">
@@ -1530,7 +1752,7 @@
                                 </template>
                             </div>
                         </div>
-                    </div>
+
                     <div class="modal-footer">
                         <div id="buttons-container">
                             <label class="btn btn-upload"><svg xmlns="http://www.w3.org/2000/svg" fill="none"

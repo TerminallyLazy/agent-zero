@@ -1,0 +1,19 @@
+{
+  "id": "researcher",
+  "name": "Researcher", 
+  "description": "Enhanced for research tasks with improved analysis and information gathering",
+  "avatar": "🔬",
+  "created_at": "2025-01-13T10:00:00Z",
+  "updated_at": "2025-01-13T10:00:00Z",
+  "prompts_subdir": "researcher",
+  "memory_subdir": "researcher",
+  "knowledge_subdirs": ["default", "research"],
+  "chat_model_overrides": {},
+  "utility_model_overrides": {},
+  "embedding_model_overrides": {},
+  "browser_model_overrides": {},
+  "custom_tools": [],
+  "custom_extensions": [],
+  "is_template": true,
+  "template_source": "built-in"
+}

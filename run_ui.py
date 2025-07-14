@@ -210,9 +210,56 @@ def run():
         )
 
     # initialize and register API handlers
-    handlers = load_classes_from_folder("python/api", "*.py", ApiHandler)
-    for handler in handlers:
-        register_api_handler(webapp, handler)
+    try:
+        handlers = load_classes_from_folder("python/api", "*.py", ApiHandler)
+        for handler in handlers:
+            register_api_handler(webapp, handler)
+    except Exception as e:
+        PrintStyle(font_color="orange", padding=True).print(f"Warning: Could not load all API handlers: {e}")
+        
+        # Manually register critical handlers (profile and CSRF)
+        try:
+            from python.api.profile_list import ProfileList
+            from python.api.profile_create import ProfileCreate
+            from python.api.profile_get import ProfileGet
+            from python.api.profile_update import ProfileUpdate
+            from python.api.profile_delete import ProfileDelete
+            from python.api.profile_switch import ProfileSwitch
+            from python.api.profile_export import ProfileExport
+            from python.api.profile_import import ProfileImport
+            from python.api.profile_templates import ProfileTemplates
+            from python.api.profile_create_from_template import ProfileCreateFromTemplate
+            from python.api.csrf_token import GetCsrfToken
+            from python.api.backup_get_defaults import BackupGetDefaults
+            from python.api.backup_create import BackupCreate
+            from python.api.backup_restore import BackupRestore
+
+            critical_handler_classes = [
+                # Profile handlers
+                ProfileList,
+                ProfileCreate,
+                ProfileGet,
+                ProfileUpdate,
+                ProfileDelete,
+                ProfileSwitch,
+                ProfileExport,
+                ProfileImport,
+                ProfileTemplates,
+                ProfileCreateFromTemplate,
+                # Essential handlers
+                GetCsrfToken,
+                BackupGetDefaults,
+                BackupCreate,
+                BackupRestore
+            ]
+
+            for handler_class in critical_handler_classes:
+                register_api_handler(webapp, handler_class)
+
+            PrintStyle(font_color="green", padding=True).print("Critical API handlers registered successfully")
+
+        except Exception as handler_error:
+            PrintStyle(font_color="red", padding=True).print(f"Failed to register critical handlers: {handler_error}")
 
     # add the webapp and mcp to the app
     app = DispatcherMiddleware(

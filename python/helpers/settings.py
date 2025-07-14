@@ -513,6 +513,34 @@ def convert_out(settings: Settings) -> SettingsOutput:
     # Agent config section
     agent_fields: list[SettingsField] = []
 
+    # Add profile selector field
+    try:
+        from python.helpers.profiles import get_profile_manager
+        profile_manager = get_profile_manager()
+        profiles = profile_manager.list_profiles()
+        active_profile_id = profile_manager.get_active_profile_id()
+        
+        # Filter out templates for selection
+        profile_options = [
+            {"value": profile["id"], "label": f"{profile.get('avatar', '🤖')} {profile['name']}"}
+            for profile in profiles if not profile.get("is_template", False)
+        ]
+        
+        agent_fields.append(
+            {
+                "id": "active_profile",
+                "title": "Active Profile",
+                "description": "Select the agent profile to use. Profiles contain custom prompts, memory settings, and configurations.",
+                "type": "select",
+                "value": active_profile_id,
+                "options": profile_options,
+                "profile_selector": True,  # Special flag to handle profile switching
+            }
+        )
+    except Exception as e:
+        # If profiles system fails, don't break settings
+        print(f"Warning: Could not load profiles for settings: {e}")
+
     agent_fields.append(
         {
             "id": "agent_prompts_subdir",

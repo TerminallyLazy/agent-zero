@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from openai import BaseModel
 from pydantic import Field
 from fastmcp import FastMCP
+import fastmcp
 
 from agent import AgentContext, AgentContextType, UserMessage
 from python.helpers.persist_chat import save_tmp_chat, remove_chat
@@ -290,21 +291,51 @@ class DynamicMcpProxy:
         message_path = f"/t-{self.token}/messages/"
 
         # Update settings in the MCP server instance if provided
-        mcp_server.settings.message_path = message_path
-        mcp_server.settings.sse_path = sse_path
+        try:
+            fastmcp.message_path = message_path
+            fastmcp.sse_path = sse_path
+        except AttributeError:
+            # Fallback for older versions
+            pass
 
         # Create a new MCP app with updated settings
         with self._lock:
-            self.app = create_sse_app(
-                server=mcp_server,
-                message_path=mcp_server.settings.message_path,
-                sse_path=mcp_server.settings.sse_path,
-                auth_server_provider=mcp_server._auth_server_provider,
-                auth_settings=mcp_server.settings.auth,
-                debug=mcp_server.settings.debug,
-                routes=mcp_server._additional_http_routes,
-                middleware=[Middleware(BaseHTTPMiddleware, dispatch=mcp_middleware)],
-            )
+            # Prepare base parameters that are always required
+            params = {
+                "server": mcp_server,
+                "message_path": message_path,
+                "sse_path": sse_path,
+                "middleware": [Middleware(BaseHTTPMiddleware, dispatch=mcp_middleware)],
+            }
+            
+            # Only add optional parameters if they are supported and not None
+            import inspect
+            sig = inspect.signature(create_sse_app)
+            
+            # Try to get auth from mcp_server, fallback to None
+            if "auth" in sig.parameters:
+                try:
+                    auth_value = mcp_server.auth
+                except AttributeError:
+                    # Try fastmcp.settings.default_auth_provider if available
+                    try:
+                        auth_value = getattr(fastmcp.settings, "default_auth_provider", None)
+                    except AttributeError:
+                        auth_value = None
+                
+                # Only add auth parameter if it's not None
+                if auth_value is not None:
+                    params["auth"] = auth_value
+            
+            # Try to get debug setting, fallback to False
+            if "debug" in sig.parameters:
+                try:
+                    debug_value = fastmcp.settings.debug
+                except AttributeError:
+                    debug_value = False
+                params["debug"] = debug_value
+            
+            self.app = create_sse_app(**params)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Forward the ASGI calls to the current app"""

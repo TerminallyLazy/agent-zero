@@ -6,6 +6,50 @@ from python.helpers.print_style import PrintStyle
 
 def initialize_agent():
     current_settings = settings.get_settings()
+    
+    # Get active profile and apply profile overrides
+    try:
+        from python.helpers.profiles import get_profile_manager
+        profile_manager = get_profile_manager()
+        active_profile = profile_manager.get_active_profile()
+        
+        # Apply profile overrides to settings
+        if active_profile:
+            # Override agent configuration from profile
+            if active_profile.get("prompts_subdir"):
+                current_settings["agent_prompts_subdir"] = active_profile["prompts_subdir"]
+            if active_profile.get("memory_subdir"):
+                current_settings["agent_memory_subdir"] = active_profile["memory_subdir"]
+            if active_profile.get("knowledge_subdirs"):
+                # Use profile knowledge subdirs, keeping default as first
+                knowledge_subdirs = active_profile["knowledge_subdirs"]
+                if "default" not in knowledge_subdirs:
+                    knowledge_subdirs = ["default"] + knowledge_subdirs
+                current_settings["agent_knowledge_subdir"] = knowledge_subdirs[1] if len(knowledge_subdirs) > 1 else "default"
+                # Store full knowledge subdirs list for later use
+                current_settings["_profile_knowledge_subdirs"] = knowledge_subdirs
+            
+            # Apply model overrides from profile
+            for override_key, overrides in [
+                ("chat_model_overrides", "chat_model"),
+                ("utility_model_overrides", "util_model"),
+                ("embedding_model_overrides", "embed_model"),
+                ("browser_model_overrides", "browser_model")
+            ]:
+                model_overrides = active_profile.get(override_key, {})
+                if model_overrides:
+                    for setting_key, setting_value in model_overrides.items():
+                        full_key = f"{overrides}_{setting_key}"
+                        if full_key in current_settings:
+                            current_settings[full_key] = setting_value
+            
+            PrintStyle(font_color="green", padding=True).print(
+                f"Using profile: {active_profile.get('name', 'Unknown')} ({active_profile.get('id', 'unknown')})"
+            )
+    except Exception as e:
+        PrintStyle(font_color="orange", padding=True).print(
+            f"Warning: Could not load profile settings: {e}"
+        )
 
     def _normalize_model_kwargs(kwargs: dict) -> dict:
         # convert string values that represent valid Python numbers to numeric types
@@ -77,7 +121,7 @@ def initialize_agent():
         browser_model=browser_llm,
         prompts_subdir=current_settings["agent_prompts_subdir"],
         memory_subdir=current_settings["agent_memory_subdir"],
-        knowledge_subdirs=["default", current_settings["agent_knowledge_subdir"]],
+        knowledge_subdirs=current_settings.get("_profile_knowledge_subdirs", ["default", current_settings["agent_knowledge_subdir"]]),
         mcp_servers=current_settings["mcp_servers"],
         code_exec_docker_enabled=False,
         # code_exec_docker_name = "A0-dev",

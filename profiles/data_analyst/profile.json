@@ -1,0 +1,31 @@
+{
+  "id": "data_analyst",
+  "name": "Data Analyst",
+  "description": "All the data analyst you'll ever need.",
+  "avatar": "🤖",
+  "created_at": "2025-07-14T00:46:25.243743+00:00",
+  "updated_at": "2025-07-14T01:11:05.597030+00:00",
+  "prompts_subdir": "data_analyst",
+  "memory_subdir": "default",
+  "knowledge_subdirs": [
+    "default"
+  ],
+  "chat_model_overrides": {},
+  "utility_model_overrides": {},
+  "embedding_model_overrides": {},
+  "browser_model_overrides": {},
+  "custom_tools": [],
+  "custom_extensions": [],
+  "custom_helpers": [],
+  "tools_dir": "tools",
+  "helpers_dir": "helpers",
+  "extensions_dir": "extensions",
+  "assets_dir": "assets",
+  "config_files": [],
+  "environment_vars": {},
+  "dependencies": [],
+  "version": "1.0.0",
+  "author": "",
+  "is_template": false,
+  "template_source": ""
+}
