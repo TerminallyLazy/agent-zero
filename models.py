@@ -71,6 +71,7 @@ class ModelProvider(Enum):
     AZURE = "OpenAI Azure"
     OPENROUTER = "OpenRouter"
     SAMBANOVA = "Sambanova"
+    WEBLLM = "WebLLM"
     OTHER = "Other OpenAI compatible"
 
 
@@ -341,6 +342,70 @@ class BrowserCompatibleChatWrapper(LiteLLMChatWrapper):
             yield chunk
 
 
+class WebLLMChatWrapper(SimpleChatModel):
+    """
+    WebLLM provider for client-side inference.
+    This wrapper acts as a placeholder that signals the frontend to use WebLLM.
+    """
+    model_name: str
+    provider: str
+    kwargs: dict = {}
+
+    def __init__(self, model: str, provider: str, **kwargs: Any):
+        self.model_name = model
+        self.provider = provider
+        self.kwargs = kwargs
+        super().__init__()
+
+    @property
+    def _llm_type(self) -> str:
+        return "webllm-chat"
+
+    def _call(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> str:
+        # This should not be called directly as WebLLM runs in the browser
+        raise NotImplementedError("WebLLM inference should be handled by the frontend")
+
+    def _stream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        # This should not be called directly as WebLLM runs in the browser
+        raise NotImplementedError("WebLLM streaming should be handled by the frontend")
+
+    async def _astream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        # This should not be called directly as WebLLM runs in the browser
+        raise NotImplementedError("WebLLM async streaming should be handled by the frontend")
+
+    async def unified_call(
+        self,
+        system_message="",
+        user_message="",
+        messages: List[BaseMessage] | None = None,
+        response_callback: Callable[[str, str], Awaitable[None]] | None = None,
+        reasoning_callback: Callable[[str, str], Awaitable[None]] | None = None,
+        tokens_callback: Callable[[str, int], Awaitable[None]] | None = None,
+        **kwargs: Any,
+    ) -> Tuple[str, str]:
+        # This is where we signal that WebLLM should be used
+        # The actual inference will be handled by the frontend
+        raise NotImplementedError("WebLLM unified_call should be handled by the frontend")
+
+
 class LiteLLMEmbeddingWrapper(Embeddings):
     model_name: str
     kwargs: dict = {}
@@ -470,6 +535,8 @@ def _adjust_call_args(provider_name: str, model_name: str, kwargs: dict):
 def get_model(type: ModelType, provider: ModelProvider, name: str, **kwargs: Any):
     provider_name = provider.name.lower()
     if type == ModelType.CHAT:
+        if provider == ModelProvider.WEBLLM:
+            return WebLLMChatWrapper(model=name, provider=provider_name, **kwargs)
         return _get_litellm_chat(LiteLLMChatWrapper, name, provider_name, **kwargs)
     elif type == ModelType.EMBEDDING:
         return _get_litellm_embedding(name, provider_name, **kwargs)
@@ -479,16 +546,20 @@ def get_model(type: ModelType, provider: ModelProvider, name: str, **kwargs: Any
 
 def get_chat_model(
     provider: ModelProvider, name: str, **kwargs: Any
-) -> LiteLLMChatWrapper:
+) -> LiteLLMChatWrapper | WebLLMChatWrapper:
     provider_name = provider.name.lower()
+    if provider == ModelProvider.WEBLLM:
+        return WebLLMChatWrapper(model=name, provider=provider_name, **kwargs)
     model = _get_litellm_chat(LiteLLMChatWrapper, name, provider_name, **kwargs)
     return model
 
 
 def get_browser_model(
     provider: ModelProvider, name: str, **kwargs: Any
-) -> BrowserCompatibleChatWrapper:
+) -> BrowserCompatibleChatWrapper | WebLLMChatWrapper:
     provider_name = provider.name.lower()
+    if provider == ModelProvider.WEBLLM:
+        return WebLLMChatWrapper(model=name, provider=provider_name, **kwargs)
     model = _get_litellm_chat(
         BrowserCompatibleChatWrapper, name, provider_name, **kwargs
     )

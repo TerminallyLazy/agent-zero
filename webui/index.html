@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="css/history.css">
     <link rel="stylesheet" href="css/scheduler-datepicker.css">
     <link rel="stylesheet" href="css/tunnel.css">
+    <link rel="stylesheet" href="css/webllm.css">
 
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="vendor/font-awesome/all.min.css">
@@ -123,10 +124,15 @@
     
 
     <!-- Non-module scripts after Alpine.js -->
+    <!-- WebLLM Library -->
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.70/lib/index.js"></script>
+    
     <script type="text/javascript" src="js/settings.js"></script>
     <script type="text/javascript" src="js/file_browser.js"></script>
     <script type="text/javascript" src="js/modal.js"></script>
     <script type="module" src="js/tunnel.js"></script>
+    <script type="text/javascript" src="js/webgpu-memory-manager.js"></script>
+    <script type="text/javascript" src="js/webllm-engine.js"></script>
 </head>
 
 <body class="dark-mode device-pointer">
@@ -553,11 +559,15 @@
                                      :class="{'active': activeTab === 'backup'}"
                                      @click="switchTab('backup')"
                                      title="Backup & Restore">Backup & Restore</div>
+                                <div class="settings-tab"
+                                     :class="{'active': activeTab === 'webllm'}"
+                                     @click="switchTab('webllm')"
+                                     title="WebLLM Local Models">WebLLM</div>
                             </div>
                         </div>
 
                         <!-- Display settings sections for agent, external, developer, mcp, backup tabs -->
-                        <div id="settings-sections" x-show="activeTab !== 'scheduler'">
+                        <div id="settings-sections" x-show="activeTab !== 'scheduler' && activeTab !== 'webllm'">
                             <nav>
                                 <ul>
                                     <template x-for="(section, index) in filteredSections" :key="section.title">
@@ -1421,6 +1431,506 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- WebLLM Tab Content -->
+                        <div id="webllm-tab-content" x-show="activeTab === 'webllm'" x-cloak x-data="$store.webllm">
+                        <!-- Settings section structure for WebLLM -->
+                        <nav>
+                            <ul>
+                                <li>
+                                    <a href="#section-webllm-models">
+                                        <img src="/public/chat_model.svg" alt="WebLLM Models">
+                                        <span>Local Models</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="#section-webllm-performance">
+                                        <img src="/public/chart.svg" alt="Performance">
+                                        <span>Performance</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="#section-webllm-test">
+                                        <img src="/public/test.svg" alt="Test">
+                                        <span>Test & Debug</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </nav>
+
+                        <div id="section-webllm-models" class="section">
+                            <div class="section-title">WebLLM Local Models</div>
+                            <div class="section-description">Manage local AI models that run entirely in your browser using WebGPU acceleration.</div>
+
+                            <!-- Compatibility Check -->
+                            <div class="field">
+                                <div class="field-label">
+                                    <div class="field-title">Browser Compatibility</div>
+                                    <div class="field-description">Check if your browser supports WebLLM features and get setup instructions</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-compatibility">
+                                        <div class="compatibility-item">
+                                            <span class="compatibility-label">WebGPU Support:</span>
+                                            <span :class="compatibility?.webgpu ? 'status-supported' : 'status-unsupported'" 
+                                                x-text="compatibility?.webgpu ? 'Supported' : 'Not Supported'"></span>
+                                        </div>
+                                        <div class="compatibility-item">
+                                            <span class="compatibility-label">WebAssembly Support:</span>
+                                            <span :class="compatibility?.webassembly ? 'status-supported' : 'status-unsupported'"
+                                                x-text="compatibility?.webassembly ? 'Supported' : 'Not Supported'"></span>
+                                        </div>
+                                        <div class="compatibility-item">
+                                            <span class="compatibility-label">Overall Status:</span>
+                                            <span :class="compatibility?.supported ? 'status-supported' : 'status-unsupported'"
+                                                x-text="compatibility?.supported ? 'Ready to use' : 'Not compatible'"></span>
+                                        </div>
+                                        <!-- WebGPU Setup Instructions -->
+                                        <template x-if="!compatibility?.webgpu && compatibility?.instructions?.length > 0">
+                                            <div class="webgpu-instructions">
+                                                <div class="field-title">Enable WebGPU for GPU Acceleration:</div>
+                                                <div class="instructions-note">With your RTX 4070, WebGPU will provide significant performance improvements!</div>
+                                                <ol class="instructions-list">
+                                                    <template x-for="instruction in compatibility.instructions">
+                                                        <li x-text="instruction"></li>
+                                                    </template>
+                                                </ol>
+                                                <div class="instructions-note">
+                                                    <strong>Note:</strong> WebLLM works without GPU using WebAssembly, but WebGPU acceleration will be much faster.
+                                                </div>
+                                            </div>
+                                        </template>
+                                        
+                                        <template x-if="compatibility?.limitations?.length > 0">
+                                            <div class="compatibility-limitations">
+                                                <div class="field-title">Current Limitations:</div>
+                                                <ul>
+                                                    <template x-for="limitation in compatibility.limitations">
+                                                        <li x-text="limitation"></li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Model Management -->
+                            <div class="field">
+                                <div class="field-label">
+                                    <div class="field-title">Available Models</div>
+                                    <div class="field-description">Select and download models for local inference</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-models">
+                                        <template x-if="!isInitialized">
+                                            <div class="webllm-not-initialized">
+                                                <p>WebLLM is not yet initialized. Browser compatibility must be supported to use local models.</p>
+                                                <button class="btn btn-primary" @click="init()" :disabled="!compatibility?.supported">
+                                                    Initialize WebLLM
+                                                </button>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="isInitialized">
+                                            <div class="webllm-model-grid">
+                                                <template x-for="modelId in engine.supportedModels" :key="modelId">
+                                                    <div class="webllm-model-card enhanced" :class="{ 'model-active': currentModel === modelId, 'model-loading': isLoading && currentModel === modelId }">
+                                                        <div class="model-header">
+                                                            <div class="model-info">
+                                                                <h4 x-text="modelId.replace('-q4f32_1-MLC', '').replace(/-/g, ' ')"></h4>
+                                                                <div class="model-details">
+                                                                    <span class="model-size" x-text="engine.estimateMemoryUsage(modelId)"></span>
+                                                                    <span class="model-type">4-bit Quantized</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="model-status-indicator">
+                                                                <template x-if="currentModel === modelId">
+                                                                    <div class="status-dot status-active" title="Model is loaded and ready"></div>
+                                                                </template>
+                                                                <template x-if="currentModel !== modelId">
+                                                                    <div class="status-dot status-inactive" title="Model is not loaded"></div>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                        <div class="model-description">
+                                                            <template x-if="modelId.includes('Llama-3.2-1B')">
+                                                                <span>Compact and efficient model, perfect for quick responses and low-resource environments</span>
+                                                            </template>
+                                                            <template x-if="modelId.includes('Llama-3.2-3B')">
+                                                                <span>Balanced model offering good performance with moderate resource usage</span>
+                                                            </template>
+                                                            <template x-if="modelId.includes('TinyLlama')">
+                                                                <span>Ultra-lightweight model for basic chat and simple tasks</span>
+                                                            </template>
+                                                            <template x-if="modelId.includes('Phi-3.5')">
+                                                                <span>Microsoft's efficient model optimized for code and reasoning tasks</span>
+                                                            </template>
+                                                            <template x-if="modelId.includes('gemma')">
+                                                                <span>Google's Gemma model with strong performance in various tasks</span>
+                                                            </template>
+                                                        </div>
+                                                        <div class="model-actions">
+                                                            <template x-if="currentModel !== modelId">
+                                                                <button class="btn btn-primary" 
+                                                                        @click="loadModel(modelId)"
+                                                                        :disabled="isLoading">
+                                                                    <span x-show="!isLoading">📥 Load Model</span>
+                                                                    <span x-show="isLoading">⏳ Loading...</span>
+                                                                </button>
+                                                            </template>
+                                                            <template x-if="currentModel === modelId">
+                                                                <div class="model-loaded">
+                                                                    <span class="status-loaded">✅ Ready</span>
+                                                                    <button class="btn btn-secondary" @click="unloadModel()">
+                                                                        🗑️ Unload
+                                                                    </button>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Loading Progress -->
+                            <div class="field" x-show="isLoading">
+                                <div class="field-label">
+                                    <div class="field-title">Model Loading Progress</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" :style="`width: ${loadingProgress}%`"></div>
+                                        </div>
+                                        <div class="progress-text" x-text="loadingText"></div>
+                                        <div class="progress-percentage" x-text="`${Math.round(loadingProgress)}%`"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Current Model Status -->
+                            <div class="field" x-show="currentModel">
+                                <div class="field-label">
+                                    <div class="field-title">Current Model</div>
+                                    <div class="field-description">Currently loaded model information</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-current-model">
+                                        <div class="current-model-info">
+                                            <span class="model-name" x-text="currentModel"></span>
+                                            <span class="model-status status-ready">Ready for inference</span>
+                                        </div>
+                                        <button class="btn btn-secondary" @click="unloadModel()">
+                                            Unload Model
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Error Display -->
+                            <div class="field" x-show="error">
+                                <div class="field-label">
+                                    <div class="field-title">Error</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-error" x-text="error"></div>
+                                </div>
+                            </div>
+
+                            <!-- Performance Monitoring -->
+                            <div class="field" x-show="currentModel">
+                                <div class="field-label">
+                                    <div class="field-title">Performance Monitoring</div>
+                                    <div class="field-description">Monitor WebGPU memory usage and inference performance</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-performance-monitor">
+                                        <div class="performance-header">
+                                            <button class="btn btn-secondary" @click="toggleMemoryMonitor()">
+                                                <span x-show="!showMemoryMonitor">Show Monitor</span>
+                                                <span x-show="showMemoryMonitor">Hide Monitor</span>
+                                            </button>
+                                            <button class="btn btn-warning" @click="forceCleanup()" :disabled="!engine.memoryManager">
+                                                Force Cleanup
+                                            </button>
+                                        </div>
+
+                                        <!-- Performance Metrics -->
+                                        <div x-show="performanceMetrics" class="performance-metrics">
+                                            <div class="metric-row">
+                                                <div class="metric-item">
+                                                    <span class="metric-label">Tokens/sec:</span>
+                                                    <span class="metric-value" x-text="performanceMetrics?.tokensPerSecond?.toFixed(1) || '0'"></span>
+                                                </div>
+                                                <div class="metric-item">
+                                                    <span class="metric-label">Latency:</span>
+                                                    <span class="metric-value" x-text="(performanceMetrics?.inferenceTime || 0) + 'ms'"></span>
+                                                </div>
+                                                <div class="metric-item">
+                                                    <span class="metric-label">Memory:</span>
+                                                    <span class="metric-value" 
+                                                        :style="`color: ${getMemoryUsageColor()}`"
+                                                        x-text="(performanceMetrics?.memoryUsage || 0) + '%'"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Memory Monitor -->
+                                        <div x-show="showMemoryMonitor" class="memory-monitor">
+                                            <template x-if="memoryStats">
+                                                <div class="memory-details">
+                                                    <div class="memory-overview">
+                                                        <div class="memory-bar">
+                                                            <div class="memory-fill" 
+                                                                :style="`width: ${memoryStats.usagePercent}%; background-color: ${getMemoryUsageColor()}`"></div>
+                                                        </div>
+                                                        <div class="memory-text">
+                                                            <span x-text="formatMemorySize(memoryStats.usedMemory)"></span> / 
+                                                            <span x-text="formatMemorySize(memoryStats.totalMemory)"></span>
+                                                            (<span x-text="memoryStats.usagePercent + '%'"></span>)
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="memory-stats-grid">
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">Active Buffers</div>
+                                                            <div class="stat-value" x-text="memoryStats.buffers?.size || 0"></div>
+                                                        </div>
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">Peak Usage</div>
+                                                            <div class="stat-value" x-text="formatMemorySize(memoryStats.peakMemory)"></div>
+                                                        </div>
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">GC Count</div>
+                                                            <div class="stat-value" x-text="memoryStats.garbageCollections || 0"></div>
+                                                        </div>
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">Available</div>
+                                                            <div class="stat-value" x-text="formatMemorySize(memoryStats.availableMemory)"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            
+                                            <template x-if="!memoryStats && engine.memoryManager">
+                                                <div class="memory-loading">
+                                                    <p>Loading memory statistics...</p>
+                                                </div>
+                                            </template>
+                                            
+                                            <template x-if="!engine.memoryManager">
+                                                <div class="memory-unavailable">
+                                                    <p>Memory monitoring unavailable - WebGPU not initialized</p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                        <!-- Performance Monitoring Section -->
+                        <div id="section-webllm-performance" class="section">
+                            <div class="section-title">Performance Monitoring</div>
+                            <div class="section-description">Monitor WebGPU memory usage, inference performance, and system resources</div>
+                            
+                            <!-- Performance Metrics -->
+                            <div class="field" x-show="currentModel">
+                                <div class="field-label">
+                                    <div class="field-title">Real-time Performance Metrics</div>
+                                    <div class="field-description">Live performance data for the currently loaded model</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-performance-monitor">
+                                        <div class="performance-header">
+                                            <button class="btn btn-secondary" @click="toggleMemoryMonitor()">
+                                                <span x-show="!showMemoryMonitor">📊 Show Monitor</span>
+                                                <span x-show="showMemoryMonitor">🙈 Hide Monitor</span>
+                                            </button>
+                                            <button class="btn btn-warning" @click="forceCleanup()" :disabled="!engine.memoryManager">
+                                                🧹 Force Cleanup
+                                            </button>
+                                        </div>
+                                        <!-- Performance Metrics -->
+                                        <div x-show="performanceMetrics" class="performance-metrics">
+                                            <div class="metric-row">
+                                                <div class="metric-item">
+                                                    <span class="metric-label">⚡ Tokens/sec:</span>
+                                                    <span class="metric-value" x-text="performanceMetrics?.tokensPerSecond?.toFixed(1) || '0'"></span>
+                                                </div>
+                                                <div class="metric-item">
+                                                    <span class="metric-label">⏱️ Latency:</span>
+                                                    <span class="metric-value" x-text="(performanceMetrics?.inferenceTime || 0) + 'ms'"></span>
+                                                </div>
+                                                <div class="metric-item">
+                                                    <span class="metric-label">💾 Memory:</span>
+                                                    <span class="metric-value" 
+                                                        :style="`color: ${getMemoryUsageColor()}`"
+                                                        x-text="(performanceMetrics?.memoryUsage || 0) + '%'"></span>
+                                                </div>
+                                                <div class="metric-item">
+                                                    <span class="metric-label">📅 Last Update:</span>
+                                                    <span class="metric-value" x-text="performanceMetrics?.lastUpdate || 'Never'"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- Memory Monitor -->
+                                        <div x-show="showMemoryMonitor" class="memory-monitor">
+                                            <template x-if="memoryStats">
+                                                <div class="memory-details">
+                                                    <div class="memory-overview">
+                                                        <div class="memory-bar">
+                                                            <div class="memory-fill" 
+                                                                :style="`width: ${memoryStats.usagePercent}%; background-color: ${getMemoryUsageColor()}`"></div>
+                                                        </div>
+                                                        <div class="memory-text" x-text="`${memoryStats.usagePercent}% used (${formatMemorySize(memoryStats.usedMemory)} / ${formatMemorySize(memoryStats.totalMemory)})`"></div>
+                                                    </div>
+                                                    <div class="memory-stats-grid">
+                                                        <div class="stat-item">
+                                                            <span class="stat-label">Used</span>
+                                                            <span class="stat-value" x-text="formatMemorySize(memoryStats.usedMemory)"></span>
+                                                        </div>
+                                                        <div class="stat-item">
+                                                            <span class="stat-label">Free</span>
+                                                            <span class="stat-value" x-text="formatMemorySize(memoryStats.totalMemory - memoryStats.usedMemory)"></span>
+                                                        </div>
+                                                        <div class="stat-item">
+                                                            <span class="stat-label">Total</span>
+                                                            <span class="stat-value" x-text="formatMemorySize(memoryStats.totalMemory)"></span>
+                                                        </div>
+                                                        <div class="stat-item">
+                                                            <span class="stat-label">Buffers</span>
+                                                            <span class="stat-value" x-text="memoryStats.bufferCount || 0"></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="!memoryStats">
+                                                <div class="memory-loading">
+                                                    <p>Loading memory statistics...</p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Performance not available message -->
+                            <div class="field" x-show="!currentModel">
+                                <div class="field-control">
+                                    <div class="webllm-not-initialized">
+                                        <p>📊 Load a model to view performance metrics</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Test & Debug Section -->
+                        <div id="section-webllm-test" class="section">
+                            <div class="section-title">Test & Debug</div>
+                            <div class="section-description">Test model inference, debug issues, and validate performance</div>
+                            
+                            <!-- Test Local Inference -->
+                            <div class="field" x-show="currentModel">
+                                <div class="field-label">
+                                    <div class="field-title">Model Testing</div>
+                                    <div class="field-description">Test the loaded model with custom prompts and monitor response quality</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="webllm-test-area enhanced">
+                                        <div class="test-input-section">
+                                            <label for="test-prompt">Test Prompt:</label>
+                                            <textarea id="test-prompt" x-model="testPrompt" placeholder="Enter a test prompt... (e.g., 'What is the capital of France?')" rows="4"></textarea>
+                                            <div class="test-actions">
+                                                <button class="btn btn-primary" @click="testModel()" :disabled="!testPrompt.trim() || !currentModel">
+                                                    🚀 Test Model
+                                                </button>
+                                                <button class="btn btn-secondary" @click="testPrompt = ''" :disabled="!testPrompt.trim()">
+                                                    🗑️ Clear
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div x-show="testResponse" class="test-response">
+                                            <div class="test-response-header">
+                                                <div class="test-response-label">🤖 Model Response:</div>
+                                                <div class="test-response-meta">
+                                                    <span x-show="performanceMetrics?.tokensPerSecond" class="response-speed">
+                                                        Speed: <span x-text="performanceMetrics.tokensPerSecond.toFixed(1)"></span> tokens/sec
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="test-response-content" x-text="testResponse"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Debug Information -->
+                            <div class="field" x-show="currentModel">
+                                <div class="field-label">
+                                    <div class="field-title">Debug Information</div>
+                                    <div class="field-description">Technical details about the current model and system state</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="debug-info-panel">
+                                        <div class="debug-row">
+                                            <span class="debug-label">Model ID:</span>
+                                            <span class="debug-value" x-text="currentModel || 'None'"></span>
+                                        </div>
+                                        <div class="debug-row">
+                                            <span class="debug-label">WebGPU Status:</span>
+                                            <span class="debug-value" :class="compatibility?.webgpu ? 'status-supported' : 'status-unsupported'" 
+                                                x-text="compatibility?.webgpu ? 'Available' : 'Not Available'"></span>
+                                        </div>
+                                        <div class="debug-row">
+                                            <span class="debug-label">Memory Manager:</span>
+                                            <span class="debug-value" x-text="engine.memoryManager ? 'Active' : 'Inactive'"></span>
+                                        </div>
+                                        <div class="debug-row">
+                                            <span class="debug-label">Browser:</span>
+                                            <span class="debug-value" x-text="compatibility?.browserInfo?.name + ' ' + compatibility?.browserInfo?.version"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sample Prompts -->
+                            <div class="field" x-show="currentModel">
+                                <div class="field-label">
+                                    <div class="field-title">Sample Prompts</div>
+                                    <div class="field-description">Pre-defined prompts to quickly test model capabilities</div>
+                                </div>
+                                <div class="field-control">
+                                    <div class="sample-prompts">
+                                        <button class="btn btn-outline" @click="testPrompt = 'What is the capital of France?'">
+                                            🌍 Geography
+                                        </button>
+                                        <button class="btn btn-outline" @click="testPrompt = 'Write a simple Python function that adds two numbers'">
+                                            🐍 Programming
+                                        </button>
+                                        <button class="btn btn-outline" @click="testPrompt = 'Explain quantum physics in simple terms'">
+                                            🔬 Science
+                                        </button>
+                                        <button class="btn btn-outline" @click="testPrompt = 'Tell me a short story about a robot'">
+                                            📚 Creative
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Testing not available message -->
+                            <div class="field" x-show="!currentModel">
+                                <div class="field-control">
+                                    <div class="webllm-not-initialized">
+                                        <p>🧪 Load a model to start testing</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="modal-footer">
@@ -1435,6 +1945,7 @@
             </div>
         </template>
     </div>
+
 
     <!-- work_dir Browser Modal -->
 
