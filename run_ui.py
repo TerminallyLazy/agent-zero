@@ -213,6 +213,42 @@ def run():
     handlers = load_classes_from_folder("python/api", "*.py", ApiHandler)
     for handler in handlers:
         register_api_handler(webapp, handler)
+    
+    # ACP and A2A protocol servers are automatically registered via ApiHandler discovery
+    
+    # Add ACP well-known discovery route manually (special path)
+    @webapp.route('/.well-known/agent.yml', methods=['GET'])
+    def acp_well_known_route():
+        """ACP agent discovery route."""
+        from flask import jsonify
+        return jsonify({
+            "agent_id": "agent-zero",
+            "name": "Agent Zero",
+            "description": "Personal, organic agentic AI framework",
+            "version": "1.0.0",
+            "protocol": "ACP",
+            "capabilities": [
+                "reasoning", "tool_execution", "memory_management",
+                "planning", "sub_agent_creation", "file_operations",
+                "web_search", "code_execution"
+            ],
+            "supported_content_types": [
+                "text/plain", "application/json", "image/png",
+                "image/jpeg", "application/pdf"
+            ],
+            "endpoints": {
+                "runs": "/acp_runs",
+                "agents": "/acp_agents", 
+                "ping": "/acp_ping"
+            },
+            "metadata": {
+                "framework": "Agent Zero",
+                "language": "Python",
+                "async_support": True,
+                "streaming": True,
+                "multimodal": True
+            }
+        })
 
     # add the webapp and mcp to the app
     app = DispatcherMiddleware(

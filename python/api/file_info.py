@@ -3,13 +3,13 @@ from python.helpers.api import ApiHandler, Input, Output, Request, Response
 from python.helpers import files, runtime
 from typing import TypedDict
 
-class FileInfoApi(ApiHandler):
+class FileInfo(ApiHandler):
     async def process(self, input: Input, request: Request) -> Output:
         path = input.get("path", "")
         info = await runtime.call_development_function(get_file_info, path)
         return info
 
-class FileInfo(TypedDict):
+class FileInfoData(TypedDict):
     input_path: str
     abs_path: str
     exists: bool
@@ -25,7 +25,7 @@ class FileInfo(TypedDict):
     file_ext: str
     message: str
 
-async def get_file_info(path: str) -> FileInfo:
+async def get_file_info(path: str) -> FileInfoData:
     abs_path = files.get_abs_path(path)
     exists = os.path.exists(abs_path)
     message = ""

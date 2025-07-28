@@ -41,3 +41,8 @@ crontab==1.0.1
 pathspec>=0.12.1
 psutil>=7.0.0
 soundfile==0.13.1
+acp-sdk>=1.1.0
+a2a-sdk>=0.2.6
+sseclient-py>=1.8
+pyyaml>=6.0
+aiohttp>=3.8.0

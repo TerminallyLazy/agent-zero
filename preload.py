@@ -24,7 +24,7 @@ async def preload():
                     emb_mod = models.get_embedding_model(
                         "huggingface", set["embed_model_name"]
                     )
-                    emb_txt = await emb_mod.aembed_query("test")
+                    emb_txt = emb_mod.embed_query("test")
                     return emb_txt
                 except Exception as e:
                     PrintStyle().error(f"Error in preload_embedding: {e}")

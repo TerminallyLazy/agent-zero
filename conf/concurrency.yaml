@@ -1,0 +1,228 @@
+# Concurrency limits for Agent Zero ACP + A2A integration
+# --------------------------------------------------------
+#
+# This file defines concurrency limits for different providers and operations
+# to prevent rate limit violations and optimize resource usage.
+#
+# Structure:
+#   providers:    Per-provider concurrency limits for LLM calls
+#   operations:   Limits for specific operation types
+#   agent_bridge: Limits for agent-to-agent communications
+#   global:       System-wide limits and defaults
+
+# LLM Provider Concurrency Limits
+# These limits control how many simultaneous LLM calls can be made to each provider
+providers:
+  # OpenAI and compatible providers
+  openai:
+    max_concurrent: 10
+    description: "OpenAI API standard tier limits"
+    
+  azure:
+    max_concurrent: 8
+    description: "Azure OpenAI Service limits"
+    
+  # Anthropic
+  anthropic:
+    max_concurrent: 5
+    description: "Conservative limit for Anthropic Claude API"
+    
+  # High-throughput providers
+  openrouter:
+    max_concurrent: 8
+    description: "OpenRouter aggregated API limits"
+    
+  groq:
+    max_concurrent: 12
+    description: "Groq high-speed inference limits"
+    
+  # Open source and local providers
+  ollama:
+    max_concurrent: 3
+    description: "Local Ollama instance resource limits"
+    
+  lm_studio:
+    max_concurrent: 2
+    description: "LM Studio local server limits"
+    
+  huggingface:
+    max_concurrent: 4
+    description: "HuggingFace API standard limits"
+    
+  # Specialized providers
+  mistral:
+    max_concurrent: 6
+    description: "Mistral AI API limits"
+    
+  gemini:
+    max_concurrent: 8
+    description: "Google Gemini API limits"
+    
+  deepseek:
+    max_concurrent: 5
+    description: "DeepSeek API limits"
+    
+  sambanova:
+    max_concurrent: 4
+    description: "Sambanova API limits"
+    
+  venice:
+    max_concurrent: 6
+    description: "Venice AI API limits"
+    
+  # Generic fallback
+  other:
+    max_concurrent: 5
+    description: "Default limit for unspecified providers"
+
+# Operation-Specific Concurrency Limits
+# These limits apply to specific types of operations regardless of provider
+operations:
+  # Parallel executor limits
+  parallel_executor:
+    max_operations: 20
+    max_concurrent_per_type: 5
+    description: "Limits for parallel execution of mixed operations"
+    
+  # Agent bridge operations
+  agent_discovery:
+    max_concurrent: 10
+    timeout: 5.0
+    description: "Agent capability discovery operations"
+    
+  agent_communication:
+    max_concurrent: 8
+    timeout: 30.0
+    description: "Agent-to-agent message sending"
+    
+  # LLM Bridge operations
+  llm_bridge_local:
+    max_concurrent: 15
+    description: "Local LLM calls via bridge"
+    
+  llm_bridge_remote:
+    max_concurrent: 5
+    timeout: 60.0
+    description: "Remote agent LLM delegation"
+    
+  # Sub-agent management
+  sub_agent_broadcast:
+    max_concurrent: 8
+    timeout: 45.0
+    description: "Broadcasting to multiple sub-agents"
+
+# Agent Bridge Communication Limits
+# Controls for ACP and A2A protocol communications
+agent_bridge:
+  # Protocol-specific limits
+  acp:
+    max_concurrent_sessions: 10
+    session_timeout: 300.0  # 5 minutes
+    max_messages_per_session: 100
+    description: "ACP protocol session limits"
+    
+  a2a:
+    max_concurrent_tasks: 8
+    task_timeout: 1800.0  # 30 minutes
+    max_history_entries: 50
+    description: "A2A protocol task limits"
+  
+  # Discovery and connection limits
+  discovery:
+    max_concurrent: 5
+    timeout: 10.0
+    cache_duration: 300.0  # 5 minutes
+    retry_attempts: 3
+    description: "Agent discovery and capability detection"
+  
+  # HTTP connection pooling
+  http:
+    pool_connections: 10
+    pool_maxsize: 20
+    max_retries: 3
+    timeout: 30.0
+    description: "HTTP connection pool settings"
+
+# Global System Limits
+# System-wide constraints and defaults
+global:
+  # Default limits when provider-specific limits are not available
+  default_max_concurrent: 5
+  default_timeout: 60.0
+  
+  # Resource protection limits
+  max_total_concurrent_operations: 50
+  max_memory_usage_mb: 1024
+  
+  # Rate limiting integration
+  respect_rate_limits: true
+  rate_limit_buffer_factor: 0.8  # Use 80% of rate limits as safety margin
+  
+  # Monitoring and logging
+  enable_concurrency_logging: true
+  log_slow_operations: true
+  slow_operation_threshold: 10.0  # seconds
+  
+  # Emergency controls
+  circuit_breaker_enabled: true
+  circuit_breaker_failure_threshold: 5
+  circuit_breaker_recovery_timeout: 60.0
+
+# Environment-Specific Overrides
+# These settings can be overridden based on deployment environment
+environments:
+  development:
+    providers:
+      openai:
+        max_concurrent: 3  # Lower limits for development
+      anthropic:
+        max_concurrent: 2
+    global:
+      enable_concurrency_logging: true
+      
+  production:
+    providers:
+      openai:
+        max_concurrent: 15  # Higher limits for production
+      anthropic:
+        max_concurrent: 8
+    global:
+      enable_concurrency_logging: false
+      circuit_breaker_enabled: true
+      
+  testing:
+    providers:
+      openai:
+        max_concurrent: 1  # Minimal concurrency for testing
+    global:
+      default_timeout: 10.0
+      enable_concurrency_logging: true
+
+# Advanced Configuration
+# Fine-tuning options for specific use cases
+advanced:
+  # Dynamic concurrency adjustment
+  adaptive_limits:
+    enabled: false
+    adjustment_factor: 0.1
+    monitoring_window: 300  # 5 minutes
+    
+  # Provider-specific optimizations
+  provider_optimizations:
+    openai:
+      burst_mode: true
+      burst_duration: 10.0
+      burst_multiplier: 1.5
+    
+    anthropic:
+      batch_requests: false
+      prefer_streaming: true
+      
+  # Failover and fallback
+  failover:
+    enabled: true
+    max_retries: 2
+    backoff_factor: 2.0
+    fallback_providers:
+      openai: ["openrouter", "anthropic"]
+      anthropic: ["openai", "openrouter"]

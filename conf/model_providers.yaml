@@ -66,6 +66,69 @@ chat:
     name: Other OpenAI compatible
     litellm_provider: openai
 
+# ACP + A2A Integration Settings
+# ------------------------------
+# Configuration for Agent Communication Protocol (ACP) and Agent-to-Agent (A2A)
+# protocol integrations with remote LLM providers
+
+acp_providers:
+  # Remote ACP agents providing LLM services
+  research_agent:
+    name: Research Agent (ACP)
+    endpoint: "https://research-agent.example.com"
+    protocol: "acp"
+    capabilities: ["llm_call", "web_search", "data_analysis"]
+    model_mapping:
+      gpt-4: "primary_model"
+      gpt-3.5-turbo: "fast_model"
+    timeout: 60.0
+    
+  analysis_agent:
+    name: Analysis Agent (ACP)
+    endpoint: "https://analysis-agent.example.com"
+    protocol: "acp"
+    capabilities: ["llm_call", "chart_generation", "statistical_analysis"]
+    model_mapping:
+      claude-3-opus: "detailed_model"
+      claude-3-haiku: "quick_model"
+    timeout: 120.0
+
+a2a_providers:
+  # Remote A2A agents providing LLM services
+  specialist_agent:
+    name: AI Specialist Agent (A2A)
+    endpoint: "https://specialist.example.com/rpc" 
+    protocol: "a2a"
+    capabilities: ["llm_call", "code_generation", "technical_writing"]
+    model_mapping:
+      gpt-4: "coding_model"
+      claude-3-opus: "writing_model"
+    timeout: 90.0
+    
+  creative_agent:
+    name: Creative Writing Agent (A2A)
+    endpoint: "https://creative.example.com/"
+    protocol: "a2a"
+    capabilities: ["llm_call", "story_generation", "creative_writing"]
+    model_mapping:
+      gpt-4: "creative_model"
+      claude-3-opus: "narrative_model"
+    timeout: 180.0
+
+# Protocol Configuration
+protocols:
+  acp:
+    discovery_path: "/.well-known/agent.yml"
+    message_endpoint: "/message"
+    session_timeout: 300.0
+    max_retries: 3
+    
+  a2a:
+    discovery_methods: ["getAgentCard"]
+    rpc_paths: ["/rpc", "/", ""]
+    task_timeout: 1800.0
+    max_retries: 2
+    
 embedding:
   huggingface:
     name: HuggingFace

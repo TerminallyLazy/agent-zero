@@ -75,7 +75,16 @@ class ApiHandler:
         except Exception as e:
             error = format_error(e)
             PrintStyle.error(f"API error: {error}")
-            return Response(response=error, status=500, mimetype="text/plain")
+            error_response = {
+                "error": True,
+                "message": "Internal server error",
+                "details": error
+            }
+            return Response(
+                response=json.dumps(error_response),
+                status=500,
+                mimetype="application/json"
+            )
 
     # get context to run agent zero in
     def get_context(self, ctxid: str):

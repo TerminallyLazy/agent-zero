@@ -1,0 +1,169 @@
+<!-- Activity Drawer Component -->
+<script type="module">
+    import { store } from "/components/agents/agent-selector-store.js";
+</script>
+<div x-data="$store.agentSelector" x-init="setTimeout(() => { if (!$store.agentSelector._initialized) init(); }, 1000)" class="activity-drawer-container" :class="{'drawer-open': showActivityDrawer}">
+    <!-- Drawer Tab (Always Visible) -->
+    <div class="activity-drawer-tab" @click="toggleActivityDrawer()">
+        <div class="tab-content">
+            <i class="tab-icon fas fa-users"></i>
+            <span class="tab-text">Agents</span>
+            <div class="tab-badge" x-text="agents.length" x-show="agents.length > 0"></div>
+        </div>
+        <div class="tab-arrow" :class="{'rotated': showActivityDrawer}">
+            <i class="fas fa-chevron-left"></i>
+        </div>
+    </div>
+
+    <!-- Drawer Content -->
+    <div class="activity-drawer-content" x-show="showActivityDrawer" x-transition>
+        <!-- Drawer Header -->
+        <div class="drawer-header">
+            <div class="header-main">
+                <div class="header-title">
+                    <h3>Agent Management</h3>
+                </div>
+                <template x-if="getSelectedAgent()">
+                    <div class="selected-agent-display">
+                        <div class="agent-status-indicator" :class="getAgentStatusClass(getSelectedAgent())"></div>
+                        <span class="selected-agent-name" x-text="getAgentDisplayName(getSelectedAgent())"></span>
+                        <span class="selected-agent-label">Active</span>
+                        <template x-if="getSelectedAgent().status === 'offline'">
+                            <span class="orphaned-warning">Offline</span>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div class="header-controls">
+                <button @click="loadAgents()" class="control-btn" title="Refresh agents">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button @click="closeActivityDrawer()" class="control-btn" title="Close drawer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="drawer-status">
+            <template x-if="isLoading">
+                <span class="status-loading">Loading agents...</span>
+            </template>
+            <template x-if="!isLoading">
+                <span class="status-text" x-text="`${agents.length} agents available`"></span>
+            </template>
+            <div class="status-controls">
+                <button @click="loadAgents()" class="status-btn" :disabled="isLoading">
+                    <i class="fas fa-refresh"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Drawer Body -->
+        <div class="drawer-body">
+            <!-- Loading State -->
+            <template x-if="isLoading">
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="empty-text">Loading agents...</div>
+                </div>
+            </template>
+
+            <!-- Error State -->
+            <template x-if="error && !isLoading">
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="empty-text" x-text="error"></div>
+                    <button @click="loadAgents()" class="retry-button">Try Again</button>
+                </div>
+            </template>
+
+            <!-- Agents List -->
+            <template x-if="!isLoading && !error && agents.length > 0">
+                <div class="agents-list">
+                    <template x-for="agent in agents" :key="agent.id">
+                        <div class="agent-item" 
+                             :class="{
+                                'item-selected': agent.id === selectedAgentId,
+                                'item-main': agent.type === 'main',
+                                'item-subordinate': agent.type === 'subordinate',
+                                'item-working': agent.status === 'working' || agent.status === 'busy',
+                                'item-idle': agent.status === 'idle' || agent.status === 'active',
+                                'item-orphaned': agent.status === 'offline' || agent.status === 'error'
+                             }"
+                             @click="selectAgent(agent.id)">
+                            
+                            <!-- Item Header -->
+                            <div class="item-header">
+                                <div class="item-info">
+                                    <div class="item-name" x-text="getAgentDisplayName(agent)"></div>
+                                    <div class="item-type-role">
+                                        <span class="item-type" x-text="agent.type"></span>
+                                        <template x-if="agent.role && agent.role !== agent.type">
+                                            <span class="item-role"> • <span x-text="agent.role"></span></span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div class="item-status-container">
+                                    <template x-if="agent.id === selectedAgentId">
+                                        <div class="selected-indicator">Selected</div>
+                                    </template>
+                                    <div class="item-status" :class="`status-${agent.status}`" x-text="agent.status"></div>
+                                </div>
+                            </div>
+
+                            <!-- Item Details -->
+                            <template x-if="agent.type !== 'main'">
+                                <div class="item-details">
+                                    <template x-if="agent.endpoint">
+                                        <div class="item-url" x-text="agent.endpoint"></div>
+                                    </template>
+                                    <template x-if="agent.capabilities && agent.capabilities.length > 0">
+                                        <div class="item-capabilities" x-text="`Capabilities: ${agent.capabilities.slice(0, 3).join(', ')}`"></div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <!-- Task Text (if available) -->
+                            <template x-if="agent.task_count > 0">
+                                <div class="item-task">
+                                    <div class="task-text" x-text="`${agent.task_count} tasks assigned`"></div>
+                                </div>
+                            </template>
+
+                            <!-- Item Footer -->
+                            <div class="item-footer">
+                                <template x-if="agent.last_contact">
+                                    <div class="item-time" x-text="`Last contact: ${new Date(agent.last_contact).toLocaleTimeString()}`"></div>
+                                </template>
+                                <div class="item-id" x-text="agent.id.slice(0, 8)"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Empty State -->
+            <template x-if="!isLoading && !error && agents.length === 0">
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="empty-text">No agents available</div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Drawer Footer -->
+        <div class="drawer-footer">
+            <span x-text="`Total: ${agents.length} agents`"></span>
+            <template x-if="agents.filter(a => a.status === 'online' || a.status === 'active').length > 0">
+                <span x-text="`Online: ${agents.filter(a => a.status === 'online' || a.status === 'active').length}`"></span>
+            </template>
+        </div>
+    </div>
+</div>

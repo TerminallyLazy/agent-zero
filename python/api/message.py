@@ -1,5 +1,6 @@
 from agent import AgentContext, UserMessage
 from python.helpers.api import ApiHandler, Request, Response
+from python.tools.agent_bridge import AgentBridge
 
 from python.helpers import files
 import os
@@ -54,6 +55,10 @@ class Message(ApiHandler):
 
         # Obtain agent context
         context = self.get_context(ctxid)
+        
+        # Check if agent routing is enabled
+        if context.get_agent().get_data("agent_routing_enabled"):
+            return await self._route_to_subordinate_agent(context, message, attachment_paths, message_id)
 
         # Store attachments in agent data
         # context.agent0.set_data("attachments", attachment_paths)
@@ -85,3 +90,115 @@ class Message(ApiHandler):
         )
 
         return context.communicate(UserMessage(message, attachment_paths)), context
+    
+    async def _route_to_subordinate_agent(self, context: AgentContext, message: str, attachment_paths: list, message_id: str):
+        """Route message to the selected subordinate agent using real ACP/A2A protocols."""
+        endpoint = context.get_agent().get_data("subordinate_agent_endpoint")
+        agent_info = context.get_agent().get_data("selected_agent_id")
+        protocol = context.get_agent().get_data("subordinate_agent_protocol", "unknown")
+        
+        if not endpoint:
+            # Fallback to main agent if routing is broken
+            context.get_agent().set_data("agent_routing_enabled", False)
+            return context.communicate(UserMessage(message, attachment_paths)), context
+        
+        # Log routing attempt
+        PrintStyle(
+            background_color="#8E44AD", font_color="white", bold=True, padding=True
+        ).print(f"Routing message via {protocol} protocol to: {agent_info}")
+        PrintStyle(font_color="white", padding=False).print(f"> {message}")
+        
+        try:
+            # Create agent bridge tool with the appropriate action for the protocol
+            bridge_action = "send"  # Both ACP and A2A support message sending
+            
+            bridge = AgentBridge(
+                agent=context.agent,
+                name="agent_bridge", 
+                method=None,
+                args={
+                    "endpoint": endpoint,
+                    "action": bridge_action,
+                    "message": message,
+                    "sender": "agent-zero",
+                    "context": context.id,
+                    "timeout": "30",
+                    # Pass additional context info for better continuity
+                    "session_data": {
+                        "user_session": context.id,
+                        "routing_from": "main_agent",
+                        "attachment_paths": attachment_paths
+                    }
+                },
+                message="",
+                loop_data=None
+            )
+            
+            # Execute the bridge call
+            response = await bridge.execute()
+            
+            # Parse the response JSON to extract the actual message
+            import json
+            try:
+                response_data = json.loads(response.message)
+                
+                # Handle different protocol response formats
+                if protocol == "ACP":
+                    actual_message = response_data.get("output", response.message)
+                elif protocol == "A2A":
+                    if "result" in response_data:
+                        result = response_data["result"]
+                        actual_message = result.get("message", result.get("response", response.message))
+                    else:
+                        actual_message = response.message
+                else:
+                    actual_message = response.message
+                    
+            except (json.JSONDecodeError, KeyError):
+                actual_message = response.message
+            
+            # Log the response
+            context.log.log(
+                type="agent_response",
+                heading=f"Response from {agent_info} ({protocol})",
+                content=actual_message,
+                kvps={
+                    "agent_id": agent_info,
+                    "endpoint": endpoint,
+                    "protocol": protocol,
+                    "routing": "subordinate"
+                },
+                id=message_id,
+            )
+            
+            # Create a deferred task that returns the response
+            task = DeferredTask(thread_name="AgentRouting")
+            task.start_task(self._return_response, actual_message)
+            
+            return task, context
+            
+        except Exception as e:
+            # If routing fails, log error and fallback to main agent
+            PrintStyle(
+                background_color="#E74C3C", font_color="white", bold=True, padding=True
+            ).print(f"Agent routing failed: {str(e)}")
+            
+            context.log.log(
+                type="error",
+                heading="Agent Routing Failed",
+                content=f"Failed to route to {agent_info} via {protocol}: {str(e)}. Falling back to main agent.",
+                kvps={
+                    "agent_id": agent_info,
+                    "endpoint": endpoint,
+                    "protocol": protocol,
+                    "error": str(e)
+                }
+            )
+            
+            # Disable routing and fallback to main agent
+            context.get_agent().set_data("agent_routing_enabled", False)
+            return context.communicate(UserMessage(message, attachment_paths)), context
+    
+    async def _return_response(self, response: str) -> str:
+        """Simple async method to return a response."""
+        return response
