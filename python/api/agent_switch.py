@@ -64,49 +64,34 @@ class AgentSwitch(ApiHandler):
                 }
             
             # Handle subordinate agent switch
-            sub_agents = get_sub_agents(agent)
-            target_agent = None
+            from python.api.agents_list import active_subordinate_agents
             
-            for sub_agent in sub_agents:
-                if sub_agent.agent_id == target_agent_id:
-                    target_agent = sub_agent
-                    break
-            
-            if not target_agent:
+            if target_agent_id not in active_subordinate_agents:
                 return {
                     "success": False,
-                    "error": f"Agent {target_agent_id} not found"
+                    "error": f"Agent {target_agent_id} not found or not active"
                 }
+            
+            target_agent_data = active_subordinate_agents[target_agent_id]
             
             # Check if agent is online
-            if target_agent.status not in ["online", "active"]:
+            if target_agent_data["status"] not in ["working", "idle", "active"]:
                 return {
                     "success": False,
-                    "error": f"Agent {target_agent_id} is not available (status: {target_agent.status})"
+                    "error": f"Agent {target_agent_id} is not available (status: {target_agent_data['status']})"
                 }
             
-            # Build agent info for response
-            agent_info = {
-                "id": target_agent.agent_id,
-                "type": "subordinate",
-                "name": f"Agent {target_agent.agent_id[:8]}",
-                "role": target_agent.agent_id,
-                "status": target_agent.status,
-                "endpoint": target_agent.endpoint,
-                "capabilities": target_agent.capabilities.capabilities if target_agent.capabilities else [],
-                "last_contact": target_agent.last_contact.isoformat() if target_agent.last_contact else None,
-                "task_count": target_agent.task_count,
-                "url": target_agent.endpoint
-            }
+            # Build agent info for response (use our new registry format)
+            agent_info = target_agent_data.copy()
             
             # Set the active agent context for message routing
-            await self._switch_to_subordinate_agent(context, target_agent, agent_info)
+            await self._switch_to_subordinate_agent(context, target_agent_data, agent_info)
             
             # Store agent info for UI state persistence and routing
             context.set_data("selected_agent_id", target_agent_id)
             context.set_data("selected_agent_info", agent_info)
             context.set_data("agent_routing_enabled", True)
-            context.set_data("subordinate_agent_endpoint", target_agent.endpoint)
+            context.set_data("subordinate_agent_endpoint", target_agent_data["endpoint"])
             
             return {
                 "success": True,
@@ -140,35 +125,20 @@ class AgentSwitch(ApiHandler):
     async def _switch_to_subordinate_agent(
         self, 
         context: AgentContext, 
-        target_agent: SubAgentInfo, 
+        target_agent_data: Dict[str, Any], 
         agent_info: Dict[str, Any]
     ):
         """Switch to a subordinate agent context."""
         try:
-            # Verify agent is still reachable
-            capabilities = await discover_agent(target_agent.endpoint, timeout=10.0)
-            if not capabilities:
-                raise ValueError(f"Cannot reach agent at {target_agent.endpoint}")
-            
-            # Update agent capabilities if they've changed
-            if capabilities != target_agent.capabilities:
-                target_agent.capabilities = capabilities
-                target_agent.last_contact = datetime.now(timezone.utc)
-                
-                # Update the registry
-                registry = context.agent.get_data("sub_agents_registry") or {}
-                registry[target_agent.agent_id] = target_agent.__dict__
-                context.agent.set_data("sub_agents_registry", registry)
-            
             # Enable agent routing
             context.set_data("agent_routing_enabled", True)
-            context.set_data("subordinate_agent_endpoint", target_agent.endpoint)
+            context.set_data("subordinate_agent_endpoint", target_agent_data["endpoint"])
             
             # Set up agent bridge for message routing
             context.agent.set_data("agent_bridge_target", {
-                "endpoint": target_agent.endpoint,
-                "agent_id": target_agent.agent_id,
-                "capabilities": capabilities.__dict__ if capabilities else None
+                "endpoint": target_agent_data["endpoint"],
+                "agent_id": target_agent_data["id"],
+                "capabilities": target_agent_data["capabilities"]
             })
             
             # Log the switch
@@ -177,8 +147,8 @@ class AgentSwitch(ApiHandler):
                 heading="Agent Switch",
                 content=f"Switched to subordinate agent: {agent_info['name']}",
                 kvps={
-                    "target": target_agent.agent_id,
-                    "endpoint": target_agent.endpoint,
+                    "target": target_agent_data["id"],
+                    "endpoint": target_agent_data["endpoint"],
                     "action": "switch"
                 }
             )
@@ -186,4 +156,4 @@ class AgentSwitch(ApiHandler):
         except Exception as e:
             # If switch fails, ensure we stay on main agent
             await self._switch_to_main_agent(context)
-            raise ValueError(f"Failed to switch to agent {target_agent.agent_id}: {str(e)}")
+            raise ValueError(f"Failed to switch to agent {target_agent_data['id']}: {str(e)}")

@@ -238,16 +238,130 @@ def run():
             ],
             "endpoints": {
                 "runs": "/acp_runs",
-                "agents": "/acp_agents", 
+                "agents": "/acp_agents",
                 "ping": "/acp_ping"
-            },
-            "metadata": {
-                "framework": "Agent Zero",
-                "language": "Python",
-                "async_support": True,
-                "streaming": True,
-                "multimodal": True
             }
+        })
+
+    # Add A2A Agent Card well-known discovery route
+    @webapp.route('/.well-known/agent.json', methods=['GET'])
+    def a2a_agent_card_route():
+        """A2A Agent Card discovery route."""
+        from flask import jsonify
+        import socket
+
+        # Get the current host and port
+        host = request.host
+        base_url = f"http://{host}"
+
+        return jsonify({
+            "name": "Agent Zero",
+            "description": "Personal, organic agentic AI framework with advanced reasoning, tool execution, and multi-agent coordination capabilities",
+            "url": base_url,
+            "provider": {
+                "name": "Agent Zero Project",
+                "url": "https://github.com/frdel/agent-zero"
+            },
+            "version": "1.0.0",
+            "documentationUrl": "https://github.com/frdel/agent-zero/blob/main/README.md",
+            "capabilities": {
+                "streaming": False,
+                "pushNotifications": False,
+                "stateTransitionHistory": True
+            },
+            "defaultInputModes": [
+                "text/plain",
+                "application/json",
+                "image/png",
+                "image/jpeg",
+                "application/pdf"
+            ],
+            "defaultOutputModes": [
+                "text/plain",
+                "application/json",
+                "image/png",
+                "image/jpeg"
+            ],
+            "skills": [
+                {
+                    "id": "reasoning",
+                    "name": "Advanced Reasoning",
+                    "description": "Complex problem-solving and logical reasoning capabilities using chain-of-thought processing",
+                    "tags": ["reasoning", "problem-solving", "analysis"],
+                    "examples": [
+                        "Analyze this complex problem and provide a step-by-step solution",
+                        "Help me understand the implications of this decision",
+                        "Break down this multi-faceted issue"
+                    ]
+                },
+                {
+                    "id": "tool_execution",
+                    "name": "Tool Execution",
+                    "description": "Execute various tools including code execution, file operations, web search, and system commands",
+                    "tags": ["tools", "automation", "execution"],
+                    "examples": [
+                        "Run this Python script and analyze the results",
+                        "Search the web for recent information about X",
+                        "Create and modify files in the workspace"
+                    ]
+                },
+                {
+                    "id": "sub_agent_creation",
+                    "name": "Sub-Agent Management",
+                    "description": "Create and manage subordinate agents with specialized roles and capabilities",
+                    "tags": ["multi-agent", "delegation", "coordination"],
+                    "examples": [
+                        "Create a specialized coding agent to help with this task",
+                        "Delegate this research task to a subordinate agent",
+                        "Coordinate multiple agents to work on different aspects"
+                    ]
+                },
+                {
+                    "id": "memory_management",
+                    "name": "Memory Management",
+                    "description": "Store, retrieve, and manage long-term memory and knowledge",
+                    "tags": ["memory", "knowledge", "persistence"],
+                    "examples": [
+                        "Remember this important information for future reference",
+                        "What did we discuss about X last week?",
+                        "Store this solution for similar problems"
+                    ]
+                },
+                {
+                    "id": "code_execution",
+                    "name": "Code Execution",
+                    "description": "Execute code in various programming languages with full environment access",
+                    "tags": ["programming", "development", "execution"],
+                    "examples": [
+                        "Write and run a Python script to process this data",
+                        "Execute this shell command and show the output",
+                        "Debug and fix this code snippet"
+                    ]
+                },
+                {
+                    "id": "file_operations",
+                    "name": "File Operations",
+                    "description": "Create, read, modify, and manage files and directories",
+                    "tags": ["files", "filesystem", "data"],
+                    "examples": [
+                        "Create a new file with this content",
+                        "Read and analyze this document",
+                        "Organize these files into a proper structure"
+                    ]
+                },
+                {
+                    "id": "web_search",
+                    "name": "Web Search",
+                    "description": "Search the internet for current information and browse web pages",
+                    "tags": ["search", "web", "information"],
+                    "examples": [
+                        "Find the latest news about artificial intelligence",
+                        "Search for documentation on this technology",
+                        "Look up current market prices for X"
+                    ]
+                }
+            ],
+            "supportsAuthenticatedExtendedCard": False
         })
 
     # add the webapp and mcp to the app

@@ -11,8 +11,10 @@ const agentSelectorModel = {
     error: null,
     showDropdown: false,
     showActivityDrawer: false,
+    activeTab: 'agents',
     _initialized: false,
     _refreshInterval: null,
+    _flowGraph: null,
 
     // Initialize the store
     async init() {
@@ -20,6 +22,8 @@ const agentSelectorModel = {
         if (this._initialized) {
             return;
         }
+
+        console.log('AgentSelector: Initializing store...');
 
         // Ensure agents array is properly initialized
         if (!Array.isArray(this.agents)) {
@@ -29,6 +33,7 @@ const agentSelectorModel = {
         // Wait for required functions to be available
         await this.waitForRequiredFunctions();
 
+        console.log('AgentSelector: Required functions available, loading agents...');
         await this.loadAgents();
         // Auto-select the main agent if none selected
         if (!this.selectedAgentId && this.agents.length > 0) {
@@ -48,6 +53,89 @@ const agentSelectorModel = {
         }
 
         this._initialized = true;
+        
+        // Initialize flow graph when drawer is opened
+        this.initFlowGraph();
+    },
+    
+    // Initialize GitGraph flow visualization
+    initFlowGraph() {
+        // Since we're loading the script in index.html, just create the flow graph
+        if (window.AgentFlowGraph) {
+            this.createFlowGraph();
+        } else {
+            // Wait a bit for the script to load
+            setTimeout(() => {
+                if (window.AgentFlowGraph) {
+                    this.createFlowGraph();
+                } else {
+                    console.error('AgentFlowGraph not available after timeout');
+                }
+            }, 500);
+        }
+    },
+    
+    createFlowGraph() {
+        console.log('createFlowGraph called');
+        // Wait for the container to be available
+        const checkContainer = () => {
+            const container = document.getElementById('agentFlowGraph');
+            console.log('Checking container:', container ? 'found' : 'not found');
+            console.log('AgentFlowGraph class available:', window.AgentFlowGraph ? 'yes' : 'no');
+
+            // Use Mermaid implementation for vertical subordinate agent flow
+            if (container && window.AgentMermaid) {
+                if (!this._flowGraph) {
+                    console.log('Creating AgentMermaid instance...');
+                    try {
+                        this._flowGraph = new AgentMermaid('agentFlowGraph', {
+                            width: 280,
+                            height: 400,
+                            theme: 'default'
+                        });
+                        console.log('AgentMermaid created successfully:', this._flowGraph);
+                    } catch (error) {
+                        console.error('Error creating AgentMermaid:', error);
+                    }
+                } else {
+                    console.log('AgentMermaid already exists, skipping creation');
+                }
+            } else if (container && window.AgentGitGraph) {
+                if (!this._flowGraph) {
+                    console.log('Creating AgentGitGraph instance...');
+                    try {
+                        this._flowGraph = new AgentGitGraph('agentFlowGraph', {
+                            width: 280,
+                            height: 400
+                        });
+                        console.log('AgentGitGraph created successfully:', this._flowGraph);
+                    } catch (error) {
+                        console.error('Error creating AgentGitGraph:', error);
+                    }
+                } else {
+                    console.log('AgentGitGraph already exists, skipping creation');
+                }
+            } else if (container && window.AgentFlowGraph) {
+                if (!this._flowGraph) {
+                    console.log('Creating AgentFlowGraph instance (fallback)...');
+                    try {
+                        this._flowGraph = new AgentFlowGraph('agentFlowGraph', {
+                            width: 280,
+                            height: 400
+                        });
+                        console.log('AgentFlowGraph created successfully:', this._flowGraph);
+                    } catch (error) {
+                        console.error('Error creating AgentFlowGraph:', error);
+                    }
+                } else {
+                    console.log('AgentFlowGraph already exists, skipping creation');
+                }
+            } else {
+                console.log('Container or flow graph classes not ready, retrying in 100ms...');
+                setTimeout(checkContainer, 100);
+            }
+        };
+        checkContainer();
     },
     
     // Wait for required functions to be available
@@ -74,6 +162,8 @@ const agentSelectorModel = {
         this.error = null;
         
         try {
+            console.log('AgentSelector: Loading agents...');
+            
             // Check if required functions are available
             if (!window.sendJsonData) {
                 throw new Error('sendJsonData function not available');
@@ -82,10 +172,20 @@ const agentSelectorModel = {
                 throw new Error('getContext function not available');
             }
             
-            // Use the global sendJsonData function that's available in window
-            const response = await window.sendJsonData('/agents_list', {
-                context: window.getContext()
-            });
+            console.log('AgentSelector: Calling sendJsonData...');
+            
+            // Try direct fetch instead of sendJsonData
+            const response = await fetch('/agents_list', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    context: window.getContext()
+                })
+            }).then(res => res.json());
+            
+            console.log('AgentSelector: Response received:', response);
             
             if (response.success) {
                 // Filter out duplicates by ID and ensure unique keys

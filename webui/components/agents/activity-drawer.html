@@ -2,7 +2,7 @@
 <script type="module">
     import { store } from "/components/agents/agent-selector-store.js";
 </script>
-<div x-data="$store.agentSelector" x-init="setTimeout(() => { if (!$store.agentSelector._initialized) init(); }, 1000)" class="activity-drawer-container" :class="{'drawer-open': showActivityDrawer}">
+<div x-data="$store.agentSelector" x-init="setTimeout(() => { console.log('Activity drawer init called'); if (!$store.agentSelector._initialized) { console.log('Initializing store...'); init(); } }, 100)" class="activity-drawer-container drawer-open" :class="{'drawer-open': showActivityDrawer}">
     <!-- Drawer Tab (Always Visible) -->
     <div class="activity-drawer-tab" @click="toggleActivityDrawer()">
         <div class="tab-content">
@@ -59,9 +59,21 @@
             </div>
         </div>
 
+        <!-- Tab Navigation -->
+        <div class="drawer-tabs">
+            <button class="tab-button" :class="{'active': activeTab === 'agents'}" @click="activeTab = 'agents'">
+                <i class="fas fa-users"></i> Agents
+            </button>
+            <button class="tab-button" :class="{'active': activeTab === 'flows'}" @click="activeTab = 'flows'; $store.agentSelector.initFlowGraph()">
+                <i class="fas fa-project-diagram"></i> Flow Graph
+            </button>
+        </div>
+
         <!-- Drawer Body -->
         <div class="drawer-body">
-            <!-- Loading State -->
+            <!-- Agents Tab -->
+            <div x-show="!activeTab || activeTab === 'agents'" class="tab-content">
+                <!-- Loading State -->
             <template x-if="isLoading">
                 <div class="empty-state">
                     <div class="empty-icon">
@@ -81,6 +93,7 @@
                     <button @click="loadAgents()" class="retry-button">Try Again</button>
                 </div>
             </template>
+
 
             <!-- Agents List -->
             <template x-if="!isLoading && !error && agents.length > 0">
@@ -156,6 +169,14 @@
                     <div class="empty-text">No agents available</div>
                 </div>
             </template>
+            </div>
+
+            <!-- Flow Graph Tab -->
+            <div x-show="activeTab === 'flows'" class="tab-content" x-init="$watch('activeTab', value => { if (value === 'flows') { setTimeout(() => $store.agentSelector.initFlowGraph(), 100); } })">
+                <div id="agentFlowGraph" class="flow-graph-container">
+                    <!-- GitGraph visualization will be inserted here -->
+                </div>
+            </div>
         </div>
 
         <!-- Drawer Footer -->

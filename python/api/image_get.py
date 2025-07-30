@@ -24,7 +24,7 @@ class ImageGet(ApiHandler):
             raise ValueError("No path provided")
 
         # check if path is within base directory
-        if not runtime.call_development_function(files.is_in_base_dir, path):
+        if not await runtime.call_development_function(files.is_in_base_dir, path):
             raise ValueError("Path is outside of allowed directory")
 
         # get file extension and info
@@ -40,7 +40,7 @@ class ImageGet(ApiHandler):
 
         if file_ext in image_extensions:
             # Handle image files
-            if not runtime.call_development_function(files.exists, path):
+            if not await runtime.call_development_function(files.exists, path):
                 # If image doesn't exist, return default image icon
                 return _send_fallback_icon("image")
 

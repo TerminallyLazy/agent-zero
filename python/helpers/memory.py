@@ -97,6 +97,39 @@ class Memory:
         return await Memory.get(agent)
 
     @staticmethod
+    async def force_rebuild(agent: Agent):
+        """Force rebuild the memory database by removing corrupted files."""
+        memory_subdir = agent.config.memory_subdir or "default"
+        db_dir = Memory._abs_db_dir(memory_subdir)
+
+        # Remove corrupted database files
+        try:
+            import shutil
+            if os.path.exists(db_dir):
+                # Backup the docstore if possible
+                backup_dir = f"{db_dir}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                try:
+                    shutil.copytree(db_dir, backup_dir)
+                    PrintStyle.standard(f"Backed up corrupted database to: {backup_dir}")
+                except:
+                    pass
+
+                # Remove corrupted files
+                for file in ["index.faiss", "index.pkl"]:
+                    file_path = os.path.join(db_dir, file)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        PrintStyle.standard(f"Removed corrupted file: {file}")
+
+        except Exception as e:
+            PrintStyle.error(f"Error during force rebuild: {e}")
+
+        # Clear from memory and reload
+        if Memory.index.get(memory_subdir):
+            del Memory.index[memory_subdir]
+        return await Memory.get(agent)
+
+    @staticmethod
     def initialize(
         log_item: LogItem | None,
         model_config: models.ModelConfig,
@@ -145,14 +178,42 @@ class Memory:
 
         # if db folder exists and is not empty:
         if os.path.exists(db_dir) and files.exists(db_dir, "index.faiss"):
-            db = MyFaiss.load_local(
-                folder_path=db_dir,
-                embeddings=embedder,
-                allow_dangerous_deserialization=True,
-                distance_strategy=DistanceStrategy.COSINE,
-                # normalize_L2=True,
-                relevance_score_fn=Memory._cosine_normalizer,
-            )  # type: ignore
+            try:
+                db = MyFaiss.load_local(
+                    folder_path=db_dir,
+                    embeddings=embedder,
+                    allow_dangerous_deserialization=True,
+                    distance_strategy=DistanceStrategy.COSINE,
+                    # normalize_L2=True,
+                    relevance_score_fn=Memory._cosine_normalizer,
+                )  # type: ignore
+
+                # Validate the database integrity
+                if not Memory._validate_db_integrity(db):
+                    PrintStyle.error("FAISS database corruption detected. Rebuilding...")
+                    if log_item:
+                        log_item.stream(progress="\nDatabase corruption detected, rebuilding...")
+                    # Save existing documents before rebuilding
+                    docs = db.get_all_docs()
+                    db = None
+
+            except Exception as e:
+                PrintStyle.error(f"Failed to load FAISS database: {e}. Rebuilding...")
+                if log_item:
+                    log_item.stream(progress=f"\nDatabase load failed: {e}, rebuilding...")
+                # Try to recover documents if possible
+                try:
+                    db = MyFaiss.load_local(
+                        folder_path=db_dir,
+                        embeddings=embedder,
+                        allow_dangerous_deserialization=True,
+                        distance_strategy=DistanceStrategy.COSINE,
+                        relevance_score_fn=Memory._cosine_normalizer,
+                    )
+                    docs = db.get_all_docs()
+                except:
+                    docs = None
+                db = None
 
             # if there is a mismatch in embeddings used, re-index the whole DB
             emb_ok = False
@@ -305,13 +366,35 @@ class Memory:
             model_config=self.agent.config.embeddings_model, input=query
         )
 
-        return await self.db.asearch(
-            query,
-            search_type="similarity_score_threshold",
-            k=limit,
-            score_threshold=threshold,
-            filter=comparator,
-        )
+        try:
+            return await self.db.asearch(
+                query,
+                search_type="similarity_score_threshold",
+                k=limit,
+                score_threshold=threshold,
+                filter=comparator,
+            )
+        except KeyError as e:
+            PrintStyle.error(f"FAISS database corruption detected during search: {e}")
+            PrintStyle.error("Attempting to rebuild memory database...")
+
+            # Force rebuild the memory database
+            rebuilt_memory = await Memory.force_rebuild(self.agent)
+            self.db = rebuilt_memory.db
+
+            # Retry the search with the rebuilt database
+            try:
+                return await self.db.asearch(
+                    query,
+                    search_type="similarity_score_threshold",
+                    k=limit,
+                    score_threshold=threshold,
+                    filter=comparator,
+                )
+            except Exception as retry_error:
+                PrintStyle.error(f"Search failed even after database rebuild: {retry_error}")
+                # Return empty results to prevent crash
+                return []
 
     async def delete_documents_by_query(
         self, query: str, threshold: float, filter: str = ""
@@ -418,6 +501,34 @@ class Memory:
             0, min(1, res)
         )  # float precision can cause values like 1.0000000596046448
         return res
+
+    @staticmethod
+    def _validate_db_integrity(db: MyFaiss) -> bool:
+        """Validate that the FAISS index and docstore are in sync."""
+        try:
+            # Check if index_to_docstore_id mapping is consistent
+            for idx, doc_id in db.index_to_docstore_id.items():
+                if doc_id not in db.docstore._dict:
+                    PrintStyle.error(f"Integrity check failed: Document ID {doc_id} (index {idx}) not found in docstore")
+                    return False
+
+            # Check if all docstore documents have corresponding index entries
+            docstore_ids = set(db.docstore._dict.keys())
+            index_ids = set(db.index_to_docstore_id.values())
+
+            if docstore_ids != index_ids:
+                missing_in_index = docstore_ids - index_ids
+                missing_in_docstore = index_ids - docstore_ids
+                if missing_in_index:
+                    PrintStyle.error(f"Integrity check failed: {len(missing_in_index)} documents in docstore missing from index")
+                if missing_in_docstore:
+                    PrintStyle.error(f"Integrity check failed: {len(missing_in_docstore)} index entries missing from docstore")
+                return False
+
+            return True
+        except Exception as e:
+            PrintStyle.error(f"Integrity check failed with exception: {e}")
+            return False
 
     @staticmethod
     def _abs_db_dir(memory_subdir: str) -> str:

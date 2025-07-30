@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+import uuid
 from typing import List, Dict, Any, Coroutine, Optional
 from dataclasses import dataclass
 
@@ -31,7 +32,7 @@ class ParallelExecutor(Tool):
 
     async def execute(self, **kwargs) -> Response:
         """
-        Execute multiple operations in parallel.
+        Execute multiple operations in parallel with flow tracking.
         
         Args (via self.args):
             operations: List of operation definitions
@@ -48,17 +49,32 @@ class ParallelExecutor(Tool):
             timeout = float(self.args.get("timeout", 60.0))
             fail_fast = self._parse_bool(self.args.get("fail_fast", "false"))
             
+            # Create flow tracking
+            flow_id = str(uuid.uuid4())
+            task_description = self._extract_task_description(operations)
+            
+            from python.api.agent_flow import flow_tracker
+            flow_tracker.create_flow(
+                flow_id=flow_id,
+                parent_agent=getattr(self.agent, 'agent_name', 'main'),
+                task_description=task_description
+            )
+            
             PrintStyle(font_color="#2E86AB", bold=True).print(
-                f"Executing {len(operations)} operations in parallel (max_concurrency={max_concurrency})"
+                f"Executing {len(operations)} operations in parallel (Flow ID: {flow_id[:8]}...)"
             )
             
             start_time = time.time()
             results = await self._execute_parallel(
-                operations, max_concurrency, timeout, fail_fast
+                operations, max_concurrency, timeout, fail_fast, flow_id
             )
             total_duration = time.time() - start_time
             
-            return self._format_response(results, total_duration)
+            # Complete flow tracking
+            success = sum(1 for r in results if r.success) > 0
+            flow_tracker.complete_flow(flow_id, success)
+            
+            return self._format_response(results, total_duration, flow_id)
             
         except Exception as e:
             error_msg = f"Parallel execution failed: {str(e)}"
@@ -94,24 +110,113 @@ class ParallelExecutor(Tool):
             return value.lower() in ("true", "1", "yes", "on")
         return bool(value)
 
+    def _extract_task_description(self, operations: List[Dict[str, Any]]) -> str:
+        """Extract a meaningful task description from operations."""
+        if not operations:
+            return "Parallel execution task"
+        
+        # Try to identify the main task from agent_call messages
+        agent_calls = [op for op in operations if op.get("type") == "agent_call"]
+        if agent_calls:
+            first_message = agent_calls[0].get("message", "")
+            if len(first_message) > 100:
+                return first_message[:97] + "..."
+            return first_message or "Multi-agent collaboration task"
+        
+        return f"Parallel execution of {len(operations)} operations"
+
     async def _execute_parallel(
         self, 
         operations: List[Dict[str, Any]], 
         max_concurrency: int,
         timeout: float,
-        fail_fast: bool
+        fail_fast: bool,
+        flow_id: str
     ) -> List[ParallelResult]:
-        """Execute operations in parallel using TaskGroup."""
+        """Execute operations in parallel using TaskGroup with flow tracking."""
         results = []
         semaphore = asyncio.Semaphore(max_concurrency)
         
+        from python.api.agent_flow import flow_tracker
+        
+        # Initialize flow progress
+        flow_tracker.update_flow_progress(flow_id, 0, len(operations))
+        
         async def _execute_single(index: int, operation: Dict[str, Any]) -> ParallelResult:
-            """Execute a single operation with concurrency control."""
+            """Execute a single operation with concurrency control and tracking."""
             async with semaphore:
                 start_time = time.time()
+                agent_id = f"agent_{index}_{int(start_time)}"
+                
                 try:
-                    result = await self._execute_operation(operation)
+                    # Add agent to flow tracking with enhanced information
+                    agent_role = self._extract_agent_role(operation)
+                    agent_info = {
+                        "id": agent_id,
+                        "name": agent_role,
+                        "type": agent_role.lower().replace(" ", "_"),
+                        "role": agent_role,
+                        "status": "running",
+                        "message": operation.get("message", ""),
+                        "endpoint": operation.get("endpoint", "local"),
+                        "protocol": "local",
+                        # Hierarchical relationship information
+                        "parent_id": getattr(self.agent, 'agent_id', None) if hasattr(self.agent, 'agent_id') else None,
+                        "superior_id": getattr(self.agent, 'agent_id', None) if hasattr(self.agent, 'agent_id') else None,
+                        "hierarchy_level": 1 if operation.get("type") == "subordinate" else 0
+                    }
+
+                    # If this is a network agent operation, try to get Agent Card info
+                    if operation.get("endpoint"):
+                        try:
+                            from python.tools.agent_bridge import discover_agent
+                            discovered_info = await discover_agent(operation["endpoint"], timeout=3.0)
+                            if discovered_info:
+                                agent_info.update({
+                                    "agent_card": discovered_info.get("agent_card", {}),
+                                    "skills": discovered_info.get("skills", []),
+                                    "capabilities": discovered_info.get("capabilities", {}),
+                                    "protocol": discovered_info.get("protocol", "unknown"),
+                                    "version": discovered_info.get("version", "unknown"),
+                                    "description": discovered_info.get("description", ""),
+                                    "name": discovered_info.get("name", agent_role)
+                                })
+                        except Exception as e:
+                            # If discovery fails, continue with basic info
+                            pass
+
+                    flow_tracker.add_agent_to_flow(flow_id, agent_info)
+                    
+                    # Register subordinate agent in the global agent registry
+                    from python.api.agents_list import register_subordinate_agent
+                    register_subordinate_agent(agent_id, {
+                        "name": f"@{agent_role.lower().replace(' ', '_')}",
+                        "role": agent_role,
+                        "status": "working", 
+                        "parent_agent": getattr(self.agent, 'agent_name', 'main'),
+                        "profile": agent_role.lower().replace(' ', '_'),
+                        "endpoint": f"local://{agent_id}",
+                        "task_count": 1
+                    })
+                    
+                    # Execute operation
+                    result = await self._execute_operation(operation, flow_id, agent_id)
                     duration = time.time() - start_time
+                    
+                    # Update agent status
+                    flow_tracker.update_agent_status(flow_id, agent_id, "completed", 100)
+                    
+                    # Update agent registry status
+                    from python.api.agents_list import update_subordinate_agent
+                    update_subordinate_agent(agent_id, {
+                        "status": "idle",
+                        "task_count": 0
+                    })
+                    
+                    # Update flow progress
+                    completed = sum(1 for r in results if r.success) + 1
+                    flow_tracker.update_flow_progress(flow_id, completed, len(operations))
+                    
                     return ParallelResult(
                         index=index, 
                         result=result, 
@@ -121,8 +226,19 @@ class ParallelExecutor(Tool):
                 except Exception as e:
                     duration = time.time() - start_time
                     error_msg = str(e)
+                    
+                    # Update agent status as failed
+                    flow_tracker.update_agent_status(flow_id, agent_id, "failed", 0)
+                    
+                    # Update agent registry status
+                    from python.api.agents_list import update_subordinate_agent
+                    update_subordinate_agent(agent_id, {
+                        "status": "error",
+                        "task_count": 0
+                    })
+                    
                     PrintStyle(font_color="orange").print(
-                        f"Operation {index} failed: {error_msg}"
+                        f"Operation {index} ({agent_role}) failed: {error_msg}"
                     )
                     return ParallelResult(
                         index=index, 
@@ -178,7 +294,38 @@ class ParallelExecutor(Tool):
         
         return results
 
-    async def _execute_operation(self, operation: Dict[str, Any]) -> Any:
+    def _extract_agent_role(self, operation: Dict[str, Any]) -> str:
+        """Extract agent role from operation message."""
+        message = operation.get("message", "")
+        
+        # Common role patterns
+        role_patterns = {
+            "ui/ux designer": "UI/UX Designer",
+            "frontend developer": "Frontend Developer", 
+            "backend developer": "Backend Developer",
+            "content writer": "Content Writer",
+            "marketing strategist": "Marketing Strategist",
+            "qa tester": "QA Tester",
+            "devops": "DevOps Engineer"
+        }
+        
+        message_lower = message.lower()
+        for pattern, role in role_patterns.items():
+            if pattern in message_lower:
+                return role
+        
+        # Fallback to operation type or generic name
+        op_type = operation.get("type", "unknown")
+        if op_type == "agent_call":
+            return "Specialist Agent"
+        elif op_type == "llm_call":
+            return "LLM Assistant"
+        elif op_type == "tool_call":
+            return "Tool Agent"
+        else:
+            return "Worker Agent"
+
+    async def _execute_operation(self, operation: Dict[str, Any], flow_id: str = None, agent_id: str = None) -> Any:
         """Execute a single operation based on its type."""
         op_type = operation.get("type", "simple")
         
@@ -206,17 +353,74 @@ class ParallelExecutor(Tool):
             raise ValueError(f"Unknown operation type: {op_type}")
 
     async def _call_subordinate_agent(self, operation: Dict[str, Any]) -> str:
-        """Call a subordinate agent using the agent bridge."""
-        from python.tools.agent_bridge import AgentBridge
-        
+        """Call a subordinate agent - try discovered agents first, fallback to local subagents."""
         message = operation.get("message", "")
         endpoint = operation.get("endpoint", "")
+        profile = operation.get("profile", "default")
         timeout = operation.get("timeout", 30.0)
         
-        if not endpoint:
-            raise ValueError("endpoint is required for agent_call operations")
+        # If endpoint specified, use agent_bridge for network communication
+        if endpoint:
+            return await self._call_network_agent(endpoint, message, timeout)
         
-        # Create and execute agent bridge
+        # Try to discover available agents using ACP/A2A protocols
+        discovered_agent = await self._discover_available_agent()
+        if discovered_agent:
+            PrintStyle(font_color="cyan").print(f"Using discovered agent: {discovered_agent}")
+            return await self._call_network_agent(discovered_agent, message, timeout)
+        
+        # Fallback to local subagent delegation
+        PrintStyle(font_color="yellow").print("No network agents discovered, spawning local subagent")
+        return await self._call_local_subagent(message, profile)
+
+    async def _discover_available_agent(self) -> str:
+        """Discover available agents using ACP/A2A protocols."""
+        import aiohttp
+        
+        # Check common agent ports for ACP/A2A agents
+        discovery_ports = [8001, 8002, 8003, 8004, 8005]
+        
+        for port in discovery_ports:
+            # Try ACP discovery first
+            acp_endpoint = f"http://localhost:{port}"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    # ACP ping endpoint
+                    async with session.get(f"{acp_endpoint}/acp_ping", timeout=aiohttp.ClientTimeout(total=1)) as response:
+                        if response.status == 200:
+                            return acp_endpoint
+            except:
+                pass
+            
+            # Try A2A discovery
+            try:
+                async with aiohttp.ClientSession() as session:
+                    # A2A getAgentCard RPC call
+                    rpc_request = {
+                        "jsonrpc": "2.0",
+                        "method": "getAgentCard", 
+                        "params": {},
+                        "id": 1
+                    }
+                    async with session.post(
+                        f"http://localhost:{port}/rpc",
+                        json=rpc_request,
+                        timeout=aiohttp.ClientTimeout(total=1),
+                        headers={"Content-Type": "application/json"}
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            if "result" in result:
+                                return f"http://localhost:{port}"
+            except:
+                pass
+        
+        return ""  # No agents discovered
+
+    async def _call_network_agent(self, endpoint: str, message: str, timeout: float) -> str:
+        """Call a network agent using agent_bridge."""
+        from python.tools.agent_bridge import AgentBridge
+        
         bridge = AgentBridge(
             agent=self.agent,
             name="agent_bridge",
@@ -232,6 +436,26 @@ class ParallelExecutor(Tool):
         )
         
         response = await bridge.execute()
+        return response.message
+
+    async def _call_local_subagent(self, message: str, profile: str) -> str:
+        """Spawn and call a local subagent."""
+        from python.tools.call_subordinate import CallSubordinate
+        
+        subordinate = CallSubordinate(
+            agent=self.agent,
+            name="call_subordinate",
+            method=None,
+            args={
+                "profile": profile,
+                "message": message,
+                "reset": "false"
+            },
+            message="",
+            loop_data=None
+        )
+        
+        response = await subordinate.execute()
         return response.message
 
     async def _call_llm(self, operation: Dict[str, Any]) -> str:
@@ -298,7 +522,7 @@ class ParallelExecutor(Tool):
         except Exception as e:
             raise ValueError(f"Failed to execute tool {tool_name}: {str(e)}")
 
-    def _format_response(self, results: List[ParallelResult], total_duration: float) -> Response:
+    def _format_response(self, results: List[ParallelResult], total_duration: float, flow_id: str = None) -> Response:
         """Format the parallel execution results into a response."""
         successful = [r for r in results if r.success]
         failed = [r for r in results if not r.success]
@@ -308,6 +532,7 @@ class ParallelExecutor(Tool):
             "successful": len(successful),
             "failed": len(failed),
             "total_duration": round(total_duration, 3),
+            "flow_id": flow_id,
             "results": []
         }
         

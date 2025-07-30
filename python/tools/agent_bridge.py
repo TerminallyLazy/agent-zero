@@ -217,7 +217,11 @@ class AgentBridge(Tool):
                                             "capabilities": agent_card,
                                             "version": agent_card.get("version"),
                                             "agent_id": agent_card.get("id") or agent_card.get("agent_id"),
-                                            "discovery_method": "getAgentCard"
+                                            "discovery_method": "getAgentCard",
+                                            "agent_card": agent_card,
+                                            "skills": agent_card.get("skills", []),
+                                            "name": agent_card.get("name", "Unknown Agent"),
+                                            "description": agent_card.get("description", "")
                                         }
                                         
                 except Exception:
