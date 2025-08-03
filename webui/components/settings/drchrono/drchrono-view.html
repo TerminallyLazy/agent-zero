@@ -1,0 +1,524 @@
+<!-- DrChrono Settings View -->
+<div class="drchrono-settings">
+  <div class="settings-header">
+    <h3>DrChrono EMR Integration</h3>
+    <span class="badge" :class="isConnected() ? 'success' : (accessToken ? 'warning' : 'danger')">
+      <span x-text="isConnected() ? '✓ Connected' : (accessToken ? '⚠ Token Present' : '✗ Not Connected')"></span>
+    </span>
+  </div>
+
+  <div class="settings-content">
+    <!-- Environment Selection -->
+    <div class="form-section">
+      <h4>Environment</h4>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="environment" value="sandbox" x-model="environment" @change="markChanged()">
+          <span class="radio-label">
+            <strong>Sandbox</strong>
+            <small>For testing and development</small>
+          </span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="environment" value="production" x-model="environment" @change="markChanged()">
+          <span class="radio-label">
+            <strong>Production</strong>
+            <small>Live patient data - use with caution</small>
+          </span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="environment" value="custom" x-model="environment" @change="markChanged()">
+          <span class="radio-label">
+            <strong>Custom</strong>
+            <small>Custom endpoint URL</small>
+          </span>
+        </label>
+      </div>
+      
+      <!-- Custom Endpoint Input -->
+      <div class="form-group" x-show="environment === 'custom'" x-transition>
+        <label>Custom Endpoint URL</label>
+        <input 
+          type="url" 
+          class="form-input" 
+          placeholder="https://api.example.com"
+          x-model="endpoints.custom"
+          @input="markChanged()"
+        >
+      </div>
+    </div>
+
+    <!-- API Configuration -->
+    <div class="form-section">
+      <h4>API Configuration</h4>
+      <div class="config-info">
+        <div class="info-item">
+          <label>Client ID</label>
+          <div class="value-display">
+            <code x-text="clientId"></code>
+            <span class="status-indicator success">✓ Configured</span>
+          </div>
+        </div>
+        
+        <div class="info-item">
+          <label>Redirect URI</label>
+          <div class="value-display">
+            <code x-text="redirectUri"></code>
+            <span class="status-indicator success">✓ Configured</span>
+          </div>
+        </div>
+        
+        <div class="info-item">
+          <label>Environment</label>
+          <div class="value-display">
+            <code x-text="environment.charAt(0).toUpperCase() + environment.slice(1)"></code>
+            <span class="status-indicator" :class="environment === 'production' ? 'warning' : 'success'">
+              <span x-text="environment === 'production' ? '⚠ Live Data' : '✓ Safe'"></span>
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="auth-section">
+        <h5>Authentication</h5>
+        <div x-show="!accessToken" class="auth-needed">
+          <p>Click below to authenticate with DrChrono and authorize access to patient data.</p>
+          <button class="btn primary" @click="initiateOAuth()" :disabled="isAuthenticating">
+            <span x-show="!isAuthenticating">🔗 Connect to DrChrono</span>
+            <span x-show="isAuthenticating">
+              <span class="spinner">⟳</span> Connecting...
+            </span>
+          </button>
+          <p><em>Alternative options if popup OAuth fails:</em></p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn ghost" @click="enterManualCode()" :disabled="isAuthenticating">
+              📝 Enter Authorization Code
+            </button>
+            <button class="btn ghost" @click="loadTokensFromFile()" :disabled="isAuthenticating">
+              📁 Load from drchrono_tokens.json
+            </button>
+          </div>
+        </div>
+        
+        <div x-show="accessToken" class="auth-status">
+          <div class="token-info">
+            <span class="status-indicator success">✓ Access Token Present</span>
+            <span class="token-preview" x-text="'...' + accessToken.slice(-8)"></span>
+          </div>
+          <button class="btn ghost small" @click="disconnect()">
+            Disconnect
+          </button>
+        </div>
+        
+        <div x-show="authError" class="auth-error">
+          <span class="status-indicator danger">✗ Authentication Error</span>
+          <p x-text="authError"></p>
+          <button class="btn" @click="authError = null; initiateOAuth()">
+            Try Again
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Connection Status -->
+    <div class="form-section" x-show="accessToken">
+      <h4>Connection Status</h4>
+      <div class="status-box">
+        <div class="status-row">
+          <span class="status-label">API Endpoint:</span>
+          <span class="status-value" x-text="currentEndpoint"></span>
+        </div>
+        <div class="status-row" x-show="practiceId">
+          <span class="status-label">Practice ID:</span>
+          <span class="status-value" x-text="practiceId"></span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Last tested:</span>
+          <span class="status-value" x-text="formatTestTime()"></span>
+        </div>
+        <div class="status-row" x-show="testResult">
+          <span class="status-label">Test result:</span>
+          <span class="status-value" :class="testResult?.success ? 'text-success' : 'text-danger'" x-text="testResult?.message"></span>
+        </div>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn" @click="testConnection()" :disabled="isTesting || !accessToken">
+          <span x-show="!isTesting">🔄 Test API Connection</span>
+          <span x-show="isTesting">
+            <span class="spinner">⟳</span> Testing...
+          </span>
+        </button>
+        <button class="btn ghost" @click="refreshAccessToken()" x-show="refreshToken">
+          🔄 Refresh Token
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="form-actions" x-show="isConnected()">
+      <button class="btn success" disabled>
+        ✓ DrChrono Integration Active
+      </button>
+      <button class="btn ghost" @click="save()">
+        💾 Save Configuration
+      </button>
+      <div class="integration-status">
+        <span class="status-text">Ready for patient data access</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.drchrono-settings {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.form-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.radio-option:hover {
+  border-color: var(--primary);
+}
+
+.radio-option input[type="radio"] {
+  margin-top: 2px;
+}
+
+.radio-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.radio-label strong {
+  color: var(--text);
+}
+
+.radio-label small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.form-input[readonly] {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.input-with-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-toggle .form-input {
+  padding-right: 40px;
+}
+
+.toggle-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.toggle-btn:hover {
+  color: var(--text);
+}
+
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status-box {
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.status-label {
+  color: var(--muted);
+}
+
+.status-value {
+  color: var(--text);
+  font-family: monospace;
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.config-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-item label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.value-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.value-display code {
+  background: var(--panel-elev);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+}
+
+.status-indicator {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.status-indicator.success {
+  background: rgba(76, 217, 123, 0.2);
+  color: var(--success);
+}
+
+.status-indicator.warning {
+  background: rgba(255, 193, 7, 0.2);
+  color: var(--warning);
+}
+
+.status-indicator.danger {
+  background: rgba(255, 93, 115, 0.2);
+  color: var(--danger);
+}
+
+.auth-section {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+
+.auth-section h5 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.auth-needed {
+  text-align: center;
+  padding: 20px;
+  background: var(--panel-elev);
+  border-radius: 8px;
+}
+
+.auth-needed p {
+  margin: 0 0 16px 0;
+  color: var(--muted);
+}
+
+.auth-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: rgba(76, 217, 123, 0.1);
+  border: 1px solid rgba(76, 217, 123, 0.3);
+  border-radius: 8px;
+}
+
+.token-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-preview {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.auth-error {
+  padding: 12px;
+  background: rgba(255, 93, 115, 0.1);
+  border: 1px solid rgba(255, 93, 115, 0.3);
+  border-radius: 8px;
+}
+
+.auth-error p {
+  margin: 8px 0 12px 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.integration-status {
+  margin-left: auto;
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.badge.success {
+  background: rgba(76, 217, 123, 0.2);
+  color: var(--success);
+}
+
+.badge.danger {
+  background: rgba(255, 93, 115, 0.2);
+  color: var(--danger);
+}
+
+/* Ensure buttons match clinical theme */
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+</style>

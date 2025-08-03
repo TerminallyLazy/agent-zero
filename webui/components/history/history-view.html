@@ -1,0 +1,424 @@
+<!-- History & Audit View -->
+<div class="main">
+  <!-- Filters Bar -->
+  <div class="filters">
+    <div class="filter-group">
+      <template x-for="option in filterOptions" :key="option.value">
+        <div class="chip" :class="{active: filter === option.value}" @click="setFilter(option.value)" x-text="option.label"></div>
+      </template>
+    </div>
+    <div class="filter-group">
+      <template x-for="option in dateRangeOptions" :key="option.value">
+        <div class="chip" :class="{active: dateRange === option.value}" @click="setDateRange(option.value)" x-text="option.label"></div>
+      </template>
+    </div>
+    <button class="btn ghost" style="margin-left: auto;" @click="exportHistory()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+      </svg>
+      Export
+    </button>
+  </div>
+
+  <!-- Timeline Grid -->
+  <div class="timeline-grid">
+    <!-- Timeline List -->
+    <div class="timeline-list">
+      <div class="loading" x-show="isLoading">
+        <span class="spinner">⟳</span> Loading history...
+      </div>
+      
+      <template x-for="event in filteredEvents" :key="event.id">
+        <div class="timeline-item" @click="selectEvent(event)">
+          <div class="timeline-marker">
+            <div class="timeline-icon" :class="getEventColor(event.type)" x-text="getEventIcon(event.type)"></div>
+            <div class="timeline-line"></div>
+          </div>
+          
+          <div class="timeline-content">
+            <div class="timeline-header">
+              <div class="timeline-time" x-text="formatTimestamp(event.timestamp)"></div>
+              <span class="badge" :class="getCategoryBadgeClass(event.category)" x-text="event.category"></span>
+            </div>
+            
+            <div class="timeline-action" x-text="event.action"></div>
+            
+            <div class="timeline-meta">
+              <span x-show="event.user" x-text="event.user"></span>
+              <span x-show="event.patient">• Patient: <span x-text="event.patient"></span></span>
+              <span x-show="event.agent">• Agent: <span x-text="event.agent"></span></span>
+            </div>
+            
+            <div class="timeline-description" x-text="event.description"></div>
+          </div>
+        </div>
+      </template>
+      
+      <div class="empty-state" x-show="filteredEvents.length === 0 && !isLoading">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+          <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+        </svg>
+        <p>No events found for the selected filters</p>
+      </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" x-show="selectedEvent">
+      <div class="detail-header">
+        <h3>Event Details</h3>
+        <button class="btn ghost" @click="closeDetail()">×</button>
+      </div>
+      
+      <div class="detail-body" x-show="selectedEvent">
+        <!-- Event Header -->
+        <div class="event-header">
+          <div class="event-icon" :class="getEventColor(selectedEvent?.type)" x-text="getEventIcon(selectedEvent?.type)"></div>
+          <div>
+            <div class="event-action" x-text="selectedEvent?.action"></div>
+            <div class="event-time">
+              <span x-text="formatDate(selectedEvent?.timestamp)"></span> at 
+              <span x-text="formatTime(selectedEvent?.timestamp)"></span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Event Info -->
+        <div class="info-section">
+          <div class="info-row">
+            <span class="info-label">Type:</span>
+            <span class="info-value" x-text="selectedEvent?.type?.replace('_', ' ')"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Category:</span>
+            <span class="badge" :class="getCategoryBadgeClass(selectedEvent?.category)" x-text="selectedEvent?.category"></span>
+          </div>
+          <div class="info-row" x-show="selectedEvent?.user">
+            <span class="info-label">User:</span>
+            <span class="info-value" x-text="selectedEvent?.user"></span>
+          </div>
+          <div class="info-row" x-show="selectedEvent?.patient">
+            <span class="info-label">Patient:</span>
+            <span class="info-value" x-text="selectedEvent?.patient"></span>
+          </div>
+          <div class="info-row" x-show="selectedEvent?.agent">
+            <span class="info-label">Agent:</span>
+            <span class="info-value" x-text="selectedEvent?.agent"></span>
+          </div>
+        </div>
+        
+        <!-- Description -->
+        <div class="description-section">
+          <h4>Description</h4>
+          <p x-text="selectedEvent?.description"></p>
+        </div>
+        
+        <!-- Details -->
+        <div class="details-section" x-show="selectedEvent?.details && Object.keys(selectedEvent.details).length > 0">
+          <h4>Additional Details</h4>
+          <div class="details-content">
+            <template x-for="[key, value] in Object.entries(selectedEvent?.details || {})" :key="key">
+              <div class="detail-item">
+                <span class="detail-key" x-text="key.replace(/_/g, ' ')"></span>:
+                <span class="detail-value" x-text="typeof value === 'object' ? JSON.stringify(value) : value"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.timeline-grid {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  height: calc(100vh - 120px);
+  overflow: hidden;
+}
+
+.timeline-list {
+  overflow-y: auto;
+  padding: 0 14px 20px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+.loading .spinner {
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 16px;
+  padding: 16px 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.timeline-item:hover .timeline-content {
+  background: var(--panel-elev);
+}
+
+.timeline-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.timeline-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--panel-elev);
+  border: 2px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.timeline-icon.primary {
+  border-color: var(--primary);
+  background: rgba(76, 201, 240, 0.1);
+}
+
+.timeline-icon.accent {
+  border-color: var(--accent);
+  background: rgba(128, 237, 153, 0.1);
+}
+
+.timeline-icon.warning {
+  border-color: var(--warning);
+  background: rgba(255, 183, 3, 0.1);
+}
+
+.timeline-line {
+  width: 2px;
+  flex: 1;
+  background: var(--border);
+  margin-top: 4px;
+}
+
+.timeline-item:last-child .timeline-line {
+  display: none;
+}
+
+.timeline-content {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.timeline-time {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.timeline-action {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.timeline-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.timeline-description {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.detail-panel {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.detail-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.event-header {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.event-icon {
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+}
+
+.event-action {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.event-time {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.info-section {
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 20px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.info-label {
+  font-size: 14px;
+  color: var(--muted);
+  min-width: 80px;
+}
+
+.info-value {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.description-section,
+.details-section {
+  margin-bottom: 20px;
+}
+
+.description-section h4,
+.details-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.description-section p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.details-content {
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.detail-item {
+  padding: 4px 0;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.detail-key {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.detail-value {
+  color: var(--text);
+  font-family: monospace;
+}
+
+.filter-group {
+  display: flex;
+  gap: 8px;
+}
+
+.filters {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-state p {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.badge.muted {
+  background: var(--badge-bg);
+  color: var(--muted);
+}
+
+.badge.accent {
+  background: rgba(128, 237, 153, 0.2);
+  color: var(--accent);
+}
+
+.badge.primary {
+  background: rgba(76, 201, 240, 0.2);
+  color: var(--primary);
+}
+
+.badge.warning {
+  background: rgba(255, 183, 3, 0.2);
+  color: var(--warning);
+}
+
+.badge.danger {
+  background: rgba(255, 93, 115, 0.2);
+  color: var(--danger);
+}
+</style>

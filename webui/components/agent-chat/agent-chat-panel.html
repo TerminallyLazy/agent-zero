@@ -1,0 +1,860 @@
+<!-- Agent Chat Interface -->
+<div class="agent-chat-container" x-show="isOpen" x-transition>
+  <!-- Chat Header -->
+  <div class="chat-header">
+    <div class="chat-title">
+      <span x-show="!activeThread">Agent Communication</span>
+      <span x-show="activeThread">
+        <span x-text="activeAgent?.name"></span>
+        <small x-show="activeThread?.patientContext" x-text="'• ' + activeThread.patientContext"></small>
+      </span>
+    </div>
+    <div class="chat-controls">
+      <button class="chat-btn" @click="toggleMinimize()" :title="isMinimized ? 'Restore' : 'Minimize'">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path x-show="!isMinimized" d="M6 19h12v2H6z"/>
+          <path x-show="isMinimized" d="M6 14l3 3v-2h6v2l3-3-3-3v2H9v-2l-3 3z"/>
+        </svg>
+      </button>
+      <button class="chat-btn" @click="closeChat()" title="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Chat Body -->
+  <div class="chat-body" x-show="!isMinimized">
+    <!-- Conversation List (when no active thread) -->
+    <div x-show="!activeThread" class="conversation-list">
+      <!-- Available Agents -->
+      <div class="agents-section">
+        <h4>Start New Conversation</h4>
+        <div class="agent-grid">
+          <template x-for="agent in availableAgents" :key="agent.id">
+            <div class="agent-card" @click="startConversation(agent.id)">
+              <div class="agent-avatar" x-text="agent.avatar"></div>
+              <div class="agent-info">
+                <div class="agent-name" x-text="agent.name"></div>
+                <div class="agent-role" x-text="agent.role"></div>
+                <div class="agent-specialty" x-text="agent.specialty"></div>
+              </div>
+              <div class="agent-status" :class="agent.status"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Recent Conversations -->
+      <div class="recent-conversations" x-show="activeConversations.length > 0">
+        <h4>Recent Conversations</h4>
+        <div class="conversation-threads">
+          <template x-for="conv in activeConversations" :key="conv.id">
+            <div class="thread-item" @click="selectConversation(conv)">
+              <div class="thread-avatar">
+                <span x-text="availableAgents.find(a => a.id === conv.agentId)?.avatar"></span>
+                <span class="unread-badge" x-show="conv.unread > 0" x-text="conv.unread"></span>
+              </div>
+              <div class="thread-info">
+                <div class="thread-subject" x-text="conv.subject"></div>
+                <div class="thread-preview" x-text="conv.lastMessage"></div>
+                <div class="thread-time" x-text="formatTime(conv.timestamp)"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Conversation Thread -->
+    <div x-show="activeThread" class="active-conversation">
+      <!-- Thread Header -->
+      <div class="thread-header">
+        <button class="back-btn" @click="activeThread = null; activeAgent = null;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <div class="thread-agent-info">
+          <div class="agent-header">
+            <span class="agent-avatar-sm" x-text="activeAgent?.avatar"></span>
+            <div>
+              <div class="agent-name-sm" x-text="activeAgent?.name"></div>
+              <div class="agent-role-sm" x-text="activeAgent?.role"></div>
+            </div>
+            <div class="connection-status" :class="isConnected ? 'connected' : 'disconnected'">
+              <span x-text="isConnected ? 'Online' : 'Connecting...'"></span>
+            </div>
+          </div>
+          <div class="agent-capabilities">
+            <template x-for="capability in (activeAgent?.capabilities || [])" :key="capability">
+              <span class="capability-tag" x-text="capability.replace('-', ' ')"></span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages-container" style="flex: 1; min-height: 0; overflow-y: auto; max-height: 400px; height: 400px;">
+        <template x-for="message in (activeThread?.messages || [])" :key="message.id">
+          <div class="message" :class="message.sender === 'user' ? 'user-message' : 'agent-message'">
+            <div class="message-content">
+              <div class="message-text" x-html="renderMarkdown(message.content)"></div>
+              <div class="message-time" x-text="formatTime(message.timestamp)"></div>
+              <div x-show="message.reasoning" class="message-reasoning">
+                <strong>Reasoning:</strong> <span x-html="renderMarkdown(message.reasoning)"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Typing Indicator -->
+        <div x-show="activeAgent && isAgentTyping(activeAgent.id)" class="typing-indicator">
+          <div class="typing-avatar" x-text="activeAgent?.avatar"></div>
+          <div class="typing-animation">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <button class="quick-btn" @click="quickMessage('review-labs')">Review Labs</button>
+        <button class="quick-btn" @click="quickMessage('draft-response')">Draft Response</button>
+        <button class="quick-btn" @click="quickMessage('check-medications')">Check Meds</button>
+        <button class="quick-btn" @click="quickMessage('schedule-followup')">Schedule Follow-up</button>
+      </div>
+
+      <!-- Message Input -->
+      <div class="message-input-container">
+        <div class="message-input">
+          <textarea 
+            x-model="currentMessage" 
+            placeholder="Type your message to the agent..."
+            @keydown.enter.prevent="sendMessage()"
+            @keydown.shift.enter.prevent="currentMessage += '\n'"
+            rows="1"
+          ></textarea>
+          <button class="send-btn" @click="sendMessage()" :disabled="!currentMessage.trim()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="input-hint">
+          <span>Press Enter to send, Shift+Enter for new line</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Chat Widget (when closed) -->
+<div class="chat-widget" x-show="!isOpen" @click="toggleChat()">
+  <div class="widget-icon">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+    </svg>
+  </div>
+  <span class="unread-count" x-show="totalUnread > 0" x-text="totalUnread"></span>
+  <div class="widget-tooltip">Chat with Agent Zero</div>
+</div>
+
+<style>
+/* Chat Container */
+.agent-chat-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  bottom: 20px; 
+  left: 20px; /* Make it full width */
+  width: auto; /* Remove fixed width */
+  height: calc(100vh - 40px); /* Full height minus margins */
+  max-height: calc(100vh - 40px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  z-index: 1001; /* Higher than clinical UI */
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+/* Chat Header */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-elev);
+  border-radius: 12px 12px 0 0;
+}
+
+.chat-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chat-title small {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.chat-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.chat-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* Chat Body */
+.chat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0; /* Critical for flex child scrolling */
+}
+
+/* Conversation List */
+.conversation-list {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.agents-section h4,
+.recent-conversations h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agent-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.agent-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.agent-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--badge-bg);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}
+
+.agent-info {
+  flex: 1;
+}
+
+.agent-name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.agent-role {
+  font-size: 12px;
+  color: var(--primary);
+  margin-bottom: 2px;
+}
+
+.agent-specialty {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.agent-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.agent-status.offline {
+  background: var(--muted);
+}
+
+/* Conversation Threads */
+.conversation-threads {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.thread-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.thread-item:hover {
+  background: var(--panel-elev);
+}
+
+.thread-avatar {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--badge-bg);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  background: var(--danger);
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.thread-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-subject {
+  font-weight: 500;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.thread-preview {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.thread-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Active Conversation */
+.active-conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0; /* Critical for flex child scrolling */
+  border: 2px solid red; /* Debug border */
+}
+
+.thread-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-elev);
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  margin-right: 8px;
+  border-radius: 4px;
+}
+
+.back-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.thread-agent-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-avatar-sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--badge-bg);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.agent-name-sm {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.agent-role-sm {
+  font-size: 12px;
+  color: var(--primary);
+}
+
+.connection-status {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.connection-status.connected {
+  color: var(--success);
+  background: rgba(76, 217, 123, 0.1);
+}
+
+.connection-status.disconnected {
+  color: var(--warning);
+  background: rgba(255, 183, 3, 0.1);
+}
+
+.agent-capabilities {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.capability-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--badge-bg);
+  color: var(--muted);
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+/* Messages */
+.messages-container {
+  flex: 1 !important;
+  padding: 16px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0 !important; /* Important for flex containers */
+  max-height: 400px !important;
+  height: 400px !important;
+  scroll-behavior: smooth;
+  /* Ensure webkit browsers also scroll smoothly */
+  -webkit-overflow-scrolling: touch;
+  /* Force scrollbar to always be visible */
+  scrollbar-width: auto !important;
+  border: 1px solid var(--border); /* Debug border to see container */
+}
+
+.messages-container::-webkit-scrollbar {
+  width: 8px !important;
+  display: block !important;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: var(--border) !important;
+  border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: var(--primary) !important;
+  border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text) !important;
+}
+
+.message {
+  display: flex;
+}
+
+.user-message {
+  justify-content: flex-end;
+}
+
+.agent-message {
+  justify-content: flex-start;
+}
+
+.message-content {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  position: relative;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.user-message .message-content {
+  background: var(--primary);
+  color: #061017;
+  border-bottom-right-radius: 4px;
+}
+
+.agent-message .message-content {
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.message-text {
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Markdown styling within messages */
+.message-text h1, .message-text h2, .message-text h3 {
+  margin: 8px 0 4px 0;
+  font-weight: 600;
+}
+
+.message-text h1 { font-size: 18px; }
+.message-text h2 { font-size: 16px; }
+.message-text h3 { font-size: 15px; }
+
+.message-text p {
+  margin: 4px 0;
+}
+
+.message-text strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.message-text em {
+  font-style: italic;
+}
+
+.message-text code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.message-text pre {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.message-text pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.message-text ul, .message-text ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.message-text li {
+  margin: 2px 0;
+}
+
+.message-text a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.message-text a:hover {
+  text-decoration: underline;
+}
+
+.message-text blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+  margin: 8px 0;
+  opacity: 0.8;
+}
+
+.message-time {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.message-reasoning {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Typing Indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.typing-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--badge-bg);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.typing-animation {
+  display: flex;
+  gap: 2px;
+}
+
+.typing-animation span {
+  width: 4px;
+  height: 4px;
+  background: var(--muted);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+
+.typing-animation span:nth-child(1) { animation-delay: -0.32s; }
+.typing-animation span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-elev);
+  overflow-x: auto;
+}
+
+.quick-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background: var(--badge-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-btn:hover {
+  background: var(--border);
+}
+
+/* Message Input */
+.message-input-container {
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.message-input {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.message-input textarea {
+  flex: 1;
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  resize: none;
+  max-height: 100px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.message-input textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.send-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--primary);
+  border: none;
+  border-radius: 8px;
+  color: #061017;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s ease;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: var(--primary-600);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-hint {
+  padding: 4px 16px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Floating Chat Widget */
+.chat-widget {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  background: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(76, 201, 240, 0.3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  z-index: 999;
+  transition: all 0.2s ease;
+}
+
+.chat-widget:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 24px rgba(76, 201, 240, 0.4);
+}
+
+.chat-widget .widget-icon {
+  color: #061017;
+}
+
+.unread-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  background: var(--danger);
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.widget-tooltip {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+  margin-bottom: 8px;
+}
+
+.chat-widget:hover .widget-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .agent-chat-container {
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-width: none;
+  }
+  
+  .message-content {
+    max-width: 90%;
+  }
+}
+
+@media (max-width: 768px) {
+  .agent-chat-container {
+    width: 380px;
+  }
+  
+  .agent-chat-container {
+    bottom: 70px; /* Smaller bottom margin on mobile */
+  }
+}
+</style>

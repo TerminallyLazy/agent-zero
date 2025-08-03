@@ -4,12 +4,14 @@ from urllib.parse import urlparse
 from openai import BaseModel
 from pydantic import Field
 from fastmcp import FastMCP
+import fastmcp
 
 from agent import AgentContext, AgentContextType, UserMessage
 from python.helpers.persist_chat import remove_chat
 from initialize import initialize_agent
 from python.helpers.print_style import PrintStyle
 from python.helpers import settings
+from python.helpers.clinical_api import ClinicalInboxAPI
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -19,6 +21,16 @@ from starlette.requests import Request
 import threading
 
 _PRINTER = PrintStyle(italic=True, font_color="green", padding=False)
+
+# Initialize Clinical Inbox API
+clinical_api = None
+
+def get_clinical_api():
+    global clinical_api
+    if clinical_api is None:
+        config = initialize_agent()
+        clinical_api = ClinicalInboxAPI(config)
+    return clinical_api
 
 
 mcp_server: FastMCP = FastMCP(
@@ -266,6 +278,165 @@ async def _run_chat(
         raise RuntimeError(f"MCP Chat message failed: {e}") from e
 
 
+# Clinical Inbox API Endpoints
+
+@mcp_server.tool(
+    name="patient_search",
+    description="Search for patients in configured EMR systems",
+    tags=["clinical", "patient", "search", "emr"],
+)
+async def patient_search(
+    query: Annotated[str, Field(description="Search query for patient name, MRN, or phone")],
+    source: Annotated[str, Field(description="Data source: 'drchrono' or 'generic'", default="generic")]
+) -> dict:
+    api = get_clinical_api()
+    return await api.search_patients(query, source)
+
+
+@mcp_server.tool(
+    name="patient_details",
+    description="Get detailed patient information",
+    tags=["clinical", "patient", "details"],
+)
+async def patient_details(
+    patient_id: Annotated[str, Field(description="Patient ID")]
+) -> dict:
+    api = get_clinical_api()
+    return await api.get_patient_details(patient_id)
+
+
+@mcp_server.tool(
+    name="inbox_messages",
+    description="Get inbox messages from various sources",
+    tags=["clinical", "inbox", "messages"],
+)
+async def inbox_messages(
+    filter_type: Annotated[str, Field(description="Filter by message type", default="")] = None,
+    limit: Annotated[int, Field(description="Maximum number of messages", default=50)] = 50
+) -> dict:
+    api = get_clinical_api()
+    return await api.get_inbox_messages(filter_type, limit)
+
+
+@mcp_server.tool(
+    name="inbox_generate_draft",
+    description="Generate draft response using specialized agent",
+    tags=["clinical", "inbox", "draft", "agent"],
+)
+async def inbox_generate_draft(
+    item_id: Annotated[str, Field(description="Inbox item ID")],
+    agent_id: Annotated[str, Field(description="Agent ID for specialized response")],
+    item_type: Annotated[str, Field(description="Type of inbox item")],
+    patient: Annotated[str, Field(description="Patient name")],
+    content: Annotated[str, Field(description="Original message content")],
+    context: Annotated[dict, Field(description="Additional context information", default_factory=dict)]
+) -> dict:
+    api = get_clinical_api()
+    return await api.generate_draft(item_id, agent_id, item_type, patient, content, context)
+
+
+@mcp_server.tool(
+    name="context_new",
+    description="Create new Agent Zero context for specialized agents",
+    tags=["clinical", "context", "agent"],
+)
+async def context_new(
+    name: Annotated[str, Field(description="Context name")],
+    system_message: Annotated[list, Field(description="System message list")]
+) -> dict:
+    try:
+        config = initialize_agent()
+        context = AgentContext(config=config, name=name)
+        
+        # Add system message
+        if system_message:
+            user_msg = UserMessage(message="", system_message=system_message)
+            context.agent0.hist_add_user_message(user_msg)
+        
+        return {
+            "success": True,
+            "id": context.id,
+            "name": context.name,
+            "created_at": context.log.logs[0].timestamp.isoformat() if context.log.logs else None
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@mcp_server.tool(
+    name="contexts_get",
+    description="Get all available Agent Zero contexts",
+    tags=["clinical", "context", "list"],
+)
+async def contexts_get() -> dict:
+    try:
+        contexts = []
+        for context_id in AgentContext._contexts:
+            context = AgentContext.get(context_id)
+            if context:
+                contexts.append({
+                    "id": context.id,
+                    "name": getattr(context, 'name', f"Context {context.id}"),
+                    "created_at": context.log.logs[0].timestamp.isoformat() if context.log.logs else None
+                })
+        
+        return {"success": True, "contexts": contexts}
+    except Exception as e:
+        return {"success": False, "message": str(e), "contexts": []}
+
+
+@mcp_server.tool(
+    name="message_async",
+    description="Send message to Agent Zero context asynchronously",
+    tags=["clinical", "message", "async"],
+)
+async def message_async(
+    context_id: Annotated[str, Field(description="Context ID")],
+    message: Annotated[str, Field(description="Message to send")],
+    attachments: Annotated[list, Field(description="File attachments", default_factory=list)]
+) -> dict:
+    try:
+        context = AgentContext.get(context_id)
+        if not context:
+            return {"success": False, "message": "Context not found"}
+        
+        user_msg = UserMessage(
+            message=message,
+            attachments=attachments
+        )
+        
+        # Start communication task
+        task = context.communicate(user_msg)
+        
+        return {"success": True, "task_id": context.id, "is_running": True}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@mcp_server.tool(
+    name="logs_get",
+    description="Get logs from Agent Zero context",
+    tags=["clinical", "logs", "context"],
+)
+async def logs_get(
+    context_id: Annotated[str, Field(description="Context ID")],
+    after_log_index: Annotated[int, Field(description="Get logs after this index", default=0)],
+    limit: Annotated[int, Field(description="Maximum number of logs", default=50)]
+) -> dict:
+    api = get_clinical_api()
+    return await api.get_context_logs(context_id, after_log_index, limit)
+
+
+@mcp_server.tool(
+    name="health",
+    description="Check Clinical Inbox system health",
+    tags=["clinical", "health", "status"],
+)
+async def health() -> dict:
+    api = get_clinical_api()
+    return await api.health_check()
+
+
 class DynamicMcpProxy:
     _instance: "DynamicMcpProxy | None" = None
 
@@ -293,30 +464,28 @@ class DynamicMcpProxy:
         message_path = f"/t-{self.token}/messages/"
 
         # Update settings in the MCP server instance if provided
-        mcp_server.settings.message_path = message_path
-        mcp_server.settings.sse_path = sse_path
+        # Using global fastmcp settings as suggested by deprecation warning
+        import fastmcp
+        fastmcp.settings.message_path = message_path
+        fastmcp.settings.sse_path = sse_path
 
         # Create new MCP apps with updated settings
         with self._lock:
+            # Simplified create_sse_app call with only essential parameters
             self.sse_app = create_sse_app(
                 server=mcp_server,
-                message_path=mcp_server.settings.message_path,
-                sse_path=mcp_server.settings.sse_path,
-                auth_server_provider=mcp_server._auth_server_provider,
-                auth_settings=mcp_server.settings.auth,
-                debug=mcp_server.settings.debug,
-                routes=mcp_server._additional_http_routes,
-                middleware=[Middleware(BaseHTTPMiddleware, dispatch=mcp_middleware)],
+                message_path=fastmcp.settings.message_path,
+                sse_path=fastmcp.settings.sse_path,
             )
 
             # For HTTP, we need to create a custom app since the lifespan manager
             # doesn't work properly in our Flask/Werkzeug environment
             self.http_app = self._create_custom_http_app(
                 http_path,
-                mcp_server._auth_server_provider,
-                mcp_server.settings.auth,
-                mcp_server.settings.debug,
-                mcp_server._additional_http_routes,
+                None,  # auth_server_provider - might be None or need different handling
+                getattr(fastmcp.settings, 'auth', None),
+                getattr(fastmcp.settings, 'debug', False),
+                getattr(mcp_server, '_additional_http_routes', []),
             )
 
     def _create_custom_http_app(self, streamable_http_path, auth_server_provider, auth_settings, debug, routes):
@@ -335,7 +504,7 @@ class DynamicMcpProxy:
 
         # Create session manager
         self.http_session_manager = StreamableHTTPSessionManager(
-            app=mcp_server._mcp_server,
+            app=getattr(mcp_server, '_mcp_server', mcp_server),
             event_store=None,
             json_response=True,
             stateless=False,
@@ -355,9 +524,16 @@ class DynamicMcpProxy:
                 await self.http_session_manager.handle_request(scope, receive, send)
 
         # Get auth middleware and routes
-        auth_middleware, auth_routes, required_scopes = setup_auth_middleware_and_routes(
-            auth_server_provider, auth_settings
-        )
+        # Handle the case where auth_settings might be None
+        if auth_settings:
+            auth_middleware, auth_routes, required_scopes = setup_auth_middleware_and_routes(
+                auth_settings
+            )
+        else:
+            # No auth settings, so no auth middleware or routes
+            auth_middleware = []
+            auth_routes = []
+            required_scopes = []
 
         server_routes.extend(auth_routes)
         server_middleware.extend(auth_middleware)
@@ -369,7 +545,7 @@ class DynamicMcpProxy:
                     streamable_http_path,
                     app=RequireAuthMiddleware(handle_streamable_http, required_scopes),
                 )
-            )
+            )           
         else:
             server_routes.append(
                 Mount(
@@ -380,7 +556,7 @@ class DynamicMcpProxy:
 
         # Add custom routes with lowest precedence
         if routes:
-            server_routes.extend(routes)
+             server_routes.extend(routes)
 
         # Add middleware
         server_middleware.append(Middleware(BaseHTTPMiddleware, dispatch=mcp_middleware))

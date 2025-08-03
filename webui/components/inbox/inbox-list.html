@@ -68,6 +68,7 @@
     <div class="detail-actions">
       <button class="btn ghost" @click="summarize()">Summarize</button>
       <button class="btn" @click="generateDraft()">Generate draft</button>
+      <button class="btn" @click="$store.agentChat.startConversation('inbox-drafter', {patient: selected.patient}); $store.agentChat.quickMessage('Please help me draft a response to this ' + selected.type + ' message from ' + selected.patient)">Ask Agent</button>
       <button class="btn primary" @click="approveAndSend()" x-show="selected.needsSignoff">Approve & Send</button>
       <button class="btn warn" @click="requestChanges()" x-show="selected.needsSignoff">Request changes</button>
     </div>

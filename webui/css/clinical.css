@@ -120,3 +120,253 @@ body.clinical {
 /* Patient panel snippet within detail */
 .patient-bar { display:flex; gap:10px; align-items:center; background: var(--panel-elev); border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
 .patient-pill { padding:4px 8px; border-radius:999px; background:#0f2037; color:#aad4ff; border:1px solid #1f3c5d; font-size:12px; }
+
+/* Typography improvements */
+body.clinical {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+/* Improved spacing */
+.clinical .card {
+  transition: all 0.2s ease;
+}
+
+.clinical .card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Enhanced focus rings */
+.clinical button:focus-visible,
+.clinical input:focus-visible,
+.clinical textarea:focus-visible,
+.clinical select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Refined cards and lists */
+.clinical .card {
+  position: relative;
+  overflow: hidden;
+}
+
+.clinical .card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.clinical .card:hover::before {
+  background: var(--primary);
+}
+
+/* Animated badges */
+.badge.running {
+  position: relative;
+  overflow: hidden;
+}
+
+.badge.running::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateY(-50%);
+  animation: pulse-sweep 2s infinite;
+}
+
+@keyframes pulse-sweep {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* Iconized section headers */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.section-header svg {
+  opacity: 0.7;
+}
+
+/* Global sticky bottom action bar */
+.clinical .bottom-action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 72px; /* Account for vertical nav */
+  right: 0;
+  height: 60px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  background: rgba(18, 23, 34, 0.95);
+}
+
+.clinical .bottom-action-bar .action-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clinical .bottom-action-bar .fab {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #061017;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(76, 201, 240, 0.3);
+  transition: all 0.2s ease;
+}
+
+.clinical .bottom-action-bar .fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 16px rgba(76, 201, 240, 0.5);
+}
+
+.clinical .bottom-action-bar .context-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.clinical .bottom-action-bar .status-indicators {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Adjust main content to account for bottom bar */
+.clinical .main {
+  padding-bottom: 80px;
+  overflow-y: auto;
+  height: calc(100vh - 56px - 80px); /* Account for topbar and bottom padding */
+}
+
+/* Icon styles */
+.clinical svg {
+  flex-shrink: 0;
+}
+
+.clinical .icon-sm { width: 16px; height: 16px; }
+.clinical .icon-md { width: 20px; height: 20px; }
+.clinical .icon-lg { width: 24px; height: 24px; }
+
+/* Improved button styles */
+.btn {
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Improved chip styles */
+.chip {
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.chip:hover {
+  transform: translateY(-1px);
+}
+
+/* Loading states */
+.skeleton {
+  background: linear-gradient(90deg, var(--panel) 25%, var(--panel-elev) 50%, var(--panel) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Improved scrollbars */
+.clinical ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.clinical ::-webkit-scrollbar-track {
+  background: var(--panel);
+}
+
+.clinical ::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.clinical ::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Settings specific fixes */
+.settings-container {
+  height: 100%;
+  overflow-y: auto;
+  padding-bottom: 40px !important;
+}
+
+.drchrono-settings {
+  padding-bottom: 40px;
+}
+
+/* Ensure all detail-actions don't get cut off */
+.clinical .detail-actions {
+  margin-bottom: 20px;
+}
+
+/* Make sure inbox detail actions are visible */
+.clinical .inbox-grid .detail .detail-actions {
+  margin-bottom: 80px; /* Extra space for bottom bar */
+}
+
+/* Fix for any modals or overlays */
+.clinical .modal,
+.clinical .dialog {
+  z-index: 1100; /* Higher than chat (1000) and bottom bar (100) */
+}

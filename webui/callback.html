@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DrChrono Authentication</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading" style="display: block;">
+            <div class="spinner"></div>
+            <h2>Authenticating with DrChrono...</h2>
+            <p>Please wait while we complete the authentication process.</p>
+        </div>
+        
+        <div id="success" style="display: none;">
+            <h2 class="success">✓ Authentication Successful!</h2>
+            <p>DrChrono has been connected successfully. You can now close this window.</p>
+        </div>
+        
+        <div id="error" style="display: none;">
+            <h2 class="error">✗ Authentication Failed</h2>
+            <p id="error-message">An error occurred during authentication.</p>
+            <button onclick="window.close()" style="
+                background: rgba(255, 255, 255, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 0.5rem 1rem;
+                border-radius: 6px;
+                cursor: pointer;
+                margin-top: 1rem;
+            ">Close Window</button>
+        </div>
+    </div>
+
+    <script>
+        // Extract authorization code from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const error = urlParams.get('error');
+        const state = urlParams.get('state');
+
+        if (error) {
+            // OAuth error
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error-message').textContent = 
+                `Authentication error: ${error}. ${urlParams.get('error_description') || ''}`;
+        } else if (code) {
+            // Success - exchange code for token
+            handleAuthCode(code, state);
+        } else {
+            // No code or error - invalid callback
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error-message').textContent = 
+                'Invalid callback URL. Missing authorization code.';
+        }
+
+        async function handleAuthCode(code, state) {
+            try {
+                // Send code to parent window for token exchange
+                if (window.opener && !window.opener.closed) {
+                    // Try to call DrChrono store method in parent window
+                    if (window.opener.Alpine && window.opener.Alpine.store('drchrono')) {
+                        const result = await window.opener.Alpine.store('drchrono').handleOAuthCallback(code, state);
+                        
+                        if (result.success) {
+                            // Success
+                            document.getElementById('loading').style.display = 'none';
+                            document.getElementById('success').style.display = 'block';
+                            
+                            // Auto-close after 2 seconds
+                            setTimeout(() => {
+                                window.close();
+                            }, 2000);
+                        } else {
+                            throw new Error(result.error || 'Token exchange failed');
+                        }
+                    } else {
+                        // Fallback: Store code in localStorage for parent to pick up
+                        localStorage.setItem('drchrono_auth_code', code);
+                        localStorage.setItem('drchrono_auth_state', state || '');
+                        
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('success').style.display = 'block';
+                        
+                        setTimeout(() => {
+                            window.close();
+                        }, 1000);
+                    }
+                } else {
+                    // No parent window - standalone callback
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').style.display = 'block';
+                    document.getElementById('error-message').textContent = 
+                        'Please return to the main application to complete authentication.';
+                }
+            } catch (error) {
+                console.error('OAuth callback error:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error-message').textContent = 
+                    `Authentication failed: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

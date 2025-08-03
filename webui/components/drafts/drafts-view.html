@@ -1,0 +1,68 @@
+<!-- Drafts & Sign-offs View -->
+<div class="main" x-data="$store.drafts">
+  <div class="filters">
+    <div class="chip" :class="{active: filter==='all'}" @click="setFilter('all')">All</div>
+    <div class="chip" :class="{active: filter==='lab'}" @click="setFilter('lab')">Labs</div>
+    <div class="chip" :class="{active: filter==='refill'}" @click="setFilter('refill')">Refills</div>
+    <div class="chip" :class="{active: filter==='patient'}" @click="setFilter('patient')">Patient Messages</div>
+  </div>
+
+  <div class="inbox-grid">
+    <div class="list">
+      <template x-for="item in filtered" :key="item.id">
+        <div class="card" @click="select(item)">
+          <div class="avatar" x-text="item.patient.split(' ').map(s=>s[0]).join('')"></div>
+          <div>
+            <div class="subject" x-text="item.subject"></div>
+            <div class="subline"><span x-text="item.patient"></span> • From <span x-text="item.agent"></span></div>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="badge" :class="item.badgeClass" x-text="item.badge"></span>
+            <span class="badge signoff" x-show="item.needsSignoff">Needs sign-off</span>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="detail" x-show="selected">
+      <div class="detail-header">
+        <div style="display:flex; flex-direction:column;">
+          <div class="subject" x-text="selected.subject"></div>
+          <div class="subline"><span x-text="selected.patient"></span> • From <span x-text="selected.agent"></span></div>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:6px; align-items:center;">
+          <span class="badge signoff" x-show="selected.needsSignoff">Needs sign-off</span>
+          <button class="btn ghost" @click="close()">Close</button>
+        </div>
+      </div>
+
+      <div class="detail-body">
+        <div class="patient-bar">
+          <div class="patient-pill" x-text="selected.patient"></div>
+          <div class="patient-pill" x-text="selected.type.toUpperCase()"></div>
+        </div>
+
+        <div>
+          <div class="subline">Original</div>
+          <div class="markdown-content" x-html="renderMarkdown(selected.original)"></div>
+        </div>
+
+        <div>
+          <div class="subline">Agent summary</div>
+          <div class="markdown-content" x-html="renderMarkdown(selected.summary)"></div>
+        </div>
+
+        <div class="editor">
+          <div class="subline" style="margin-bottom:6px;">Draft</div>
+          <textarea x-model="draft" style="max-height: 200px; overflow-y: auto; resize: vertical;"></textarea>
+        </div>
+      </div>
+
+      <div class="detail-actions">
+        <button class="btn primary" @click="approveAndSend()">Approve & Send</button>
+        <button class="btn" @click="approveAndQueue()">Approve & Queue</button>
+        <button class="btn warn" @click="requestChanges()">Request changes</button>
+      </div>
+    </div>
+  </div>
+</div>

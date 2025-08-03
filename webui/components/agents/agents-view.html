@@ -1,0 +1,74 @@
+<!-- Agents & Tasks View -->
+<div class="main" x-data="$store.agents" style="padding: 20px; min-height: 100vh;">
+  <div style="display:flex; gap:12px; padding:12px 14px; border-bottom:1px solid var(--border); background: var(--panel); margin-bottom: 20px; border-radius: 8px;">
+    <div style="font-weight:700; color: var(--text); font-size: 18px;">Clinical Agents</div>
+  </div>
+
+  <div style="padding:12px 14px; display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom: 30px;">
+    <template x-for="a in agents" :key="a.id">
+      <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom: 12px;">
+          <div style="width: 40px; height: 40px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #061017; font-weight: 600;" x-text="a.name.split(' ').map(s=>s[0]).join('')"></div>
+          <div style="flex: 1;">
+            <div style="font-weight:700; color: var(--text); margin-bottom: 4px;" x-text="a.name"></div>
+            <div style="font-size: 12px; color: var(--muted);">Queues: <span x-text="a.assigned.join(', ')"></span></div>
+          </div>
+          <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;" :style="a.status === 'running' ? 'background: var(--success); color: white;' : 'background: var(--border); color: var(--muted);'" x-text="a.status"></span>
+        </div>
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">Last run: <span x-text="a.lastRun ? new Date(a.lastRun).toLocaleString() : 'Never'"></span></div>
+        <div style="display:flex; gap:8px; flex-wrap: wrap;">
+          <button style="padding: 6px 12px; background: var(--primary); color: #061017; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" @click="startAgent(a.id)" x-show="a.status!=='running'">Start</button>
+          <button style="padding: 6px 12px; background: var(--danger); color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" @click="stopAgent(a.id)" x-show="a.status==='running'">Stop</button>
+          <button style="padding: 6px 12px; background: var(--success); color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" @click="$store.agentChat.startConversation(a.id)">Chat</button>
+          <button style="padding: 6px 12px; background: var(--border); color: var(--text); border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" @click="deleteAgent(a.id)">Delete</button>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Agent Creation Section -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div style="font-weight:700; color: var(--text); font-size: 18px;">Agent Management</div>
+    <button style="padding: 8px 16px; background: var(--primary); color: #061017; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;" @click="console.log('Add Agent clicked'); showAddAgent = true">+ Add New Agent</button>
+  </div>
+
+  <!-- Add Agent Modal -->
+  <div x-show="showAddAgent" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;" @click.self="showAddAgent = false">
+    <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 500px; max-width: 90vw;">
+      <h3 style="margin: 0 0 20px 0; color: var(--text);">Create New Agent</h3>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 600;">Agent Name</label>
+        <input x-model="newAgent.name" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-elev); color: var(--text);" placeholder="e.g., Lab Result Analyzer">
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 600;">Specialization</label>
+        <select x-model="newAgent.specialization" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-elev); color: var(--text);">
+          <option value="">Select specialization...</option>
+          <option value="lab-analysis">Lab Analysis</option>
+          <option value="medication-management">Medication Management</option>
+          <option value="appointment-scheduling">Appointment Scheduling</option>
+          <option value="patient-communication">Patient Communication</option>
+          <option value="clinical-documentation">Clinical Documentation</option>
+          <option value="billing-coding">Billing & Coding</option>
+          <option value="quality-assurance">Quality Assurance</option>
+        </select>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 600;">System Prompt</label>
+        <textarea x-model="newAgent.systemPrompt" rows="4" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-elev); color: var(--text); resize: vertical;" placeholder="Define the agent's role, capabilities, and behavior..."></textarea>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button style="padding: 8px 16px; background: var(--border); color: var(--text); border: none; border-radius: 6px; cursor: pointer;" @click="showAddAgent = false; resetNewAgent()">Cancel</button>
+        <button style="padding: 8px 16px; background: var(--primary); color: #061017; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;" @click="console.log('Create Agent clicked'); createAgent()">Create Agent</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Activity Logs -->
+  <div style="margin-top: 30px;">
+    <div style="font-weight:700; color: var(--text); font-size: 18px; margin-bottom: 20px;">Recent Agent Activity</div>
+    <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+      <div style="font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; color: var(--text); white-space: pre-wrap; max-height: 300px; overflow-y: auto;" x-text="logs.length ? logs.join('\n') : 'No recent activity'"></div>
+    </div>
+  </div>
+</div>

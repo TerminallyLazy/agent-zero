@@ -1,0 +1,500 @@
+<!-- Webhooks Management View -->
+<div class="webhooks-settings">
+  <div class="settings-header">
+    <h3>DrChrono Webhooks</h3>
+    <span class="badge" :class="isVerified ? 'success' : 'warning'">
+      <span x-text="isVerified ? '✓ Verified' : '⚠ Not Verified'"></span>
+    </span>
+  </div>
+
+  <div class="settings-content">
+    <!-- Webhook Configuration -->
+    <div class="form-section">
+      <h4>Configuration</h4>
+      
+      <div class="form-group">
+        <label>Callback URL</label>
+        <div class="input-with-copy">
+          <input 
+            type="url" 
+            class="form-input" 
+            x-model="callbackUrl"
+            readonly
+          >
+          <button class="btn ghost small" @click="navigator.clipboard.writeText(callbackUrl)">
+            📋 Copy
+          </button>
+        </div>
+        <small class="form-hint">Use this URL in your DrChrono webhook configuration</small>
+      </div>
+
+      <div class="form-group">
+        <label>Secret Token</label>
+        <input 
+          type="text" 
+          class="form-input" 
+          x-model="secretToken"
+          readonly
+        >
+        <small class="form-hint">Use this secret token in DrChrono for webhook verification</small>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn primary" @click="verifyWebhook()" :disabled="isConfiguring">
+          <span x-show="!isConfiguring">🔍 Test Verification</span>
+          <span x-show="isConfiguring">
+            <span class="spinner">⟳</span> Testing...
+          </span>
+        </button>
+        <button class="btn ghost" @click="pingWebhook()" :disabled="isConfiguring">
+          🏓 Send Ping
+        </button>
+        <button class="btn ghost" @click="exportConfig()">
+          📥 Export Config
+        </button>
+      </div>
+
+      <div x-show="testResult" class="test-result" :class="testResult?.success ? 'success' : 'error'">
+        <span x-text="testResult?.message"></span>
+      </div>
+    </div>
+
+    <!-- Event Selection -->
+    <div class="form-section">
+      <h4>Webhook Events</h4>
+      <p class="section-description">Select which DrChrono events should trigger webhooks to the Clinical Inbox.</p>
+      
+      <div class="events-grid">
+        <template x-for="event in supportedEvents" :key="event.id">
+          <div class="event-card" :class="{ active: isEventSelected(event.id) }">
+            <label class="event-label">
+              <input 
+                type="checkbox" 
+                :checked="isEventSelected(event.id)"
+                @change="toggleEvent(event.id)"
+              >
+              <div class="event-info">
+                <strong x-text="event.name"></strong>
+                <small x-text="event.description"></small>
+              </div>
+            </label>
+          </div>
+        </template>
+      </div>
+
+      <div class="selection-summary">
+        <span class="count" x-text="selectedEvents.length"></span> events selected
+      </div>
+    </div>
+
+    <!-- Webhook Status -->
+    <div class="form-section">
+      <h4>Status & Monitoring</h4>
+      
+      <div class="status-grid">
+        <div class="status-item">
+          <label>Verification Status</label>
+          <div class="status-value" :class="isVerified ? 'success' : 'warning'">
+            <span x-text="isVerified ? '✓ Verified' : '⚠ Not Verified'"></span>
+          </div>
+        </div>
+        
+        <div class="status-item">
+          <label>Last Verified</label>
+          <div class="status-value" x-text="formatTimestamp(lastVerification)"></div>
+        </div>
+        
+        <div class="status-item">
+          <label>Events Configured</label>
+          <div class="status-value" x-text="selectedEvents.length + ' events'"></div>
+        </div>
+        
+        <div class="status-item">
+          <label>Endpoint URL</label>
+          <div class="status-value">
+            <code x-text="callbackUrl"></code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Deliveries -->
+    <div class="form-section" x-show="recentDeliveries.length > 0">
+      <h4>Recent Webhook Deliveries</h4>
+      
+      <div class="deliveries-list">
+        <template x-for="delivery in recentDeliveries" :key="delivery.id">
+          <div class="delivery-item">
+            <div class="delivery-event">
+              <strong x-text="delivery.event"></strong>
+              <span class="delivery-id" x-text="delivery.id"></span>
+            </div>
+            <div class="delivery-meta">
+              <span class="delivery-time" x-text="formatTimestamp(delivery.timestamp)"></span>
+              <span class="delivery-status" :class="delivery.status" x-text="delivery.status"></span>
+              <span class="delivery-attempts" x-text="delivery.attempts + ' attempt' + (delivery.attempts > 1 ? 's' : '')"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Setup Instructions -->
+    <div class="form-section">
+      <h4>DrChrono Setup Instructions</h4>
+      <div class="instructions">
+        <ol>
+          <li><strong>Go to DrChrono Developer Console:</strong> <a href="https://app.drchrono.com/api-management/" target="_blank">https://app.drchrono.com/api-management/</a></li>
+          <li><strong>Edit your API application</strong> and scroll to the "Webhooks" section</li>
+          <li><strong>Add a new webhook</strong> with these settings:
+            <ul>
+              <li><strong>Callback URL:</strong> <code x-text="callbackUrl"></code></li>
+              <li><strong>Secret Token:</strong> <code x-text="secretToken"></code></li>
+              <li><strong>Events:</strong> Select the events you've chosen above</li>
+            </ul>
+          </li>
+          <li><strong>Verify the webhook</strong> using the "Verify webhook" button in DrChrono</li>
+          <li><strong>Test the integration</strong> using the buttons above</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.webhooks-settings {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.form-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.form-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.section-description {
+  margin: 0 0 16px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.form-input[readonly] {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.input-with-copy {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-copy .form-input {
+  flex: 1;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.test-result {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.test-result.success {
+  background: rgba(76, 217, 123, 0.1);
+  border: 1px solid rgba(76, 217, 123, 0.3);
+  color: var(--success);
+}
+
+.test-result.error {
+  background: rgba(255, 93, 115, 0.1);
+  border: 1px solid rgba(255, 93, 115, 0.3);
+  color: var(--danger);
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.event-card {
+  background: var(--panel-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.2s ease;
+}
+
+.event-card:hover {
+  border-color: var(--primary);
+}
+
+.event-card.active {
+  background: rgba(76, 217, 123, 0.05);
+  border-color: var(--success);
+}
+
+.event-label {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.event-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-info strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.event-info small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.selection-summary {
+  text-align: center;
+  padding: 8px;
+  background: var(--panel-elev);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.selection-summary .count {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-item label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-value {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.status-value.success {
+  color: var(--success);
+}
+
+.status-value.warning {
+  color: var(--warning);
+}
+
+.status-value code {
+  background: var(--panel-elev);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.deliveries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.delivery-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--panel-elev);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.delivery-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delivery-id {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.delivery-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.delivery-time {
+  color: var(--muted);
+}
+
+.delivery-status {
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.delivery-status.delivered {
+  background: rgba(76, 217, 123, 0.2);
+  color: var(--success);
+}
+
+.delivery-status.failed {
+  background: rgba(255, 93, 115, 0.2);
+  color: var(--danger);
+}
+
+.delivery-attempts {
+  color: var(--muted);
+}
+
+.instructions {
+  background: var(--panel-elev);
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.instructions ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.instructions li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.instructions ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.instructions code {
+  background: var(--panel);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.badge.success {
+  background: rgba(76, 217, 123, 0.2);
+  color: var(--success);
+}
+
+.badge.warning {
+  background: rgba(255, 193, 7, 0.2);
+  color: var(--warning);
+}
+
+.btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+</style>
