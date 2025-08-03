@@ -1,0 +1,75 @@
+<!-- Inbox List -->
+<div class="filters">
+  <div class="chip" :class="{active: filter==='all'}" @click="setFilter('all')">All</div>
+  <div class="chip" :class="{active: filter==='patients'}" @click="setFilter('patients')">Patients</div>
+  <div class="chip" :class="{active: filter==='colleagues'}" @click="setFilter('colleagues')">Colleagues</div>
+  <div class="chip" :class="{active: filter==='labs'}" @click="setFilter('labs')">Labs</div>
+  <div class="chip" :class="{active: filter==='refills'}" @click="setFilter('refills')">Refills</div>
+  <div class="chip" :class="{active: filter==='appointments'}" @click="setFilter('appointments')">Appointments</div>
+  <div class="chip" :class="{active: filter==='signoff'}" @click="setFilter('signoff')">Needs Sign-off</div>
+</div>
+
+<div class="inbox-grid">
+  <div class="list">
+    <template x-for="item in filteredItems" :key="item.id">
+      <div class="card" @click="$store.inbox.select(item)">
+        <div class="avatar" x-text="item.initials"></div>
+        <div>
+          <div class="subject" x-text="item.subject"></div>
+          <div class="subline">
+            <span x-text="item.patient"></span> • <span x-text="item.preview"></span>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <span class="badge" :class="item.badgeClass" x-text="item.badge"></span>
+          <span class="badge signoff" x-show="item.needsSignoff">Needs sign-off</span>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <div class="detail" x-show="selected">
+    <div class="detail-header">
+      <div class="avatar" x-text="selected.initials"></div>
+      <div style="display:flex; flex-direction:column;">
+        <div class="subject" x-text="selected.subject"></div>
+        <div class="subline"><span x-text="selected.patient"></span> • <span x-text="selected.type"></span></div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:6px; align-items:center;">
+        <span class="badge" :class="selected.badgeClass" x-text="selected.badge"></span>
+        <span class="badge signoff" x-show="selected.needsSignoff">Needs sign-off</span>
+      </div>
+    </div>
+
+    <div class="detail-body">
+      <div class="patient-bar">
+        <div class="patient-pill" x-text="selected.patient"></div>
+        <div class="patient-pill" x-text="'Allergy: ' + (selected.allergy||'NKDA')"></div>
+        <div class="patient-pill" x-text="'Meds: ' + (selected.meds||'—')"></div>
+        <div class="patient-pill" x-text="'Next: ' + (selected.nextAppt||'—')"></div>
+      </div>
+
+      <div>
+        <div class="subline">Original</div>
+        <div style="white-space:pre-wrap" x-text="selected.body"></div>
+      </div>
+
+      <div>
+        <div class="subline">Agent summary</div>
+        <div style="white-space:pre-wrap" x-text="selected.summary || 'Click Summarize to ask Agent Zero.'"></div>
+      </div>
+
+      <div class="editor">
+        <div class="subline" style="margin-bottom:6px;">Draft reply</div>
+        <textarea x-model="draft"></textarea>
+      </div>
+    </div>
+
+    <div class="detail-actions">
+      <button class="btn ghost" @click="summarize()">Summarize</button>
+      <button class="btn" @click="generateDraft()">Generate draft</button>
+      <button class="btn primary" @click="approveAndSend()" x-show="selected.needsSignoff">Approve & Send</button>
+      <button class="btn warn" @click="requestChanges()" x-show="selected.needsSignoff">Request changes</button>
+    </div>
+  </div>
+</div>
