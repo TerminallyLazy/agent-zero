@@ -41,4 +41,6 @@ instruments/**
 !**/.gitkeep
 agent_history.gif
 
-drchrono_tokens.json
+tests/
+
+.claude/

@@ -15,6 +15,21 @@ from agent import AgentContext, UserMessage, AgentContextType
 from initialize import initialize_agent
 from python.helpers.persist_chat import remove_chat
 
+# A2A Mesh helpers
+from .agent_card import minimal_agent_card_from_context, AgentCard
+from .registry_broker import AgentRegistry
+from .negotiation import (
+    make_task_envelope,
+    propose as negotiation_propose,
+    accept as negotiation_accept,
+    request_clarification as negotiation_clarify,
+    update_progress as negotiation_progress,
+    complete as negotiation_complete,
+)
+from .provenance import ProvenanceRecorder
+from .fallback_policy import ErrorCategory, decide_fallback
+import os
+
 # Import FastA2A
 try:
     from fasta2a import Worker, FastA2A  # type: ignore
@@ -60,6 +75,13 @@ except ImportError:  # pragma: no cover – library not installed
 
 _PRINTER = PrintStyle(italic=True, font_color="purple", padding=False)
 
+# Secret for signing (inject via env var in prod)
+AGENT_CARD_SECRET = os.environ.get("A2A_CARD_SECRET", "placeholder-secret")
+
+# Singleton registry + provenance
+registry = AgentRegistry()
+provenance = ProvenanceRecorder()
+
 
 class AgentZeroWorker(Worker):  # type: ignore[misc]
     """Agent Zero implementation of FastA2A Worker."""
@@ -77,6 +99,19 @@ class AgentZeroWorker(Worker):  # type: ignore[misc]
 
             _PRINTER.print(f"[A2A] Processing task {task_id} with new temporary context")
 
+            # Create structured negotiation envelope
+            task_envelope = make_task_envelope(
+                initiator_id="remote",
+                goal=message.get('parts', [{}])[0].get('text', ''),
+                context_snippets={"original_message": message},
+                required_capabilities={},
+                response_channel="a2a"
+            )
+            task_envelope["task_id"] = task_id  # Use FastA2A task ID
+            
+            # Record negotiation
+            negotiation_propose(task_envelope)
+
             # Convert A2A message to Agent Zero format
             agent_message = self._convert_message(message)
 
@@ -93,9 +128,16 @@ class AgentZeroWorker(Worker):  # type: ignore[misc]
                 temp=False,
             )
 
+            # Accept automatically for now; could include policy logic
+            negotiation_accept(task_envelope)
+            negotiation_progress(task_envelope, "Starting execution")
+
             # Process message through Agent Zero (includes response)
             task = context.communicate(agent_message)
             result_text = await task.result()
+
+            # Complete the negotiation
+            negotiation_complete(task_envelope, result_text)
 
             # Build A2A message from result
             response_message: Message = {  # type: ignore
@@ -120,6 +162,13 @@ class AgentZeroWorker(Worker):  # type: ignore[misc]
 
         except Exception as e:
             _PRINTER.print(f"[A2A] Error processing task {params.get('id', 'unknown')}: {e}")
+            
+            # Fallback decision
+            fallback = decide_fallback(ErrorCategory.TRANSIENT, task_envelope)
+            task_envelope["fallback_suggestion"] = fallback
+            task_envelope["error"] = str(e)
+            task_envelope["state"] = "failed"
+
             await self.storage.update_task(
                 task_id=params.get('id', 'unknown'),
                 state='failed'
@@ -212,7 +261,15 @@ class DynamicA2AProxy:
             storage = InMemoryStorage()  # type: ignore[arg-type]
             broker = InMemoryBroker()  # type: ignore[arg-type]
 
-            # Define Agent Zero's skills
+            # Generate dynamic agent card and register
+            cfg = initialize_agent()
+            temp_context = AgentContext(cfg, type=AgentContextType.BACKGROUND)
+            own_card = minimal_agent_card_from_context(temp_context).signed(AGENT_CARD_SECRET)
+            registry.register(own_card["agent_card"]["agent_id"], own_card)
+            temp_context.reset()
+            AgentContext.remove(temp_context.id)
+
+            # Define Agent Zero's skills (preserve backward visibility if needed)
             skills: List[Skill] = [{  # type: ignore
                 "id": "general_assistance",
                 "name": "General AI Assistant",

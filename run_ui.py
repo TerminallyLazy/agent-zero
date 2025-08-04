@@ -163,6 +163,363 @@ async def serve_index():
     )
     return index
 
+# A2A Mesh API Endpoints
+try:
+    from python.helpers.registry_broker import AgentRegistry
+    from python.helpers.agent_card import AgentCard
+    from flask import jsonify
+    import uuid
+    from datetime import datetime
+    
+    # Global registry for A2A mesh
+    _a2a_registry = None
+    
+    def get_a2a_registry():
+        global _a2a_registry
+        if _a2a_registry is None:
+            _a2a_registry = AgentRegistry()
+        return _a2a_registry
+    
+    @webapp.route("/a2a_registry_match", methods=["GET", "POST"])
+    @requires_auth
+    async def a2a_registry_match():
+        try:
+            registry = get_a2a_registry()
+            
+            # Light cleanup only
+            registry.prune_stale(ttl=300.0)
+            
+            all_agents = registry.list_agents()
+            
+            # If no agents in registry, create a default one for display
+            if len(all_agents) == 0:
+                default_card = AgentCard(
+                    agent_id="agent-zero-local",
+                    role_description="Agent Zero - AI Assistant",
+                    tools=["code_execution", "web_search", "file_management", "data_analysis"],
+                    capabilities={
+                        "programming": True,
+                        "web_browsing": True,
+                        "file_management": True,
+                        "data_analysis": True
+                    },
+                    trust_level="local",
+                    version="1.0"
+                )
+                
+                return jsonify({
+                    "matches": [{"agent_card": default_card.to_dict()}],
+                    "goal": "",
+                    "status": "success"
+                })
+            
+            # Return all agents for now
+            matches = []
+            for agent in all_agents:
+                matches.append({"agent_card": agent.signed_card.get("agent_card", {})})
+                
+            return jsonify({
+                "matches": matches,
+                "goal": "",
+                "status": "success"
+            })
+            
+        except Exception as e:
+            return jsonify({"error": str(e), "status": "error"})
+    
+    @webapp.route("/a2a_tasks_list", methods=["GET", "POST"])
+    @requires_auth
+    async def a2a_tasks_list():
+        try:
+            registry = get_a2a_registry()
+            all_tasks = {}
+            if hasattr(registry, '_tasks'):
+                all_tasks = registry._tasks.copy()
+            
+            return jsonify({
+                "tasks": all_tasks,
+                "count": len(all_tasks),
+                "status": "success"
+            })
+            
+        except Exception as e:
+            return jsonify({"error": str(e), "status": "error"})
+    
+    @webapp.route("/a2a_task_execute", methods=["POST"])
+    @requires_auth
+    async def a2a_task_execute():
+        try:
+            from python.helpers.async_task_coordinator import get_coordinator
+            
+            data = request.get_json() if request.is_json else {}
+            goal = data.get("goal", "")
+            if not goal:
+                return jsonify({"error": "Goal required", "status": "error"})
+            
+            # Use async coordinator for better concurrency
+            coordinator = get_coordinator()
+            task_id = await coordinator.submit_task(goal)
+            
+            # Get initial task status
+            task_status = await coordinator.get_task_status(task_id)
+            
+            # Also store in registry for backward compatibility
+            registry = get_a2a_registry()
+            if not hasattr(registry, '_tasks'):
+                registry._tasks = {}
+            
+            # Convert to legacy format for UI compatibility
+            task_envelope = {
+                "task_id": task_id,
+                "initiator_id": "ui-user",
+                "goal": goal,
+                "state": "running",
+                "created_at": task_status["created_at"],
+                "history": [{
+                    "event": "created",
+                    "timestamp": task_status["created_at"],
+                    "detail": "Task submitted via async coordinator"
+                }]
+            }
+            registry._tasks[task_id] = task_envelope
+            
+            print(f"[A2A] Submitted task {task_id} to async coordinator: {goal[:50]}...")
+            
+            return jsonify({
+                "task": task_envelope,
+                "status": "started",
+                "message": f"Task {task_id} submitted for async execution"
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e), "status": "error"})
+    
+    @webapp.route("/a2a_task_execute_batch", methods=["POST"])
+    @requires_auth
+    async def a2a_task_execute_batch():
+        """Execute multiple tasks in parallel."""
+        try:
+            from python.helpers.async_task_coordinator import get_coordinator
+            
+            data = request.get_json() if request.is_json else {}
+            goals = data.get("goals", [])
+            if not goals or not isinstance(goals, list):
+                return jsonify({"error": "Goals list required", "status": "error"})
+            
+            # Use async coordinator for parallel execution
+            coordinator = get_coordinator()
+            task_ids = await coordinator.submit_batch(goals)
+            
+            # Store in registry for backward compatibility
+            registry = get_a2a_registry()
+            if not hasattr(registry, '_tasks'):
+                registry._tasks = {}
+            
+            tasks = []
+            for i, task_id in enumerate(task_ids):
+                task_status = await coordinator.get_task_status(task_id)
+                task_envelope = {
+                    "task_id": task_id,
+                    "initiator_id": "ui-user",
+                    "goal": goals[i],
+                    "state": "running",
+                    "created_at": task_status["created_at"],
+                    "history": [{
+                        "event": "created",
+                        "timestamp": task_status["created_at"],
+                        "detail": "Batch task submitted via async coordinator"
+                    }]
+                }
+                registry._tasks[task_id] = task_envelope
+                tasks.append(task_envelope)
+            
+            print(f"[A2A] Submitted {len(task_ids)} tasks for parallel execution")
+            
+            return jsonify({
+                "tasks": tasks,
+                "task_ids": task_ids,
+                "status": "started",
+                "message": f"{len(task_ids)} tasks submitted for parallel execution"
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e), "status": "error"})
+    
+    @webapp.route("/a2a_task_status", methods=["POST"])
+    @requires_auth
+    async def a2a_task_status():
+        """Get updated status for a task."""
+        try:
+            from python.helpers.async_task_coordinator import get_coordinator
+            
+            data = request.get_json() if request.is_json else {}
+            task_id = data.get("task_id", "")
+            if not task_id:
+                return jsonify({"error": "Task ID required", "status": "error"})
+            
+            # Get status from coordinator
+            coordinator = get_coordinator()
+            task_status = await coordinator.get_task_status(task_id)
+            
+            if not task_status:
+                # Fallback to registry
+                registry = get_a2a_registry()
+                if hasattr(registry, '_tasks') and task_id in registry._tasks:
+                    task = registry._tasks[task_id]
+                    return jsonify({"task": task, "status": "success"})
+                else:
+                    return jsonify({"error": "Task not found", "status": "error"})
+            
+            # Convert coordinator status to legacy format
+            task_envelope = {
+                "task_id": task_id,
+                "goal": task_status.get("goal", ""),
+                "state": task_status["status"],
+                "created_at": task_status["created_at"],
+                "started_at": task_status.get("started_at"),
+                "completed_at": task_status.get("completed_at"),
+                "result": task_status.get("result"),
+                "error": task_status.get("error"),
+                "progress": task_status.get("progress", []),
+                "history": [
+                    {
+                        "event": "created",
+                        "timestamp": task_status["created_at"],
+                        "detail": "Task created"
+                    }
+                ]
+            }
+            
+            # Add progress events to history
+            for prog in task_status.get("progress", []):
+                task_envelope["history"].append({
+                    "event": "progress",
+                    "timestamp": prog["timestamp"],
+                    "detail": prog["message"]
+                })
+            
+            # Update registry
+            registry = get_a2a_registry()
+            if hasattr(registry, '_tasks'):
+                registry._tasks[task_id] = task_envelope
+            
+            return jsonify({"task": task_envelope, "status": "success"})
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e), "status": "error"})
+    
+    @webapp.route("/a2a_registry_list", methods=["GET", "POST"])
+    @requires_auth
+    async def a2a_registry_list():
+        """Get all registered agents"""
+        try:
+            registry = get_a2a_registry()
+            
+            # Light cleanup
+            registry.prune_stale(ttl=300.0)
+            
+            all_agents = registry.list_agents()
+            
+            # Convert to UI format
+            agents_dict = {}
+            for agent in all_agents:
+                agent_card = agent.signed_card.get("agent_card", {})
+                agents_dict[agent.agent_id] = {
+                    "card": agent_card,
+                    "lastSeen": datetime.fromtimestamp(agent.last_heartbeat).isoformat(),
+                    "score": agent.score_cache
+                }
+            
+            # Always include local agent
+            if "agent-zero-local" not in agents_dict:
+                agents_dict["agent-zero-local"] = {
+                    "card": {
+                        "agent_id": "agent-zero-local",
+                        "role_description": "Agent Zero - Local AI Assistant",
+                        "trust_level": "local",
+                        "version": "1.0",
+                        "tools": ["code_execution", "web_search", "file_management", "data_analysis"]
+                    },
+                    "lastSeen": datetime.now().isoformat(),
+                    "score": {}
+                }
+            
+            return jsonify({
+                "agents": agents_dict,
+                "count": len(agents_dict),
+                "status": "success"
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e), "status": "error"})
+    
+    @webapp.route("/a2a_registry_clear", methods=["POST"])
+    @requires_auth
+    async def a2a_registry_clear():
+        """Clear all agents from the registry"""
+        try:
+            registry = get_a2a_registry()
+            
+            # Clear all agents
+            if hasattr(registry, '_agents'):
+                count = len(registry._agents)
+                registry._agents.clear()
+                print(f"[A2A] Cleared {count} agents from registry")
+            
+            # Clear all tasks
+            if hasattr(registry, '_tasks'):
+                task_count = len(registry._tasks)
+                registry._tasks.clear()
+                print(f"[A2A] Cleared {task_count} tasks from registry")
+            
+            return jsonify({
+                "status": "success",
+                "message": "Registry cleared successfully",
+                "agents_cleared": count if 'count' in locals() else 0,
+                "tasks_cleared": task_count if 'task_count' in locals() else 0
+            })
+            
+        except Exception as e:
+            return jsonify({"error": str(e), "status": "error"})
+
+    @webapp.route("/a2a_registry_debug", methods=["GET"])
+    @requires_auth
+    async def a2a_registry_debug():
+        """Debug endpoint to see registry state"""
+        try:
+            registry = get_a2a_registry()
+            debug_info = {
+                "registry_id": id(registry),
+                "agent_count": len(registry.list_agents()),
+                "agents": []
+            }
+            
+            for agent in registry.list_agents():
+                debug_info["agents"].append({
+                    "agent_id": agent.agent_id,
+                    "last_heartbeat": agent.last_heartbeat,
+                    "age_seconds": time.time() - agent.last_heartbeat
+                })
+            
+            return jsonify(debug_info)
+            
+        except Exception as e:
+            return jsonify({"error": str(e), "status": "error"})
+
+    print("[A2A] API endpoints registered successfully")
+
+except Exception as e:
+    print(f"[A2A] Failed to register API endpoints: {e}")
+    # Continue without A2A endpoints if there's an error
+
 
 def run():
     PrintStyle().print("Initializing framework...")
@@ -216,7 +573,7 @@ def run():
 
     # add the webapp, mcp, and a2a to the app
     middleware_routes = {
-        "/mcp": ASGIMiddleware(app=mcp_server.DynamicMcpProxy.get_instance()),  # type: ignore
+        # "/mcp": ASGIMiddleware(app=mcp_server.DynamicMcpProxy.get_instance()),  # type: ignore - temporarily disabled due to FastMCP API compatibility
         "/a2a": ASGIMiddleware(app=fasta2a_server.DynamicA2AProxy.get_instance()),  # type: ignore
     }
 
@@ -248,7 +605,7 @@ def init_a0():
     # only wait for init chats, otherwise they would seem to disappear for a while on restart
     init_chats.result_sync()
 
-    initialize.initialize_mcp()
+    # initialize.initialize_mcp()  # temporarily disabled due to FastMCP API compatibility
     # start job loop
     initialize.initialize_job_loop()
     # preload

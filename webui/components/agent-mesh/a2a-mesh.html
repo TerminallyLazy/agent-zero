@@ -1,0 +1,825 @@
+<div x-data="$store.agentMeshStore" x-init="init()" class="agent-mesh-container">
+  <!-- Header -->
+  <div class="mesh-header">
+    <div class="header-content">
+      <div class="title-section">
+        <h1 class="mesh-title">Agent Mesh</h1>
+        <p class="mesh-subtitle">Monitor and manage agent-to-agent communication, task delegation, and mesh topology</p>
+      </div>
+      <div class="header-actions">
+        <div class="agent-count">
+          <div class="status-dot"></div>
+          <span x-text="Object.keys(agents).length || 0"></span> agents active
+        </div>
+        <button @click="updateAgents()" class="refresh-btn">
+          <i class="fas fa-sync-alt"></i>
+          Refresh
+        </button>
+        <button @click="clearRegistry()" class="clear-btn" style="margin-left: 8px;">
+          <i class="fas fa-trash"></i>
+          Clear Registry
+        </button>
+        <button @click="console.log('[Debug] Agents:', agents); console.log('[Debug] Tasks:', tasks); console.log('[Debug] Loading:', loading);" class="refresh-btn" style="margin-left: 8px; background: #6b7280;">
+          <i class="fas fa-bug"></i>
+          Debug
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="mesh-content">
+    <!-- Active Agents Panel -->
+    <div class="agents-panel">
+      <div class="panel-header">
+        <h3>Active Agents</h3>
+      </div>
+      <div class="panel-body">
+        <template x-if="loading">
+          <div class="empty-state">
+            <i class="fas fa-spinner fa-spin empty-icon"></i>
+            <p>Loading agents...</p>
+          </div>
+        </template>
+        
+        <template x-if="!loading && Object.keys(agents).length === 0">
+          <div class="empty-state">
+            <i class="fas fa-desktop empty-icon"></i>
+            <p>No agents connected</p>
+            <button @click="updateAgents()" class="refresh-btn" style="margin-top: 1rem;">
+              <i class="fas fa-sync-alt"></i>
+              Refresh Agents
+            </button>
+          </div>
+        </template>
+
+        <div class="agents-list">
+          <template x-for="agent in Object.values(agents)" :key="agent.card.agent_id">
+            <div class="agent-card">
+              <div class="agent-header">
+                <div class="agent-status online"></div>
+                <h4 class="agent-name" x-text="agent.card.agent_id"></h4>
+              </div>
+              <p class="agent-description" x-text="agent.card.role_description"></p>
+              
+              <div class="agent-tools">
+                <div class="tools-label">Tools:</div>
+                <div class="tools-list">
+                  <template x-for="tool in agent.card.tools.slice(0, 3)" :key="tool">
+                    <span class="tool-tag" x-text="tool"></span>
+                  </template>
+                  <template x-if="agent.card.tools.length > 3">
+                    <span class="tool-tag more" x-text="`+${agent.card.tools.length - 3} more`"></span>
+                  </template>
+                </div>
+              </div>
+              
+              <div class="agent-meta">
+                <span>Trust: <strong x-text="agent.card.trust_level"></strong></span>
+                <span>v<span x-text="agent.card.version"></span></span>
+                <span class="last-seen" x-text="formatTimestamp(agent.lastSeen)"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Management Panel -->
+    <div class="tasks-panel">
+      <div class="panel-header">
+        <h3>Task Negotiation</h3>
+      </div>
+      <div class="panel-body">
+        <!-- Task Creation -->
+        <div class="task-creation">
+          <label class="form-label">Create New Task</label>
+          <div class="input-group">
+            <input 
+              x-model="newGoal" 
+              type="text" 
+              placeholder="Describe what you need done..." 
+              class="task-input"
+              @keydown.enter="async () => {
+                if (!newGoal.trim()) return;
+                const result = await $store.agentMeshStore.executeTask(newGoal);
+                if (result) {
+                  selectedTask = result.task_id;
+                  newGoal = '';
+                }
+              }"
+            />
+            <button 
+              @click="async () => {
+                if (!newGoal.trim()) return;
+                const result = await $store.agentMeshStore.executeTask(newGoal);
+                if (result) {
+                  selectedTask = result.task_id;
+                  newGoal = '';
+                }
+              }"
+              class="propose-btn"
+            >
+              <i class="fas fa-plus"></i>
+              Propose Task
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Tasks -->
+        <div class="tasks-list">
+          <template x-if="Object.keys(tasks).length === 0">
+            <div class="empty-state">
+              <i class="fas fa-tasks empty-icon"></i>
+              <h4>No Active Tasks</h4>
+              <p>Create a task above to start delegating work to agents</p>
+            </div>
+          </template>
+
+          <template x-for="task in Object.values(tasks)" :key="task.task_id">
+            <div 
+              class="task-card"
+              :class="{ 'selected': selectedTask === task.task_id }"
+              @click="selectedTask = task.task_id"
+            >
+              <div class="task-header">
+                <div class="task-status">
+                  <span 
+                    class="status-badge"
+                    :class="task.state"
+                    x-text="task.state.toUpperCase()"
+                  ></span>
+                  <span class="task-id" x-text="task.task_id.substring(0, 8) + '...'"></span>
+                </div>
+                
+                <template x-if="selectedTask === task.task_id && ['proposed', 'clarifying'].includes(task.state)">
+                  <div class="task-actions">
+                    <button 
+                      @click.stop="updateTaskState(task.task_id, { state: 'clarifying' }); task.history.push({ event: 'clarification_requested', detail: 'Need more information', timestamp: new Date().toISOString() });"
+                      class="action-btn clarify"
+                    >
+                      <i class="fas fa-question-circle"></i>
+                      Clarify
+                    </button>
+                    <button 
+                      @click.stop="updateTaskState(task.task_id, { state: 'accepted' }); task.history.push({ event: 'accepted', timestamp: new Date().toISOString() });"
+                      class="action-btn accept"
+                    >
+                      <i class="fas fa-check"></i>
+                      Accept
+                    </button>
+                    <button 
+                      @click.stop="updateTaskState(task.task_id, { state: 'rejected' }); task.history.push({ event: 'rejected', reason: 'Not appropriate for this agent', timestamp: new Date().toISOString() });"
+                      class="action-btn reject"
+                    >
+                      <i class="fas fa-times"></i>
+                      Reject
+                    </button>
+                  </div>
+                </template>
+                
+                <template x-if="selectedTask === task.task_id && task.state === 'running'">
+                  <div class="task-actions">
+                    <button 
+                      @click.stop="updateTaskState(task.task_id, { state: 'cancelled' }); task.history.push({ event: 'cancelled', reason: 'Cancelled by user', timestamp: new Date().toISOString() });"
+                      class="action-btn cancel"
+                    >
+                      <i class="fas fa-stop"></i>
+                      Cancel
+                    </button>
+                  </div>
+                </template>
+              </div>
+              
+              <h4 class="task-goal" x-text="task.goal"></h4>
+              <p class="task-meta">From: <strong x-text="task.initiator"></strong> • <span x-text="formatTimestamp(task.created_at)"></span></p>
+              
+              <!-- Progress indicator for running tasks -->
+              <template x-if="task.state === 'running' && task.progress">
+                <div class="task-progress">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <span x-text="task.progress"></span>
+                </div>
+              </template>
+
+              <!-- Task History -->
+              <template x-if="selectedTask === task.task_id && task.history.length > 0">
+                <div class="task-history">
+                  <h5 class="history-title">
+                    <i class="fas fa-history"></i>
+                    Task History
+                  </h5>
+                  <div class="history-list">
+                    <template x-for="entry in task.history" :key="entry.timestamp">
+                      <div class="history-entry">
+                        <div class="history-dot" :class="entry.event"></div>
+                        <div class="history-content">
+                          <div class="history-header">
+                            <span class="event-name" x-text="entry.event.replace('_', ' ').toUpperCase()"></span>
+                            <span class="event-time" x-text="formatTimestamp(entry.timestamp)"></span>
+                          </div>
+                          <template x-if="entry.detail">
+                            <p class="event-detail" x-text="entry.detail"></p>
+                          </template>
+                          <template x-if="entry.reason">
+                            <p class="event-detail"><strong>Reason:</strong> <span x-text="entry.reason"></span></p>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Provenance Trace -->
+  <template x-if="selectedTask">
+    <div class="provenance-panel">
+      <div class="panel-header">
+        <h3>
+          <i class="fas fa-sitemap"></i>
+          Provenance Trace
+        </h3>
+      </div>
+      <div class="panel-body">
+        <div class="terminal">
+          <template x-if="provenance[selectedTask]">
+            <pre class="trace-output" x-text="(() => {
+              const buildTrace = (taskId, depth = 0) => {
+                const node = provenance[taskId];
+                if (!node) return '  '.repeat(depth) + `┗━ Task ${taskId} (unknown)\n`;
+                
+                const indent = '  '.repeat(depth);
+                const connector = depth === 0 ? '┏━' : '┣━';
+                let trace = `${indent}${connector} Task: ${taskId.substring(0, 8)}...\n`;
+                trace += `${indent}   State: ${node.task.state}\n`;
+                trace += `${indent}   Goal: ${node.task.goal}\n`;
+                trace += `${indent}   Delegated: ${node.children ? node.children.length : 0} subtasks\n`;
+                
+                if (node.children && node.children.length > 0) {
+                  node.children.forEach((childId, index) => {
+                    trace += buildTrace(childId, depth + 1);
+                  });
+                }
+                
+                return trace;
+              };
+              
+              return buildTrace(selectedTask) || 'No provenance data available';
+            })()"></pre>
+          </template>
+          <template x-if="!provenance[selectedTask]">
+            <div class="empty-trace">
+              <i class="fas fa-sitemap empty-icon"></i>
+              <h4>No Provenance Trace Available</h4>
+              <p>Provenance is recorded when tasks are delegated to other agents</p>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<style>
+.agent-mesh-container {
+  background: var(--color-background);
+  color: var(--color-text);
+  padding: var(--spacing-lg);
+  font-family: 'Rubik', sans-serif;
+  min-height: 100vh;
+}
+
+.mesh-header {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-lg);
+}
+
+.mesh-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.mesh-subtitle {
+  color: var(--color-secondary);
+  margin: var(--spacing-xs) 0 0 0;
+  font-size: 0.9rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.agent-count {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-secondary);
+  font-size: 0.9rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.refresh-btn {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-weight: 600;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.refresh-btn:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.refresh-btn:hover i {
+  transform: rotate(180deg);
+  transition: transform 0.3s;
+}
+
+.mesh-content {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.agents-panel, .tasks-panel, .provenance-panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.panel-header {
+  background: var(--color-input);
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.panel-body {
+  padding: var(--spacing-md);
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--color-secondary);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  opacity: 0.5;
+  margin-bottom: var(--spacing-md);
+}
+
+.empty-state h4 {
+  margin: var(--spacing-sm) 0;
+  color: var(--color-text);
+}
+
+.agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.agent-card {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  transition: all 0.2s;
+}
+
+.agent-card:hover {
+  background: var(--color-input);
+  border-color: var(--color-primary);
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.agent-status {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.agent-status.online {
+  background: #10b981;
+}
+
+.agent-name {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.agent-description {
+  margin: var(--spacing-xs) 0;
+  color: var(--color-secondary);
+  font-size: 0.85rem;
+}
+
+.agent-tools {
+  margin: var(--spacing-sm) 0;
+}
+
+.tools-label {
+  font-size: 0.75rem;
+  color: var(--color-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.tools-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.tool-tag {
+  background: #3b82f6;
+  color: white;
+  padding: 2px var(--spacing-xs);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.tool-tag.more {
+  background: var(--color-secondary);
+}
+
+.agent-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--color-secondary);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.task-creation {
+  background: var(--color-input);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid var(--color-border);
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+}
+
+.input-group {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.task-input {
+  flex: 1;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.task-input:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  background: var(--color-input-focus);
+}
+
+.propose-btn {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-weight: 600;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.propose-btn:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.task-card {
+  background: var(--color-background);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.task-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-input);
+}
+
+.task-card.selected {
+  border-color: #8b5cf6;
+  background: var(--color-input);
+  box-shadow: 0 0 0 1px #8b5cf6;
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.task-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.status-badge {
+  padding: 4px var(--spacing-sm);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+}
+
+.status-badge.proposed { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.status-badge.clarifying { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.status-badge.accepted { background: linear-gradient(135deg, #10b981, #059669); }
+.status-badge.rejected { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.status-badge.running { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.status-badge.completed, .status-badge.failed { background: linear-gradient(135deg, #6b7280, #4b5563); }
+
+.task-id {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--color-secondary);
+  background: var(--color-input);
+  padding: 2px var(--spacing-xs);
+  border-radius: 4px;
+}
+
+.task-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.action-btn {
+  border: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  transform: scale(1.05);
+}
+
+.action-btn.clarify {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #92400e;
+}
+
+.action-btn.accept {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  color: #065f46;
+}
+
+.action-btn.reject {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  color: #991b1b;
+}
+
+.action-btn.cancel {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #92400e;
+}
+
+.task-goal {
+  margin: var(--spacing-sm) 0;
+  font-weight: 600;
+}
+
+.task-meta {
+  color: var(--color-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-input);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-border);
+}
+
+.task-progress i {
+  color: #8b5cf6;
+}
+
+.task-history {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.history-entry {
+  display: flex;
+  gap: var(--spacing-sm);
+  background: var(--color-panel);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-border);
+}
+
+.history-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.history-dot.proposed { background: #3b82f6; }
+.history-dot.clarification_requested { background: #f59e0b; }
+.history-dot.accepted { background: #10b981; }
+.history-dot.rejected { background: #ef4444; }
+.history-dot.progress { background: #8b5cf6; }
+.history-dot.completed { background: #6b7280; }
+
+.history-content {
+  flex: 1;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.event-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.event-time {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--color-secondary);
+  background: var(--color-input);
+  padding: 2px var(--spacing-xs);
+  border-radius: 4px;
+}
+
+.event-detail {
+  background: var(--color-input);
+  padding: var(--spacing-xs);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin: var(--spacing-xs) 0 0 0;
+}
+
+.provenance-panel {
+  grid-column: 1 / -1;
+}
+
+.terminal {
+  background: #1a1a1a;
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  border: 2px solid #333;
+}
+
+.trace-output {
+  color: #10b981;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.empty-trace {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: #6b7280;
+}
+
+.empty-trace h4 {
+  color: #9ca3af;
+  margin: var(--spacing-sm) 0;
+}
+
+@media (max-width: 1024px) {
+  .mesh-content {
+    grid-template-columns: 1fr;
+  }
+  
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .input-group {
+    flex-direction: column;
+  }
+}
+</style>

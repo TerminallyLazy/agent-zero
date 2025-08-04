@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Coroutine, Dict
 from enum import Enum
 import uuid
+import time
 import models
 
 from python.helpers import extract_tools, files, errors, history, tokens
@@ -71,6 +72,14 @@ class AgentContext:
         if existing:
             AgentContext.remove(self.id)
         self._contexts[self.id] = self
+        
+        # Register with A2A mesh if not a background context
+        if self.type != AgentContextType.BACKGROUND:
+            try:
+                from python.helpers.a2a_agent_registration import register_agent_context
+                register_agent_context(self)
+            except Exception as e:
+                print(f"[A2A] Failed to register context {self.id}: {e}")
 
     @staticmethod
     def get(id: str):
@@ -98,6 +107,15 @@ class AgentContext:
         context = AgentContext._contexts.pop(id, None)
         if context and context.task:
             context.task.kill()
+            
+        # Clean up agent registration when context is removed
+        if context:
+            try:
+                from python.helpers.a2a_agent_registration import unregister_agent_context
+                unregister_agent_context(context)
+            except Exception as e:
+                print(f"[A2A] Failed to unregister agent on context removal: {e}")
+                
         return context
 
     def serialize(self):
@@ -304,6 +322,26 @@ class Agent:
         self.intervention: UserMessage | None = None
         self.data = {}  # free data object all the tools can use
 
+        # Auto-register with A2A mesh for agent communication
+        try:
+            # Only register main agents to avoid cluttering the mesh with temporary subordinates
+            if self.number == 0:  # Only main agents
+                from python.helpers.registry_broker import AgentRegistry
+                from python.helpers.agent_card import minimal_agent_card_from_context
+                
+                registry = AgentRegistry()
+                agent_card = minimal_agent_card_from_context(self.context)
+                agent_id = f"agent-{self.agent_name}-{self.context.id}"
+                
+                # Just register - let the registry handle everything
+                registry.register(agent_id, {"agent_card": agent_card.to_dict()})
+                self.registry_agent_id = agent_id
+                
+                print(f"[A2A] Registered agent: {agent_id}")
+            
+        except Exception as e:
+            print(f"[A2A] Registration failed: {e}")
+            # Don't let registration failures break the agent
 
         asyncio.run(self.call_extensions("agent_init"))
 
@@ -313,6 +351,15 @@ class Agent:
     async def monologue(self):
         while True:
             try:
+                # Send heartbeat to registry to show agent is active
+                if hasattr(self, 'registry_agent_id') and self.number == 0:
+                    try:
+                        from python.helpers.registry_broker import AgentRegistry
+                        registry = AgentRegistry()
+                        registry.heartbeat(self.registry_agent_id)
+                    except Exception:
+                        pass  # Don't let heartbeat errors break the agent
+                
                 # loop data dictionary to pass to extensions
                 self.loop_data = LoopData(user_message=self.last_user_message)
                 # call monologue_start extensions

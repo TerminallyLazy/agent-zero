@@ -19,8 +19,8 @@
     <link rel="stylesheet" href="css/tunnel.css">
     <link rel="stylesheet" href="css/notification.css">
 
-    <!-- Font Awesome for icons -->
-    <link rel="stylesheet" href="vendor/font-awesome/all.min.css">
+    <!-- Font Awesome for icons (CDN) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
     <!-- Flatpickr for datetime picker -->
     <link rel="stylesheet" href="vendor/flatpickr/flatpickr.min.css">
@@ -132,6 +132,7 @@
     <script type="text/javascript" src="js/file_browser.js"></script>
     <script type="text/javascript" src="js/modal.js"></script>
     <script type="module" src="js/tunnel.js"></script>
+    <script type="module" src="components/agent-mesh/a2a-mesh-store.js"></script>
 </head>
 
 <body class="dark-mode device-pointer">
@@ -589,6 +590,13 @@
                                             <span>Flare Tunnel</span>
                                         </a>
                                     </li>
+                                    <!-- Agent Mesh navigation entry - only visible in the External Services tab -->
+                                    <li x-show="activeTab === 'external'">
+                                        <a href="#section-agent-mesh">
+                                            <img src="/public/agentmesh.png" alt="Agent Mesh">
+                                            <span>Agent Mesh</span>
+                                        </a>
+                                    </li>
                                 </ul>
                             </nav>
 
@@ -750,6 +758,14 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                            
+                            <!-- Agent Mesh section content - only visible in External Services tab -->
+                            <div id="section-agent-mesh" class="section" x-show="activeTab === 'external'">
+                                <div class="section-title">Agent Mesh</div>
+                                <div class="section-description">Monitor and manage agent-to-agent communication, task delegation, and mesh topology.</div>
+                                <!-- Agent Mesh content UI -->
+                                <x-component path="agent-mesh/a2a-mesh.html"></x-component>
                             </div>
                         </div>
 
