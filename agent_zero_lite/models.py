@@ -130,7 +130,11 @@ async def _stream_chat_completion(
 class LiteLLMChatModel(SimpleChatModel):
     """LangChain compatible chat model using LiteLLM."""
     
-    llm_config: ModelConfig
+    # Define Pydantic model_config
+    model_config = {"arbitrary_types_allowed": True}
+    
+    # Our custom config attribute with a different name to avoid conflicts
+    llm_config: ModelConfig = None
     
     def __init__(self, model_config: ModelConfig):
         super().__init__()
