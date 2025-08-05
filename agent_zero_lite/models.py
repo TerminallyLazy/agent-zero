@@ -130,11 +130,11 @@ async def _stream_chat_completion(
 class LiteLLMChatModel(SimpleChatModel):
     """LangChain compatible chat model using LiteLLM."""
     
-    model_config: ModelConfig
+    llm_config: ModelConfig
     
     def __init__(self, model_config: ModelConfig):
         super().__init__()
-        self.model_config = model_config
+        self.llm_config = model_config
     
     async def _agenerate(
         self,
@@ -154,23 +154,23 @@ class LiteLLMChatModel(SimpleChatModel):
             else:
                 formatted_messages.append({"role": "assistant", "content": message.content})
         
-        model_kwargs = self.model_config.build_kwargs()
+        model_kwargs = self.llm_config.build_kwargs()
         if stop:
             model_kwargs["stop"] = stop
         
-        api_key = get_api_key(self.model_config.provider)
+        api_key = get_api_key(self.llm_config.provider)
         if api_key != "None":
             model_kwargs["api_key"] = api_key
         
         response = await acompletion(
-            model=f"{self.model_config.provider}/{self.model_config.name}",
+            model=f"{self.llm_config.provider}/{self.llm_config.name}",
             messages=formatted_messages,
             **model_kwargs
         )
         
         return ChatGenerationChunk(
             message=AIMessageChunk(content=response.choices[0].message.content or ""),
-            generation_info={"model_name": f"{self.model_config.provider}/{self.model_config.name}"}
+            generation_info={"model_name": f"{self.llm_config.provider}/{self.llm_config.name}"}
         )
     
     @property
