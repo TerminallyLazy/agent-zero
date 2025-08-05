@@ -140,6 +140,18 @@ Check out the `examples` directory for more usage examples:
 
 Agent Zero Lite can be configured using environment variables:
 
+## Testing
+
+For testing purposes, you can use mock API keys:
+
+```bash
+# In .env file
+OPENAI_API_KEY=sk-mock-key-for-testing
+ANTHROPIC_API_KEY=sk-ant-mock-key-for-testing
+```
+
+When using mock API keys (starting with `sk-mock`), the agent will return predefined responses instead of making actual API calls. This is useful for testing the agent without consuming API credits.
+
 - `OPENAI_API_KEY`: OpenAI API key
 - `ANTHROPIC_API_KEY`: Anthropic API key
 - `API_KEY_<PROVIDER>`: API key for other providers
