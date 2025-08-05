@@ -19,21 +19,29 @@ def create_default_config() -> AgentConfig:
     if not openai_api_key:
         print("Warning: OPENAI_API_KEY not found in environment variables.")
     
+    # Get model provider and name from environment variables
+    chat_provider = get_dotenv_value("CHAT_MODEL_PROVIDER") or "openai"
+    chat_name = get_dotenv_value("CHAT_MODEL_NAME") or "gpt-4o"
+    utility_provider = get_dotenv_value("UTILITY_MODEL_PROVIDER") or "openai"
+    utility_name = get_dotenv_value("UTILITY_MODEL_NAME") or "gpt-3.5-turbo"
+    
     # Create model configurations
     chat_model = ModelConfig(
         type=ModelType.CHAT,
-        provider="openai",
-        name="gpt-4o",
-        ctx_length=128000,
+        provider=chat_provider,
+        name=chat_name,
+        ctx_length=int(get_dotenv_value("CHAT_MODEL_CTX_LENGTH") or "128000"),
         limit_output=4000,
+        kwargs={"temperature": float(get_dotenv_value("CHAT_MODEL_TEMPERATURE") or "0.7")},
     )
     
     utility_model = ModelConfig(
         type=ModelType.UTILITY,
-        provider="openai",
-        name="gpt-3.5-turbo",
-        ctx_length=16000,
+        provider=utility_provider,
+        name=utility_name,
+        ctx_length=int(get_dotenv_value("UTILITY_MODEL_CTX_LENGTH") or "16000"),
         limit_output=2000,
+        kwargs={"temperature": float(get_dotenv_value("UTILITY_MODEL_TEMPERATURE") or "0.2")},
     )
     
     # Create agent configuration
