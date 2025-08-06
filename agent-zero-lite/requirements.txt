@@ -1,0 +1,55 @@
+# Core LLM & Framework - FULL LiteLLM support
+litellm>=1.74
+langchain-core>=0.3.49
+langchain-community>=0.3.19
+
+# Vector Database & Embeddings for Memory/Knowledge
+faiss-cpu>=1.11.0
+sentence-transformers>=3.0.1
+
+# Document Processing & RAG
+unstructured>=0.16.23
+unstructured-client>=0.31.0
+pypdf>=4.3.1
+lxml_html_clean>=0.3.1
+markdown>=3.7
+markdownify>=1.1.0
+pymupdf>=1.25.3
+pytesseract>=0.3.13
+pdf2image>=1.17.0
+
+# Web UI & API
+flask[async]>=3.0.3
+flask-basicauth>=0.2.0
+a2wsgi>=1.10.8
+
+# Core Utilities
+python-dotenv>=1.1.0
+tiktoken>=0.8.0
+nest-asyncio>=1.6.0
+paramiko>=3.5.0
+simpleeval>=1.0.3
+inputimeout>=1.0.4
+pytz>=2024.2
+pathspec>=0.12.1
+psutil>=7.0.0
+webcolors>=24.6.0
+
+# MCP Support (Optional but included)
+mcp>=1.9.0
+fastmcp>=2.3.4
+
+# Git Integration
+GitPython>=3.1.43
+
+# Audio processing
+openai-whisper>=20240930
+
+# Additional utilities
+webcolors
+pytz
+
+# Dependencies for various features
+ansio>=0.0.1
+fasta2a>=0.5.0
+flaredantic>=0.1.4

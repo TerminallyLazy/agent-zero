@@ -1,0 +1,94 @@
+# Model Providers Configuration for Agent Zero Lite
+# This file defines the available AI model providers for different types of models
+
+chat:
+  openai:
+    name: "OpenAI"
+    description: "OpenAI GPT models"
+    api_base: "https://api.openai.com/v1"
+    
+  anthropic:
+    name: "Anthropic"
+    description: "Claude models by Anthropic"
+    api_base: "https://api.anthropic.com"
+    
+  openrouter:
+    name: "OpenRouter"
+    description: "OpenRouter unified API"
+    api_base: "https://openrouter.ai/api/v1"
+    
+  google:
+    name: "Google"
+    description: "Google Gemini models"
+    api_base: "https://generativelanguage.googleapis.com/v1beta"
+    
+  groq:
+    name: "Groq"
+    description: "Groq fast inference"
+    api_base: "https://api.groq.com/openai/v1"
+    
+  mistral:
+    name: "Mistral AI"
+    description: "Mistral AI models"
+    api_base: "https://api.mistral.ai/v1"
+    
+  cohere:
+    name: "Cohere"
+    description: "Cohere language models"
+    api_base: "https://api.cohere.ai/v1"
+    
+  together:
+    name: "Together AI"
+    description: "Together AI models"
+    api_base: "https://api.together.xyz/v1"
+    
+  perplexity:
+    name: "Perplexity"
+    description: "Perplexity AI models"
+    api_base: "https://api.perplexity.ai"
+    
+  deepseek:
+    name: "DeepSeek"
+    description: "DeepSeek models"
+    api_base: "https://api.deepseek.com/beta"
+    
+  replicate:
+    name: "Replicate"
+    description: "Replicate model hosting"
+    api_base: "https://api.replicate.com/v1"
+    
+  huggingface:
+    name: "Hugging Face"
+    description: "Hugging Face Inference API"
+    api_base: "https://api-inference.huggingface.co/models"
+
+embedding:
+  openai:
+    name: "OpenAI"
+    description: "OpenAI embedding models"
+    api_base: "https://api.openai.com/v1"
+    
+  huggingface:
+    name: "Hugging Face"
+    description: "Hugging Face embedding models"
+    api_base: "https://api-inference.huggingface.co/models"
+    
+  cohere:
+    name: "Cohere"
+    description: "Cohere embedding models"
+    api_base: "https://api.cohere.ai/v1"
+    
+  mistral:
+    name: "Mistral AI"
+    description: "Mistral embedding models"
+    api_base: "https://api.mistral.ai/v1"
+    
+  voyageai:
+    name: "Voyage AI"
+    description: "Voyage AI embedding models"
+    api_base: "https://api.voyageai.com/v1"
+    
+  together:
+    name: "Together AI"
+    description: "Together AI embedding models"
+    api_base: "https://api.together.xyz/v1"

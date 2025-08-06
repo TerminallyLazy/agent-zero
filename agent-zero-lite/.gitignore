@@ -7,8 +7,6 @@
 #Ignore cursor rules
 .cursor/
 
-venv/
-.venv/
 # ignore test files in root dir
 /*.test.py
 

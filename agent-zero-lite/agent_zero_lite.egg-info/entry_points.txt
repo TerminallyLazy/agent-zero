@@ -1,0 +1,3 @@
+[console_scripts]
+agent-zero-lite = agent_zero_lite.cli:main
+azl = agent_zero_lite.cli:main

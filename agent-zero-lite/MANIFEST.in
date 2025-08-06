@@ -1,0 +1,33 @@
+# Include package data files
+include README.md
+include LICENSE
+include requirements.txt
+include .env.example
+
+# Include all files in package directories
+recursive-include agent_zero_lite/webui *
+recursive-include agent_zero_lite/prompts *
+recursive-include agent_zero_lite/knowledge *
+recursive-include agent_zero_lite/python *
+recursive-include agent_zero_lite/conf *
+include agent_zero_lite/.env.example
+include agent_zero_lite/initialize.py
+include agent_zero_lite/models.py
+include agent_zero_lite/agent.py
+
+# Exclude compiled Python files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *~
+global-exclude *.swp
+global-exclude .DS_Store
+
+# Exclude development files
+exclude .gitignore
+exclude .env
+exclude *.log
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude agent_zero_lite/logs *
+recursive-exclude agent_zero_lite/memory *
+recursive-exclude agent_zero_lite/work_dir *
