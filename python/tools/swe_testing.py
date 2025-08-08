@@ -1,5 +1,6 @@
 from python.helpers.tool import Tool, Response
 from python.tools.code_execution_tool import CodeExecution
+import re
 
 class SweTesting(Tool):
     async def execute(self, **kwargs) -> Response:
@@ -7,6 +8,8 @@ class SweTesting(Tool):
         coverage_command = self.args.get("coverage_command", "")
         install_deps = str(self.args.get("install_deps", "false")).lower().strip() == "true"
         install_command = self.args.get("install_command", "")
+        parse_summary = str(self.args.get("parse_summary", "true")).lower().strip() == "true"
+        failures_top_n = int(self.args.get("failures_top_n", 5))
 
         steps = []
         cmds = []
@@ -31,4 +34,37 @@ class SweTesting(Tool):
         cet = CodeExecution(self.agent, "code_execution_tool", "", args, self.message)
         cet.log = self.get_log_object()
         resp = await cet.execute(**args)
-        return Response(message=resp.message, break_loop=False)
+
+        if not parse_summary:
+            return Response(message=resp.message, break_loop=False)
+
+        lines = resp.message.splitlines()
+        summary = []
+        pytest_summary = []
+        coverage_summary = []
+        failure_lines = []
+
+        for ln in lines:
+            s = ln.strip()
+            if (" failed" in s or " passed" in s or " error" in s) and ("pytest" in "pytest" or "collected" in s or s.endswith("in")):
+                if re.search(r"(failed|passed|errors|xfailed|skipped)", s, re.IGNORECASE):
+                    pytest_summary.append(s)
+            if re.search(r"TOTAL.+\d+%|\bCoverage\b.+\d+%", s):
+                coverage_summary.append(s)
+            if re.search(r":\d+:\s*(AssertionError|E\s+|FAILED|ERROR)", s):
+                failure_lines.append(s)
+            elif re.search(r"^\s*E\s", s):
+                failure_lines.append(s)
+
+        summary.append("Test execution summary:")
+        if pytest_summary:
+            summary.append("Pytest summary:")
+            summary.extend(pytest_summary[:3])
+        if coverage_summary:
+            summary.append("Coverage summary:")
+            summary.extend(coverage_summary[:3])
+        if failure_lines:
+            summary.append(f"Top {min(failures_top_n, len(failure_lines))} failure lines:")
+            summary.extend(failure_lines[:failures_top_n])
+
+        return Response(message="\n".join(summary) if summary else resp.message, break_loop=False)
