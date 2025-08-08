@@ -7,6 +7,8 @@
     <title>Agent Zero</title>
     <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
     <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="css/messages.css">
+    <link rel="stylesheet" href="components/messages/action-buttons/simple-action-buttons.css">
     <link rel="stylesheet" href="css/toast.css">
     <link rel="stylesheet" href="css/settings.css">
     <link rel="stylesheet" href="css/file_browser.css">
@@ -16,16 +18,14 @@
     <link rel="stylesheet" href="css/history.css">
     <link rel="stylesheet" href="css/scheduler-datepicker.css">
     <link rel="stylesheet" href="css/tunnel.css">
-
-    <!-- Font Awesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="css/notification.css">
 
     <!-- Flatpickr for datetime picker -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <link rel="stylesheet" href="vendor/flatpickr/flatpickr.min.css">
+    <script src="vendor/flatpickr/flatpickr.min.js"></script>
 
     <script>
-        window.safeCall = function (name, ...args) {
+        globalThis.safeCall = function (name, ...args) {
             if (window[name]) window[name](...args)
         }
     </script>
@@ -33,7 +33,7 @@
     <!-- Pre-initialize schedulerSettings to ensure Alpine doesn't miss it -->
     <script>
         // Pre-define schedulerSettings skeleton to ensure it's available to Alpine
-        window.schedulerSettings = function() {
+        globalThis.schedulerSettings = function() {
             return {
                 tasks: [],
                 isLoading: true,
@@ -99,33 +99,40 @@
 
     <!-- Load module scripts first -->
     <script type="module" src="js/scheduler.js"></script>
-    <script type="module" src="js/speech.js"></script>
     <script type="module" src="js/history.js"></script>
+
     <script type="module" src="index.js"></script>
 
     <!-- Then load Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.3/dist/cdn.min.js"></script>
+    <script defer src="vendor/alpine/alpine.collapse.min.js"></script>
     <!-- <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script> -->
     <script type="module" src="js/initFw.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.36.5/src-noconflict/ace.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/ace-builds@1.36.5/css/ace.min.css" rel="stylesheet">
+    <script src="vendor/ace-min/ace.js"></script>
+    <link href="vendor/ace-min/ace.min.css" rel="stylesheet">
     <!-- KaTeX CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="vendor/katex/katex.min.css" crossorigin="anonymous">
 
     <!-- KaTeX javascript -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js" crossorigin="anonymous"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"
+    <script defer src="vendor/katex/katex.min.js" crossorigin="anonymous"></script>
+    <script defer src="vendor/katex/katex.auto-render.min.js"
         crossorigin="anonymous"></script>
+
+    <!-- QR Code Library -->
+    <script src="vendor/qrcode.min.js"></script>
+
+    <!-- Google Icons -->
+    <link rel="stylesheet" href="vendor/google/google-icons.css" />
+
 
     <!-- Non-module scripts after Alpine.js -->
     <script type="text/javascript" src="js/settings.js"></script>
     <script type="text/javascript" src="js/file_browser.js"></script>
     <script type="text/javascript" src="js/modal.js"></script>
-    <script type="text/javascript" src="js/tunnel.js"></script>
+    <script type="module" src="js/tunnel.js"></script>
 </head>
 
-<body class="dark-mode">
+<body class="dark-mode device-pointer">
     <div class="container">
         <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
         <div class="icons-section" id="hide-button" x-data="{ connected: true }">
@@ -142,7 +149,7 @@
             </button>
 
             <div id="logo-container">
-                <a href="https://github.com/frdel/agent-zero" target="_blank" rel="noopener noreferrer">
+                <a href="https://github.com/agent0ai/agent-zero" target="_blank" rel="noopener noreferrer">
                     <img src="./public/splash.jpg" alt="a0" width="22" height="22">
                 </a>
             </div>
@@ -205,7 +212,7 @@
                     tasks: [],
                     selected: '',
                     openTaskDetail(taskId) {
-                        window.openTaskDetail(taskId);
+                        globalThis.openTaskDetail(taskId);
                     }
                 }"
                     style="display: none;">
@@ -276,7 +283,7 @@
                                 <span>Autoscroll</span>
                                 <label class="switch">
                                     <input id="auto-scroll-switch" type="checkbox" x-model="autoScroll"
-                                        x-effect="window.safeCall('toggleAutoScroll',autoScroll)">
+                                        x-effect="globalThis.safeCall('toggleAutoScroll',autoScroll)">
                                     <span class="slider"></span>
                                 </label>
                             </li>
@@ -300,7 +307,7 @@
                                 <span>Show thoughts</span>
                                 <label class="switch">
                                     <input type="checkbox" x-model="showThoughts"
-                                        x-effect="window.safeCall('toggleThoughts',showThoughts)">
+                                        x-effect="globalThis.safeCall('toggleThoughts',showThoughts)">
                                     <span class="slider"></span>
                                 </label>
                             </li>
@@ -308,7 +315,7 @@
                                 <span>Show JSON</span>
                                 <label class="switch">
                                     <input type="checkbox" x-model="showJson"
-                                        x-effect="window.safeCall('toggleJson',showJson)">
+                                        x-effect="globalThis.safeCall('toggleJson',showJson)">
                                     <span class="slider"></span>
                                 </label>
                             </li>
@@ -316,7 +323,7 @@
                                 <span>Show utility messages</span>
                                 <label class="switch">
                                     <input type="checkbox" x-model="showUtils"
-                                        x-effect="window.safeCall('toggleUtils',showUtils)">
+                                        x-effect="globalThis.safeCall('toggleUtils',showUtils)">
                                     <span class="slider"></span>
                                 </label>
                             </li>
@@ -344,9 +351,17 @@
                             stroke-width="3" x-bind:opacity="connected ? 0 : 1" />
                     </svg>
                 </div>
+                <!-- Notification Toggle positioned next to time-date -->
+                <x-component path="notifications/notification-icons.html"></x-component>
             </div>
             <div id="chat-history">
             </div>
+
+            <!-- NEW: Toast Stack Component -->
+            <div style="position: relative; height: 0;">
+                <x-component path="notifications/notification-toast-stack.html"></x-component>
+            </div>
+
             <div id="toast" class="toast">
                 <div class="toast__content">
                     <div class="toast__title"></div>
@@ -356,75 +371,21 @@
                 <button class="toast__copy" style="display: none;">Copy</button>
                 <button class="toast__close">Close</button>
             </div>
-            <div id="progress-bar-box" x-data="{ isSpeaking: false }" x-init="
-            // Watch the speech synthesis status to update isSpeaking
-            setInterval(() => isSpeaking = window.speech.isSpeaking(), 100)
-        ">
+            <div id="progress-bar-box">
                 <h4 id="progress-bar-h">
                     <span id="progress-bar-i">|></span><span id="progress-bar"></span>
                 </h4>
-                <h4 id="progress-bar-stop-speech" x-show="isSpeaking">
-                    <span id="stop-speech" @click="window.speech.stop()" style="cursor: pointer">Stop Speech</span>
+                <h4 id="progress-bar-stop-speech" x-data x-cloak x-show="$store.speech.isSpeaking">
+                    <span id="stop-speech" @click="$store.speech.stop()" style="cursor: pointer">Stop Speech</span>
                 </h4>
             </div>
             <div id="input-section" x-data="{
-                paused: false,
-                attachments: [],
-                hasAttachments: false,
-
-                handleFileUpload(event) {
-                    const files = event.target.files;
-
-                    Array.from(files).forEach(file => {
-                        const ext = file.name.split('.').pop().toLowerCase();
-
-                            const isImage = ['jpg', 'jpeg', 'png', 'bmp'].includes(ext);
-
-                            if (isImage) {
-                                // Handle image preview
-                                const reader = new FileReader();
-                                reader.onload = e => {
-                                    this.attachments.push({
-                                        file: file,
-                                        url: e.target.result,
-                                        type: 'image',
-                                        name: file.name,
-                                        extension: ext
-                                    });
-                                    this.hasAttachments = true;
-                                };
-                                reader.readAsDataURL(file);
-                            } else {
-                                // Handle other file types
-                                this.attachments.push({
-                                    file: file,
-                                    type: 'file',
-                                    name: file.name,
-                                    extension: ext
-                                });
-                                this.hasAttachments = true;
-                            }
-                    });
-                }
+                paused: false
             }">
 
-                <!-- Preview section -->
-                <div x-show="hasAttachments" class="preview-section">
-                    <template x-for="(attachment, index) in attachments" :key="index">
-                        <div class="preview-item" :class="{'image-preview': attachment.type === 'image'}">
-                            <template x-if="attachment.type === 'image'">
-                                <img :src="attachment.url" :alt="attachment.name">
-                            </template>
-                            <template x-if="attachment.type === 'file'">
-                                <div class="file-preview">
-                                    <span class="filename" x-text="attachment.name"></span>
-                                    <span class="extension" x-text="attachment.extension.toUpperCase()"></span>
-                                </div>
-                            </template>
-                            <button @click="attachments.splice(index, 1); hasAttachments = attachments.length > 0"
-                                class="remove-attachment">&times;</button>
-                        </div>
-                    </template>
+                <!-- Attachment Preview section -->
+                <div>
+                    <x-component path="/chat/attachments/inputPreview.html" />
                 </div>
 
                 <!-- Top row with input and buttons -->
@@ -439,7 +400,7 @@
                                     d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z" />
                             </svg>
                         </label>
-                        <input type="file" id="file-input" accept="*" multiple style="display: none" @change="handleFileUpload($event)">
+                        <input type="file" id="file-input" accept="*" multiple style="display: none" @change="$store.chatAttachments.handleFileUpload($event)">
 
                         <div x-show="showTooltip" class="tooltip">
                             Add attachments to the message
@@ -470,7 +431,9 @@
 
                         <!-- Microphone button -->
                         <button class="chat-button mic-inactive" id="microphone-button"
-                            aria-label="Start/Stop recording">
+                            aria-label="Start/Stop recording"
+                            @click="$store.speech.handleMicrophoneClick()"
+                            x-effect="$store.speech.updateMicrophoneButtonUI()">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 18" fill="currentColor">
                                 <path
                                     d="m8,12c1.66,0,3-1.34,3-3V3c0-1.66-1.34-3-3-3s-3,1.34-3,3v6c0,1.66,1.34,3,3,3Zm-1,1.9c-2.7-.4-4.8-2.6-5-5.4H0c.2,3.8,3.1,6.9,7,7.5v2h2v-2c3.9-.6,6.8-3.7,7-7.5h-2c-.2,2.8-2.3,5-5,5.4h-2Z" />
@@ -522,7 +485,7 @@
                         <p>Files</p>
                     </button>
 
-                    <button class="text-button" id="history_inspect" @click="window.openHistoryModal()">
+                    <button class="text-button" id="history_inspect" @click="globalThis.openHistoryModal()">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="5 10 85 85">
                             <path fill="currentColor"
                                 d="m59.572,57.949c-.41,0-.826-.105-1.207-.325l-9.574-5.528c-.749-.432-1.21-1.231-1.21-2.095v-14.923c0-1.336,1.083-2.419,2.419-2.419s2.419,1.083,2.419,2.419v13.526l8.364,4.829c1.157.668,1.554,2.148.886,3.305-.448.776-1.261,1.21-2.097,1.21Zm30.427-7.947c0,10.684-4.161,20.728-11.716,28.283-6.593,6.59-15.325,10.69-24.59,11.544-1.223.113-2.448.169-3.669.169-7.492,0-14.878-2.102-21.22-6.068l-15.356,5.733c-.888.331-1.887.114-2.557-.556s-.887-1.669-.556-2.557l5.733-15.351c-4.613-7.377-6.704-16.165-5.899-24.891.854-9.266,4.954-17.998,11.544-24.588,7.555-7.555,17.6-11.716,28.285-11.716s20.73,4.161,28.285,11.716c7.555,7.555,11.716,17.599,11.716,28.283Zm-15.137-24.861c-13.71-13.71-36.018-13.71-49.728,0-11.846,11.846-13.682,30.526-4.365,44.417.434.647.53,1.464.257,2.194l-4.303,11.523,11.528-4.304c.274-.102.561-.153.846-.153.474,0,.944.139,1.348.41,13.888,9.315,32.568,7.479,44.417-4.365,13.707-13.708,13.706-36.014,0-49.723Zm-24.861-4.13c-15.989,0-28.996,13.006-28.996,28.992s13.008,28.992,28.996,28.992c1.336,0,2.419-1.083,2.419-2.419s-1.083-2.419-2.419-2.419c-13.32,0-24.157-10.835-24.157-24.153s10.837-24.153,24.157-24.153,24.153,10.835,24.153,24.153c0,1.336,1.083,2.419,2.419,2.419s2.419-1.083,2.419-2.419c0-15.986-13.006-28.992-28.992-28.992Zm25.041,33.531c-1.294.347-2.057,1.673-1.71,2.963.343,1.289,1.669,2.057,2.963,1.71,1.289-.343,2.053-1.669,1.71-2.963-.347-1.289-1.673-2.057-2.963-1.71Zm-2.03,6.328c-1.335,0-2.419,1.084-2.419,2.419s1.084,2.419,2.419,2.419,2.419-1.084,2.419-2.419-1.084-2.419-2.419-2.419Zm-3.598,5.587c-1.289-.347-2.615.416-2.963,1.71-.343,1.289.421,2.615,1.71,2.963,1.294.347,2.62-.421,2.963-1.71.347-1.294-.416-2.62-1.71-2.963Zm-4.919,4.462c-1.157-.667-2.638-.27-3.306.887-.667,1.157-.27,2.638.887,3.305,1.157.668,2.638.27,3.306-.887.667-1.157.27-2.638-.887-3.306Zm-9.327,3.04c-.946.946-.946,2.478,0,3.42.942.946,2.473.946,3.42,0,.946-.942.946-2.473,0-3.42-.946-.946-2.478-.946-3.42,0Z">
@@ -531,7 +494,7 @@
                         <p>History</p>
                     </button>
 
-                    <button class="text-button" id="ctx_window" @click="window.openCtxWindowModal()">
+                    <button class="text-button" id="ctx_window" @click="globalThis.openCtxWindowModal()">
                         <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="17 15 70 70" fill="currentColor">
                             <path
                                 d="m63 25c1.1016 0 2-0.89844 2-2s-0.89844-2-2-2h-26c-1.1016 0-2 0.89844-2 2s0.89844 2 2 2z">
@@ -566,7 +529,7 @@
     <div id="settingsModal" x-data="settingsModalProxy">
         <template x-teleport="body">
             <div x-show="isOpen" class="modal-overlay" @click.self="handleCancel()"
-                @keydown.escape.window="handleCancel()" x-transition>
+                @keydown.escape.window="isOpen && handleCancel()" x-transition>
                 <div class="modal-container">
                     <div class="modal-header">
                         <h2 x-text="settings.title"></h2>
@@ -588,7 +551,7 @@
                                 <div class="settings-tab"
                                      :class="{'active': activeTab === 'mcp'}"
                                      @click="switchTab('mcp')"
-                                     title="MCP">MCP</div>
+                                     title="MCP">MCP/A2A</div>
                                 <div class="settings-tab"
                                      :class="{'active': activeTab === 'developer'}"
                                      @click="switchTab('developer')"
@@ -634,9 +597,9 @@
 
                                     <template x-for="(field, fieldIndex) in section.fields.filter(f => !f.hidden)" :key="fieldIndex">
                                         <div :class="{'field': true, 'field-full': field.type === 'textarea'}">
-                                            <div class="field-label">
-                                                <div class="field-title" x-text="field.title"></div>
-                                                <div class="field-description" x-html="field.description || ''"></div>
+                                            <div class="field-label" x-show="field.title || field.description">
+                                                <div class="field-title" x-text="field.title" x-show="field.title"></div>
+                                                <div class="field-description" x-html="field.description || ''" x-show="field.description"></div>
                                             </div>
 
                                             <div class="field-control">
@@ -660,6 +623,8 @@
                                                 <template x-if="field.type === 'password'">
                                                     <input type="password" :class="field.classes" :value="field.value"
                                                         :readonly="field.readonly === true"
+                                                        :id="field.id"
+                                                        autocomplete="off"
                                                         @input="field.value = $event.target.value">
                                                 </template>
 
@@ -709,6 +674,11 @@
                                                         </template>
                                                     </select>
                                                 </template>
+
+                                                <!-- HTML field -->
+                                                <template x-if="field.type === 'html'">
+                                                    <div :class="field.classes" x-html="field.value"></div>
+                                                </template>
                                             </div>
                                         </div>
                                     </template>
@@ -719,23 +689,23 @@
                             <div id="section-tunnel" class="section" x-show="activeTab === 'external'">
                                 <div class="section-title">Flare Tunnel</div>
                                 <div class="section-description">Create a secure public URL to access your Agent Zero instance anytime, anywhere.</div>
-                                <div class="field">
-                                    <div class="field-label">
-                                        <div class="field-title">Tunnel provider</div>
-                                        <div class="field-description">Select provider for public tunnel</div>
-                                    </div>
-                                    <div class="field-control">
-                                        <select id="tunnel-provider" x-model="provider" :disabled="isLoading">
-                                            <option value="serveo">Serveo</option>
-                                            <option value="cloudflared">Cloudflare</option>
-                                        </select>
-                                    </div>
-                                </div>
                                 <!-- Tunnel content UI -->
                                 <div class="tunnel-container" x-data="tunnelSettings">
+                                    <div class="field">
+                                        <div class="field-label">
+                                            <div class="field-title">Tunnel provider</div>
+                                            <div class="field-description">Select provider for public tunnel</div>
+                                        </div>
+                                        <div class="field-control">
+                                            <select id="tunnel-provider" x-model="provider" :disabled="isLoading">
+                                                <option value="cloudflared">Cloudflare</option>
+                                                <option value="serveo">Serveo</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                     <!-- Loading spinner for tunnel operations -->
                                     <div class="loading-spinner" x-show="isLoading">
-                                        <i class="fas fa-spinner fa-spin"></i>
+                                        <span class="icon material-symbols-outlined spin">progress_activity</span>
                                         <span x-text="loadingText || 'Processing tunnel request...'"></span>
                                     </div>
 
@@ -747,12 +717,18 @@
                                                 <input type="text" class="tunnel-link-input" :value="tunnelLink" readonly>
                                                 <div class="buttons-row">
                                                     <button class="copy-link-button" @click="copyToClipboard()" title="Copy to clipboard">
-                                                        <i class="fas fa-copy"></i> Copy
+                                                        <span class="icon material-symbols-outlined">content_copy</span> Copy
                                                     </button>
                                                     <button class="refresh-link-button" @click="refreshLink()" title="Generate new URL">
-                                                        <i class="fas fa-sync-alt"></i> Refresh
+                                                        <span class="icon material-symbols-outlined">refresh</span> Refresh
                                                     </button>
                                                 </div>
+                                            </div>
+                                            <div class="tunnel-qr-container">
+                                                <div class="tunnel-qr-code" id="qrcode-tunnel">
+                                                    <!-- QR code will be generated here -->
+                                                </div>
+                                                <div class="tunnel-qr-label">Scan with mobile device</div>
                                             </div>
                                             <div class="tunnel-link-info">
                                                 Share this URL to allow others to access your Agent Zero instance.
@@ -762,14 +738,14 @@
                                             </div>
                                             <div class="stop-tunnel-container">
                                                 <button class="btn btn-danger" @click="stopTunnel()">
-                                                    <i class="fas fa-stop-circle"></i> Stop Tunnel
+                                                    <span class="icon material-symbols-outlined">stop_circle</span> Stop Tunnel
                                                 </button>
                                             </div>
                                         </div>
                                         <!-- Generate tunnel button when no link exists -->
                                         <div class="tunnel-actions" x-show="!linkGenerated">
                                             <button class="btn btn-ok" @click="generateLink()">
-                                                <i class="fas fa-play-circle"></i> Create Tunnel
+                                                <span class="icon material-symbols-outlined">play_circle</span> Create Tunnel
                                             </button>
                                         </div>
                                     </div>
@@ -1682,22 +1658,8 @@
         </template>
     </div>
 
-    <!-- Drag and Drop Overlay -->
-    <div id="dragdrop-overlay"
-         x-cloak
-         x-data="{ isVisible: false }"
-         x-show="isVisible"
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-300"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="dragdrop-overlay">
-        <img src="public/dragndrop.svg" alt="Drop files" class="dragdrop-icon">
-        <div class="dragdrop-text">Drop files to attach them to your message</div>
-        <div class="dragdrop-subtext"></div>
-    </div>
+    <!-- Drag and Drop Overlay Component -->
+    <x-component path="chat/attachments/dragDropOverlay.html"></x-component>
 
 </body>
 

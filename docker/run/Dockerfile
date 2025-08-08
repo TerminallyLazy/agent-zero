@@ -1,13 +1,13 @@
 # Use the pre-built base image for A0
 # FROM agent-zero-base:local
-FROM frdel/agent-zero-base:latest
+FROM agent0ai/agent-zero-base:latest
 
 # Check if the argument is provided, else throw an error
 ARG BRANCH
 RUN if [ -z "$BRANCH" ]; then echo "ERROR: BRANCH is not set!" >&2; exit 1; fi
 ENV BRANCH=$BRANCH
 
-# Copy contents of the project to /a0
+# Copy filesystem files to root
 COPY ./fs/ /
 
 # pre installation steps

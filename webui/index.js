@@ -1,8 +1,12 @@
-import * as msgs from "./js/messages.js";
-import { speech } from "./js/speech.js";
-import * as api from "./js/api.js";
+import * as msgs from "/js/messages.js";
+import * as api from "/js/api.js";
+import * as css from "/js/css.js";
+import { sleep } from "/js/sleep.js";
+import { store as attachmentsStore } from "/components/chat/attachments/attachmentsStore.js";
+import { store as speechStore } from "/components/chat/speech/speech-store.js";
+import { store as notificationStore } from "/components/notifications/notification-store.js";
 
-window.fetchApi = api.fetchApi; // TODO - backward compatibility for non-modular scripts, remove once refactored to alpine
+globalThis.fetchApi = api.fetchApi; // TODO - backward compatibility for non-modular scripts, remove once refactored to alpine
 
 const leftPanel = document.getElementById("left-panel");
 const rightPanel = document.getElementById("right-panel");
@@ -20,12 +24,18 @@ const timeDate = document.getElementById("time-date-container");
 
 let autoScroll = true;
 let context = "";
-let connectionStatus = false;
+let resetCounter = 0;
+let skipOneSpeech = false;
+let connectionStatus = undefined; // undefined = not checked yet, true = connected, false = disconnected
 
 // Initialize the toggle button
 setupSidebarToggle();
 // Initialize tabs
 setupTabs();
+
+export function getAutoScroll() {
+  return autoScroll;
+}
 
 function isMobile() {
   return window.innerWidth <= 768;
@@ -60,8 +70,8 @@ function handleResize() {
   }
 }
 
-window.addEventListener("load", handleResize);
-window.addEventListener("resize", handleResize);
+globalThis.addEventListener("load", handleResize);
+globalThis.addEventListener("resize", handleResize);
 
 document.addEventListener("DOMContentLoaded", () => {
   const overlay = document.getElementById("sidebar-overlay");
@@ -88,41 +98,40 @@ document.addEventListener("DOMContentLoaded", setupSidebarToggle);
 export async function sendMessage() {
   try {
     const message = chatInput.value.trim();
-    const inputAD = Alpine.$data(inputSection);
-    const attachments = inputAD.attachments;
-    const hasAttachments = attachments && attachments.length > 0;
+    const attachmentsWithUrls = attachmentsStore.getAttachmentsForSending();
+    const hasAttachments = attachmentsWithUrls.length > 0;
 
     if (message || hasAttachments) {
       let response;
       const messageId = generateGUID();
 
+      // Clear input and attachments
+      chatInput.value = "";
+      attachmentsStore.clearAttachments();
+      adjustTextareaHeight();
+
       // Include attachments in the user message
       if (hasAttachments) {
-        const attachmentsWithUrls = attachments.map((attachment) => {
-          if (attachment.type === "image") {
-            return {
-              ...attachment,
-              url: URL.createObjectURL(attachment.file),
-            };
-          } else {
-            return {
-              ...attachment,
-            };
-          }
-        });
+        const heading =
+          attachmentsWithUrls.length > 0
+            ? "Uploading attachments..."
+            : "User message";
 
         // Render user message with attachments
-        setMessage(messageId, "user", "", message, false, {
-          attachments: attachmentsWithUrls,
+        setMessage(messageId, "user", heading, message, false, {
+          // attachments: attachmentsWithUrls, // skip here, let the backend properly log them
         });
+
+        // sleep one frame to render the message before upload starts - better UX
+        sleep(0);
 
         const formData = new FormData();
         formData.append("text", message);
         formData.append("context", context);
         formData.append("message_id", messageId);
 
-        for (let i = 0; i < attachments.length; i++) {
-          formData.append("attachments", attachments[i].file);
+        for (let i = 0; i < attachmentsWithUrls.length; i++) {
+          formData.append("attachments", attachmentsWithUrls[i].file);
         }
 
         response = await api.fetchApi("/message_async", {
@@ -149,41 +158,34 @@ export async function sendMessage() {
       const jsonResponse = await response.json();
       if (!jsonResponse) {
         toast("No response returned.", "error");
-      }
-      // else if (!jsonResponse.ok) {
-      //     if (jsonResponse.message) {
-      //         toast(jsonResponse.message, "error");
-      //     } else {
-      //         toast("Undefined error.", "error");
-      //     }
-      // }
-      else {
+      } else {
         setContext(jsonResponse.context);
       }
-
-      // Clear input and attachments
-      chatInput.value = "";
-      inputAD.attachments = [];
-      inputAD.hasAttachments = false;
-      adjustTextareaHeight();
     }
   } catch (e) {
-    toastFetchError("Error sending message", e);
+    toastFetchError("Error sending message", e); // Will use new notification system
   }
 }
 
 function toastFetchError(text, error) {
-  if (getConnectionStatus()) {
-    toast(`${text}: ${error.message}`, "error");
-  } else {
-    toast(
-      `${text} (it seems the backend is not running): ${error.message}`,
-      "error"
-    );
-  }
   console.error(text, error);
+  // Use new frontend error notification system (async, but we don't need to wait)
+  const errorMessage = error?.message || error?.toString() || "Unknown error";
+
+  if (getConnectionStatus()) {
+    // Backend is connected, just show the error
+    toastFrontendError(`${text}: ${errorMessage}`).catch((e) =>
+      console.error("Failed to show error toast:", e)
+    );
+  } else {
+    // Backend is disconnected, show connection error
+    toastFrontendError(
+      `${text} (backend appears to be disconnected): ${errorMessage}`,
+      "Connection Error"
+    ).catch((e) => console.error("Failed to show connection error toast:", e));
+  }
 }
-window.toastFetchError = toastFetchError;
+globalThis.toastFetchError = toastFetchError;
 
 chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -235,37 +237,12 @@ updateUserTime();
 setInterval(updateUserTime, 1000);
 
 function setMessage(id, type, heading, content, temp, kvps = null) {
-  // Search for the existing message container by id
-  let messageContainer = document.getElementById(`message-${id}`);
-
-  if (messageContainer) {
-    // Don't re-render user messages
-    if (type === "user") {
-      return; // Skip re-rendering
-    }
-    // For other types, update the message
-    messageContainer.innerHTML = "";
-  } else {
-    // Create a new container if not found
-    const sender = type === "user" ? "user" : "ai";
-    messageContainer = document.createElement("div");
-    messageContainer.id = `message-${id}`;
-    messageContainer.classList.add("message-container", `${sender}-container`);
-    if (temp) messageContainer.classList.add("message-temp");
-  }
-
-  const handler = msgs.getHandler(type);
-  handler(messageContainer, id, type, heading, content, temp, kvps);
-
-  // If the container was found, it was already in the DOM, no need to append again
-  if (!document.getElementById(`message-${id}`)) {
-    chatHistory.appendChild(messageContainer);
-  }
-
+  const result = msgs.setMessage(id, type, heading, content, temp, kvps);
   if (autoScroll) chatHistory.scrollTop = chatHistory.scrollHeight;
+  return result;
 }
 
-window.loadKnowledge = async function () {
+globalThis.loadKnowledge = async function () {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".txt,.pdf,.csv,.html,.json,.md";
@@ -324,7 +301,7 @@ export const sendJsonData = async function (url, data) {
   // const jsonResponse = await response.json();
   // return jsonResponse;
 };
-window.sendJsonData = sendJsonData;
+globalThis.sendJsonData = sendJsonData;
 
 function generateGUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
@@ -340,8 +317,15 @@ function getConnectionStatus() {
 
 function setConnectionStatus(connected) {
   connectionStatus = connected;
-  const statusIcon = Alpine.$data(timeDate.querySelector(".status-icon"));
-  statusIcon.connected = connected;
+  if (globalThis.Alpine && timeDate) {
+    const statusIconEl = timeDate.querySelector(".status-icon");
+    if (statusIconEl) {
+      const statusIcon = Alpine.$data(statusIconEl);
+      if (statusIcon) {
+        statusIcon.connected = connected;
+      }
+    }
+  }
 }
 
 let lastLogVersion = 0;
@@ -354,8 +338,10 @@ async function poll() {
     // Get timezone from navigator
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+    const log_from = lastLogVersion;
     const response = await sendJsonData("/poll", {
-      log_from: lastLogVersion,
+      log_from: log_from,
+      notifications_from: notificationStore.lastNotificationVersion || 0,
       context: context || null,
       timezone: timezone,
     });
@@ -369,9 +355,13 @@ async function poll() {
     if (!context) setContext(response.context);
     if (response.context != context) return; //skip late polls after context change
 
+    // if the chat has been reset, restart this poll as it may have been called with incorrect log_from
     if (lastLogGuid != response.log_guid) {
       chatHistory.innerHTML = "";
       lastLogVersion = 0;
+      lastLogGuid = response.log_guid;
+      await poll();
+      return;
     }
 
     if (lastLogVersion != response.log_version) {
@@ -395,38 +385,52 @@ async function poll() {
 
     updateProgress(response.log_progress, response.log_progress_active);
 
+    // Update notifications from response
+    notificationStore.updateFromPoll(response);
+
     //set ui model vars from backend
-    const inputAD = Alpine.$data(inputSection);
-    inputAD.paused = response.paused;
+    if (globalThis.Alpine && inputSection) {
+      const inputAD = Alpine.$data(inputSection);
+      if (inputAD) {
+        inputAD.paused = response.paused;
+      }
+    }
 
     // Update status icon state
     setConnectionStatus(true);
 
     // Update chats list and sort by created_at time (newer first)
-    const chatsAD = Alpine.$data(chatsSection);
-    const contexts = response.contexts || [];
-    chatsAD.contexts = contexts.sort(
-      (a, b) => (b.created_at || 0) - (a.created_at || 0)
-    );
+    let chatsAD = null;
+    let contexts = response.contexts || [];
+    if (globalThis.Alpine && chatsSection) {
+      chatsAD = Alpine.$data(chatsSection);
+      if (chatsAD) {
+        chatsAD.contexts = contexts.sort(
+          (a, b) => (b.created_at || 0) - (a.created_at || 0)
+        );
+      }
+    }
 
     // Update tasks list and sort by creation time (newer first)
     const tasksSection = document.getElementById("tasks-section");
-    if (tasksSection) {
+    if (globalThis.Alpine && tasksSection) {
       const tasksAD = Alpine.$data(tasksSection);
-      let tasks = response.tasks || [];
+      if (tasksAD) {
+        let tasks = response.tasks || [];
 
-      // Always update tasks to ensure state changes are reflected
-      if (tasks.length > 0) {
-        // Sort the tasks by creation time
-        const sortedTasks = [...tasks].sort(
-          (a, b) => (b.created_at || 0) - (a.created_at || 0)
-        );
+        // Always update tasks to ensure state changes are reflected
+        if (tasks.length > 0) {
+          // Sort the tasks by creation time
+          const sortedTasks = [...tasks].sort(
+            (a, b) => (b.created_at || 0) - (a.created_at || 0)
+          );
 
-        // Assign the sorted tasks to the Alpine data
-        tasksAD.tasks = sortedTasks;
-      } else {
-        // Make sure to use a new empty array instance
-        tasksAD.tasks = [];
+          // Assign the sorted tasks to the Alpine data
+          tasksAD.tasks = sortedTasks;
+        } else {
+          // Make sure to use a new empty array instance
+          tasksAD.tasks = [];
+        }
       }
     }
 
@@ -435,7 +439,7 @@ async function poll() {
       // Update selection in the active tab
       const activeTab = localStorage.getItem("activeTab") || "chats";
 
-      if (activeTab === "chats") {
+      if (activeTab === "chats" && chatsAD) {
         chatsAD.selected = context;
         localStorage.setItem("lastSelectedChat", context);
 
@@ -486,7 +490,8 @@ async function poll() {
       }
     } else if (
       contexts.length > 0 &&
-      localStorage.getItem("activeTab") === "chats"
+      localStorage.getItem("activeTab") === "chats" &&
+      chatsAD
     ) {
       // If we're in chats tab with no selection but have chats, select the first one
       const firstChatId = contexts[0].id;
@@ -516,15 +521,38 @@ function afterMessagesUpdate(logs) {
 }
 
 function speakMessages(logs) {
+  if (skipOneSpeech) {
+    skipOneSpeech = false;
+    return;
+  }
   // log.no, log.type, log.heading, log.content
   for (let i = logs.length - 1; i >= 0; i--) {
     const log = logs[i];
+
+    // if already spoken, end
+    // if(log.no < lastSpokenNo) break;
+
+    // finished response
     if (log.type == "response") {
-      if (log.no > lastSpokenNo) {
-        lastSpokenNo = log.no;
-        speech.speak(log.content);
-        return;
-      }
+      // lastSpokenNo = log.no;
+      speechStore.speakStream(
+        getChatBasedId(log.no),
+        log.content,
+        log.kvps?.finished
+      );
+      return;
+
+      // finished LLM headline, not response
+    } else if (
+      log.type == "agent" &&
+      log.kvps &&
+      log.kvps.headline &&
+      log.kvps.tool_args &&
+      log.kvps.tool_name != "response"
+    ) {
+      // lastSpokenNo = log.no;
+      speechStore.speakStream(getChatBasedId(log.no), log.kvps.headline, true);
+      return;
     }
   }
 }
@@ -538,40 +566,43 @@ function updateProgress(progress, active) {
     addClassToElement(progressBar, "shiny-text");
   }
 
+  progress = msgs.convertIcons(progress);
+
   if (progressBar.innerHTML != progress) {
     progressBar.innerHTML = progress;
   }
 }
 
-window.pauseAgent = async function (paused) {
+globalThis.pauseAgent = async function (paused) {
   try {
     const resp = await sendJsonData("/pause", { paused: paused, context });
   } catch (e) {
-    window.toastFetchError("Error pausing agent", e);
+    globalThis.toastFetchError("Error pausing agent", e);
   }
 };
 
-window.resetChat = async function (ctxid = null) {
+globalThis.resetChat = async function (ctxid = null) {
   try {
     const resp = await sendJsonData("/chat_reset", {
       context: ctxid === null ? context : ctxid,
     });
+    resetCounter++;
     if (ctxid === null) updateAfterScroll();
   } catch (e) {
-    window.toastFetchError("Error resetting chat", e);
+    globalThis.toastFetchError("Error resetting chat", e);
   }
 };
 
-window.newChat = async function () {
+globalThis.newChat = async function () {
   try {
     setContext(generateGUID());
     updateAfterScroll();
   } catch (e) {
-    window.toastFetchError("Error creating new chat", e);
+    globalThis.toastFetchError("Error creating new chat", e);
   }
 };
 
-window.killChat = async function (id) {
+globalThis.killChat = async function (id) {
   if (!id) {
     console.error("No chat ID provided for deletion");
     return;
@@ -605,10 +636,10 @@ window.killChat = async function (id) {
 
     updateAfterScroll();
 
-    toast("Chat deleted successfully", "success");
+    justToast("Chat deleted successfully", "success", 1000, "chat-removal");
   } catch (e) {
     console.error("Error deleting chat:", e);
-    window.toastFetchError("Error deleting chat", e);
+    globalThis.toastFetchError("Error deleting chat", e);
   }
 };
 
@@ -670,7 +701,7 @@ function ensureProperTabSelection(contextId) {
   return false;
 }
 
-window.selectChat = async function (id) {
+globalThis.selectChat = async function (id) {
   if (id === context) return; //already selected
 
   // Check if we need to switch tabs based on the context type
@@ -714,47 +745,61 @@ export const setContext = function (id) {
   lastLogVersion = 0;
   lastSpokenNo = 0;
 
+  // Stop speech when switching chats
+  speechStore.stopAudio();
+
   // Clear the chat history immediately to avoid showing stale content
   chatHistory.innerHTML = "";
 
   // Update both selected states
-  const chatsAD = Alpine.$data(chatsSection);
-  const tasksAD = Alpine.$data(tasksSection);
+  if (globalThis.Alpine) {
+    if (chatsSection) {
+      const chatsAD = Alpine.$data(chatsSection);
+      if (chatsAD) chatsAD.selected = id;
+    }
+    if (tasksSection) {
+      const tasksAD = Alpine.$data(tasksSection);
+      if (tasksAD) tasksAD.selected = id;
+    }
+  }
 
-  chatsAD.selected = id;
-  tasksAD.selected = id;
+  //skip one speech if enabled when switching context
+  if (localStorage.getItem("speech") == "true") skipOneSpeech = true;
 };
 
 export const getContext = function () {
   return context;
 };
 
-window.toggleAutoScroll = async function (_autoScroll) {
+export const getChatBasedId = function (id) {
+  return context + "-" + resetCounter + "-" + id;
+};
+
+globalThis.toggleAutoScroll = async function (_autoScroll) {
   autoScroll = _autoScroll;
 };
 
-window.toggleJson = async function (showJson) {
-  // add display:none to .msg-json class definition
-  toggleCssProperty(".msg-json", "display", showJson ? "block" : "none");
+globalThis.toggleJson = async function (showJson) {
+  css.toggleCssProperty(".msg-json", "display", showJson ? "block" : "none");
 };
 
-window.toggleThoughts = async function (showThoughts) {
-  // add display:none to .msg-json class definition
-  toggleCssProperty(
+globalThis.toggleThoughts = async function (showThoughts) {
+  css.toggleCssProperty(
     ".msg-thoughts",
     "display",
     showThoughts ? undefined : "none"
   );
 };
 
-window.toggleUtils = async function (showUtils) {
-  // add display:none to .msg-json class definition
-  toggleCssProperty(".message-util", "display", showUtils ? undefined : "none");
-  // toggleCssProperty('.message-util .msg-kvps', 'display', showUtils ? undefined : 'none');
-  // toggleCssProperty('.message-util .msg-content', 'display', showUtils ? undefined : 'none');
+globalThis.toggleUtils = async function (showUtils) {
+  css.toggleCssProperty(
+    ".message-util",
+    "display",
+    showUtils ? undefined : "none"
+  );
 };
 
-window.toggleDarkMode = function (isDark) {
+globalThis.toggleDarkMode = function (isDark) {
   if (isDark) {
     document.body.classList.remove("light-mode");
     document.body.classList.add("dark-mode");
@@ -766,13 +811,13 @@ window.toggleDarkMode = function (isDark) {
   localStorage.setItem("darkMode", isDark);
 };
 
-window.toggleSpeech = function (isOn) {
+globalThis.toggleSpeech = function (isOn) {
   console.log("Speech:", isOn);
   localStorage.setItem("speech", isOn);
-  if (!isOn) speech.stop();
+  if (!isOn) speechStore.stopAudio();
 };
 
-window.nudge = async function () {
+globalThis.nudge = async function () {
   try {
     const resp = await sendJsonData("/nudge", { ctxid: getContext() });
   } catch (e) {
@@ -780,17 +825,20 @@ window.nudge = async function () {
   }
 };
 
-window.restart = async function () {
+globalThis.restart = async function () {
   try {
     if (!getConnectionStatus()) {
-      toast("Backend disconnected, cannot restart.", "error");
+      await toastFrontendError(
+        "Backend disconnected, cannot restart.",
+        "Restart Error"
+      );
       return;
     }
     // First try to initiate restart
     const resp = await sendJsonData("/restart", {});
   } catch (e) {
-    // Show restarting message
-    toast("Restarting...", "info", 0);
+    // Show restarting message with no timeout and restart group
+    await toastFrontendInfo("Restarting...", "System Restart", 9999, "restart");
 
     let retries = 0;
     const maxRetries = 240; // Maximum number of retries (60 seconds with 250ms interval)
@@ -798,11 +846,9 @@ window.restart = async function () {
     while (retries < maxRetries) {
       try {
         const resp = await sendJsonData("/health", {});
-        // Server is back up, show success message
+        // Server is back up, show success message that replaces the restarting message
         await new Promise((resolve) => setTimeout(resolve, 250));
-        hideToast();
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        toast("Restarted", "success", 5000);
+        await toastFrontendSuccess("Restarted", "System Restart", 5, "restart");
         return;
       } catch (e) {
         // Server still down, keep waiting
@@ -812,9 +858,12 @@ window.restart = async function () {
     }
 
     // If we get here, restart failed or took too long
-    hideToast();
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    toast("Restart timed out or failed", "error", 5000);
+    await toastFrontendError(
+      "Restart timed out or failed",
+      "Restart Error",
+      8,
+      "restart"
+    );
   }
 };
 
@@ -824,31 +873,7 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleDarkMode(isDarkMode);
 });
 
-function toggleCssProperty(selector, property, value) {
-  // Get the stylesheet that contains the class
-  const styleSheets = document.styleSheets;
-
-  // Iterate through all stylesheets to find the class
-  for (let i = 0; i < styleSheets.length; i++) {
-    const styleSheet = styleSheets[i];
-    const rules = styleSheet.cssRules || styleSheet.rules;
-
-    for (let j = 0; j < rules.length; j++) {
-      const rule = rules[j];
-      if (rule.selectorText == selector) {
-        // Check if the property is already applied
-        if (value === undefined) {
-          rule.style.removeProperty(property);
-        } else {
-          rule.style.setProperty(property, value);
-        }
-        return;
-      }
-    }
-  }
-}
-
-window.loadChats = async function () {
+globalThis.loadChats = async function () {
   try {
     const fileContents = await readJsonFiles();
     const response = await sendJsonData("/chat_load", { chats: fileContents });
@@ -872,7 +897,7 @@ window.loadChats = async function () {
   }
 };
 
-window.saveChat = async function () {
+globalThis.saveChat = async function () {
   try {
     const response = await sendJsonData("/chat_export", { ctxid: context });
 
@@ -965,107 +990,53 @@ function removeClassFromElement(element, className) {
   element.classList.remove(className);
 }
 
+function justToast(text, type = "info", timeout = 5000, group = "") {
+  notificationStore.addFrontendToastOnly(
+    type,
+    text,
+    "",
+    timeout / 1000,
+    group
+  )
+}
+  
+
 function toast(text, type = "info", timeout = 5000) {
-  const toast = document.getElementById("toast");
-  const isVisible = toast.classList.contains("show");
+  // Convert timeout from milliseconds to seconds for new notification system
+  const display_time = Math.max(timeout / 1000, 1); // Minimum 1 second
 
-  // Clear any existing timeout immediately
-  if (toast.timeoutId) {
-    clearTimeout(toast.timeoutId);
-    toast.timeoutId = null;
-  }
-
-  // Function to update toast content and show it
-  const updateAndShowToast = () => {
-    // Update the toast content and type
-    const title = type.charAt(0).toUpperCase() + type.slice(1);
-    toast.querySelector(".toast__title").textContent = title;
-    toast.querySelector(".toast__message").textContent = text;
-
-    // Remove old classes and add new ones
-    toast.classList.remove("toast--success", "toast--error", "toast--info");
-    toast.classList.add(`toast--${type}`);
-
-    // Show/hide copy button based on toast type
-    const copyButton = toast.querySelector(".toast__copy");
-    copyButton.style.display = type === "error" ? "inline-block" : "none";
-
-    // Add the close button event listener
-    const closeButton = document.querySelector(".toast__close");
-    closeButton.onclick = () => {
-      hideToast();
-    };
-
-    // Add the copy button event listener
-    copyButton.onclick = () => {
-      navigator.clipboard.writeText(text);
-      copyButton.textContent = "Copied!";
-      setTimeout(() => {
-        copyButton.textContent = "Copy";
-      }, 2000);
-    };
-
-    // Show the toast
-    toast.style.display = "flex";
-    // Force a reflow to ensure the animation triggers
-    void toast.offsetWidth;
-    toast.classList.add("show");
-
-    // Set timeout if specified
-    if (timeout) {
-      const minTimeout = Math.max(timeout, 5000);
-      toast.timeoutId = setTimeout(() => {
-        hideToast();
-      }, minTimeout);
+  // Use new frontend notification system based on type
+    switch (type.toLowerCase()) {
+      case "error":
+        return notificationStore.frontendError(text, "Error", display_time);
+      case "success":
+        return notificationStore.frontendInfo(text, "Success", display_time);
+      case "warning":
+        return notificationStore.frontendWarning(text, "Warning", display_time);
+      case "info":
+      default:
+        return notificationStore.frontendInfo(text, "Info", display_time);
     }
-  };
 
-  if (isVisible) {
-    // If a toast is visible, hide it first then show the new one
-    toast.classList.remove("show");
-    toast.classList.add("hide");
-
-    // Wait for hide animation to complete before showing new toast
-    setTimeout(() => {
-      toast.classList.remove("hide");
-      updateAndShowToast();
-    }, 400); // Match this with CSS transition duration
-  } else {
-    // If no toast is visible, show the new one immediately
-    updateAndShowToast();
-  }
 }
-window.toast = toast;
+globalThis.toast = toast;
 
-function hideToast() {
-  const toast = document.getElementById("toast");
-
-  // Clear any existing timeout
-  if (toast.timeoutId) {
-    clearTimeout(toast.timeoutId);
-    toast.timeoutId = null;
-  }
-
-  toast.classList.remove("show");
-  toast.classList.add("hide");
-
-  // Wait for the hide animation to complete before removing from display
-  setTimeout(() => {
-    toast.style.display = "none";
-    toast.classList.remove("hide");
-  }, 400); // Match this with CSS transition duration
-}
+// OLD: hideToast function removed - now using new notification system
 
 function scrollChanged(isAtBottom) {
-  const inputAS = Alpine.$data(autoScrollSwitch);
-  inputAS.autoScroll = isAtBottom;
+  if (globalThis.Alpine && autoScrollSwitch) {
+    const inputAS = Alpine.$data(autoScrollSwitch);
+    if (inputAS) {
+      inputAS.autoScroll = isAtBottom;
+    }
+  }
   // autoScrollSwitch.checked = isAtBottom
 }
 
 function updateAfterScroll() {
   // const toleranceEm = 1; // Tolerance in em units
   // const tolerancePx = toleranceEm * parseFloat(getComputedStyle(document.documentElement).fontSize); // Convert em to pixels
-  const tolerancePx = 50;
+  const tolerancePx = 10;
   const chatHistory = document.getElementById("chat-history");
   const isAtBottom =
     chatHistory.scrollHeight - chatHistory.scrollTop <=
@@ -1106,101 +1077,6 @@ async function startPolling() {
 }
 
 document.addEventListener("DOMContentLoaded", startPolling);
-
-document.addEventListener("DOMContentLoaded", () => {
-  const dragDropOverlay = document.getElementById("dragdrop-overlay");
-  const inputSection = document.getElementById("input-section");
-  let dragCounter = 0;
-
-  // Prevent default drag behaviors
-  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-    document.addEventListener(
-      eventName,
-      (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      },
-      false
-    );
-  });
-
-  // Handle drag enter
-  document.addEventListener(
-    "dragenter",
-    (e) => {
-      dragCounter++;
-      if (dragCounter === 1) {
-        Alpine.$data(dragDropOverlay).isVisible = true;
-      }
-    },
-    false
-  );
-
-  // Handle drag leave
-  document.addEventListener(
-    "dragleave",
-    (e) => {
-      dragCounter--;
-      if (dragCounter === 0) {
-        Alpine.$data(dragDropOverlay).isVisible = false;
-      }
-    },
-    false
-  );
-
-  // Handle drop
-  dragDropOverlay.addEventListener(
-    "drop",
-    (e) => {
-      dragCounter = 0;
-      Alpine.$data(dragDropOverlay).isVisible = false;
-
-      const inputAD = Alpine.$data(inputSection);
-      const files = e.dataTransfer.files;
-      handleFiles(files, inputAD);
-    },
-    false
-  );
-});
-
-// Separate file handling logic to be used by both drag-drop and file input
-function handleFiles(files, inputAD) {
-  Array.from(files).forEach((file) => {
-    const ext = file.name.split(".").pop().toLowerCase();
-
-    const isImage = ["jpg", "jpeg", "png", "bmp"].includes(ext);
-
-    if (isImage) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        inputAD.attachments.push({
-          file: file,
-          url: e.target.result,
-          type: "image",
-          name: file.name,
-          extension: ext,
-        });
-        inputAD.hasAttachments = true;
-      };
-      reader.readAsDataURL(file);
-    } else {
-      inputAD.attachments.push({
-        file: file,
-        type: "file",
-        name: file.name,
-        extension: ext,
-      });
-      inputAD.hasAttachments = true;
-    }
-  });
-}
-
-// Modify the existing handleFileUpload to use the new handleFiles function
-window.handleFileUpload = function (event) {
-  const files = event.target.files;
-  const inputAD = Alpine.$data(inputSection);
-  handleFiles(files, inputAD);
-};
 
 // Setup event handlers once the DOM is fully loaded
 document.addEventListener("DOMContentLoaded", function () {
@@ -1260,8 +1136,8 @@ function activateTab(tabName) {
     chatsSection.style.display = "";
 
     // Get the available contexts from Alpine.js data
-    const chatsAD = Alpine.$data(chatsSection);
-    const availableContexts = chatsAD.contexts || [];
+    const chatsAD = globalThis.Alpine ? Alpine.$data(chatsSection) : null;
+    const availableContexts = chatsAD?.contexts || [];
 
     // Restore previous chat selection
     const lastSelectedChat = localStorage.getItem("lastSelectedChat");
@@ -1284,8 +1160,8 @@ function activateTab(tabName) {
     tasksSection.style.flexDirection = "column";
 
     // Get the available tasks from Alpine.js data
-    const tasksAD = Alpine.$data(tasksSection);
-    const availableTasks = tasksAD.tasks || [];
+    const tasksAD = globalThis.Alpine ? Alpine.$data(tasksSection) : null;
+    const availableTasks = tasksAD?.tasks || [];
 
     // Restore previous task selection
     const lastSelectedTask = localStorage.getItem("lastSelectedTask");
@@ -1336,7 +1212,7 @@ function initializeActiveTab() {
 // Open the scheduler detail view for a specific task
 function openTaskDetail(taskId) {
   // Wait for Alpine.js to be fully loaded
-  if (window.Alpine) {
+  if (globalThis.Alpine) {
     // Get the settings modal button and click it to ensure all init logic happens
     const settingsButton = document.getElementById("settings");
     if (settingsButton) {
@@ -1351,7 +1227,7 @@ function openTaskDetail(taskId) {
       }
 
       // Get the Alpine.js data for the modal
-      const modalData = Alpine.$data(modalEl);
+      const modalData = globalThis.Alpine ? Alpine.$data(modalEl) : null;
 
       // Use a timeout to ensure the modal is fully rendered
       setTimeout(() => {
@@ -1370,7 +1246,9 @@ function openTaskDetail(taskId) {
           }
 
           // Get the Alpine.js data for the scheduler component
-          const schedulerData = Alpine.$data(schedulerComponent);
+          const schedulerData = globalThis.Alpine
+            ? Alpine.$data(schedulerComponent)
+            : null;
 
           // Show the task detail view for the specific task
           schedulerData.showTaskDetail(taskId);
@@ -1387,4 +1265,4 @@ function openTaskDetail(taskId) {
 }
 
 // Make the function available globally
-window.openTaskDetail = openTaskDetail;
+globalThis.openTaskDetail = openTaskDetail;

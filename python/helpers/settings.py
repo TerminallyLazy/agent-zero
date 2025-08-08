@@ -4,12 +4,13 @@ import json
 import os
 import re
 import subprocess
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 import models
 from python.helpers import runtime, whisper, defer, git
 from . import files, dotenv
 from python.helpers.print_style import PrintStyle
+from python.helpers.providers import get_providers
 
 
 class Settings(TypedDict):
@@ -17,6 +18,7 @@ class Settings(TypedDict):
 
     chat_model_provider: str
     chat_model_name: str
+    chat_model_api_base: str
     chat_model_kwargs: dict[str, str]
     chat_model_ctx_length: int
     chat_model_ctx_history: float
@@ -27,6 +29,7 @@ class Settings(TypedDict):
 
     util_model_provider: str
     util_model_name: str
+    util_model_api_base: str
     util_model_kwargs: dict[str, str]
     util_model_ctx_length: int
     util_model_ctx_input: float
@@ -36,18 +39,37 @@ class Settings(TypedDict):
 
     embed_model_provider: str
     embed_model_name: str
+    embed_model_api_base: str
     embed_model_kwargs: dict[str, str]
     embed_model_rl_requests: int
     embed_model_rl_input: int
 
     browser_model_provider: str
     browser_model_name: str
+    browser_model_api_base: str
     browser_model_vision: bool
+    browser_model_rl_requests: int
+    browser_model_rl_input: int
+    browser_model_rl_output: int
     browser_model_kwargs: dict[str, str]
 
-    agent_prompts_subdir: str
+    agent_profile: str
     agent_memory_subdir: str
     agent_knowledge_subdir: str
+
+    memory_recall_enabled: bool
+    memory_recall_interval: int
+    memory_recall_history_len: int
+    memory_recall_memories_max_search: int
+    memory_recall_solutions_max_search: int
+    memory_recall_memories_max_result: int
+    memory_recall_solutions_max_result: int
+    memory_recall_similarity_threshold: float
+    memory_recall_query_prep: bool
+    memory_recall_post_filter: bool
+    memory_memorize_enabled: bool
+    memory_memorize_consolidation: bool
+    memory_memorize_replace_threshold: float
 
     api_keys: dict[str, str]
 
@@ -67,11 +89,16 @@ class Settings(TypedDict):
     stt_silence_duration: int
     stt_waiting_timeout: int
 
+    tts_kokoro: bool
+
     mcp_servers: str
     mcp_client_init_timeout: int
     mcp_client_tool_timeout: int
     mcp_server_enabled: bool
     mcp_server_token: str
+
+    a2a_server_enabled: bool
+    
 
 
 class PartialSettings(Settings, total=False):
@@ -88,7 +115,15 @@ class SettingsField(TypedDict, total=False):
     title: str
     description: str
     type: Literal[
-        "text", "number", "select", "range", "textarea", "password", "switch", "button"
+        "text",
+        "number",
+        "select",
+        "range",
+        "textarea",
+        "password",
+        "switch",
+        "button",
+        "html",
     ]
     value: Any
     min: float
@@ -111,13 +146,14 @@ class SettingsOutput(TypedDict):
 
 
 PASSWORD_PLACEHOLDER = "****PSWD****"
+API_KEY_PLACEHOLDER = "************"
 
 SETTINGS_FILE = files.get_abs_path("tmp/settings.json")
 _settings: Settings | None = None
 
 
 def convert_out(settings: Settings) -> SettingsOutput:
-    from models import ModelProvider
+    default_settings = get_default_settings()
 
     # main model section
     chat_model_fields: list[SettingsField] = []
@@ -128,7 +164,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Select provider for main chat model used by Agent Zero",
             "type": "select",
             "value": settings["chat_model_provider"],
-            "options": [{"value": p.name, "label": p.value} for p in ModelProvider],
+            "options": cast(list[FieldOption], get_providers("chat")),
         }
     )
     chat_model_fields.append(
@@ -138,6 +174,16 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Exact name of model from selected provider",
             "type": "text",
             "value": settings["chat_model_name"],
+        }
+    )
+
+    chat_model_fields.append(
+        {
+            "id": "chat_model_api_base",
+            "title": "Chat model API base URL",
+            "description": "API base URL for main chat model. Leave empty for default. Only relevant for Azure, local and custom (other) providers.",
+            "type": "text",
+            "value": settings["chat_model_api_base"],
         }
     )
 
@@ -208,7 +254,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "chat_model_kwargs",
             "title": "Chat model additional parameters",
-            "description": "Any other parameters supported by the model. Format is KEY=VALUE on individual lines, just like .env file.",
+            "description": "Any other parameters supported by <a href='https://docs.litellm.ai/docs/set_keys' target='_blank'>LiteLLM</a>. Format is KEY=VALUE on individual lines, just like .env file.",
             "type": "textarea",
             "value": _dict_to_env(settings["chat_model_kwargs"]),
         }
@@ -231,7 +277,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Select provider for utility model used by the framework",
             "type": "select",
             "value": settings["util_model_provider"],
-            "options": [{"value": p.name, "label": p.value} for p in ModelProvider],
+            "options": cast(list[FieldOption], get_providers("chat")),
         }
     )
     util_model_fields.append(
@@ -241,6 +287,16 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Exact name of model from selected provider",
             "type": "text",
             "value": settings["util_model_name"],
+        }
+    )
+
+    util_model_fields.append(
+        {
+            "id": "util_model_api_base",
+            "title": "Utility model API base URL",
+            "description": "API base URL for utility model. Leave empty for default. Only relevant for Azure, local and custom (other) providers.",
+            "type": "text",
+            "value": settings["util_model_api_base"],
         }
     )
 
@@ -278,7 +334,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "util_model_kwargs",
             "title": "Utility model additional parameters",
-            "description": "Any other parameters supported by the model. Format is KEY=VALUE on individual lines, just like .env file.",
+            "description": "Any other parameters supported by <a href='https://docs.litellm.ai/docs/set_keys' target='_blank'>LiteLLM</a>. Format is KEY=VALUE on individual lines, just like .env file.",
             "type": "textarea",
             "value": _dict_to_env(settings["util_model_kwargs"]),
         }
@@ -301,7 +357,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Select provider for embedding model used by the framework",
             "type": "select",
             "value": settings["embed_model_provider"],
-            "options": [{"value": p.name, "label": p.value} for p in ModelProvider],
+            "options": cast(list[FieldOption], get_providers("embedding")),
         }
     )
     embed_model_fields.append(
@@ -311,6 +367,16 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Exact name of model from selected provider",
             "type": "text",
             "value": settings["embed_model_name"],
+        }
+    )
+
+    embed_model_fields.append(
+        {
+            "id": "embed_model_api_base",
+            "title": "Embedding model API base URL",
+            "description": "API base URL for embedding model. Leave empty for default. Only relevant for Azure, local and custom (other) providers.",
+            "type": "text",
+            "value": settings["embed_model_api_base"],
         }
     )
 
@@ -338,7 +404,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "embed_model_kwargs",
             "title": "Embedding model additional parameters",
-            "description": "Any other parameters supported by the model. Format is KEY=VALUE on individual lines, just like .env file.",
+            "description": "Any other parameters supported by <a href='https://docs.litellm.ai/docs/set_keys' target='_blank'>LiteLLM</a>. Format is KEY=VALUE on individual lines, just like .env file.",
             "type": "textarea",
             "value": _dict_to_env(settings["embed_model_kwargs"]),
         }
@@ -347,7 +413,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
     embed_model_section: SettingsSection = {
         "id": "embed_model",
         "title": "Embedding Model",
-        "description": "Settings for the embedding model used by Agent Zero.",
+        "description": f"Settings for the embedding model used by Agent Zero.<br><h4>⚠️ No need to change</h4>The default HuggingFace model {default_settings['embed_model_name']} is preloaded and runs locally within the docker container and there's no need to change it unless you have a specific requirements for embedding.",
         "fields": embed_model_fields,
         "tab": "agent",
     }
@@ -361,7 +427,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Select provider for web browser model used by <a href='https://github.com/browser-use/browser-use' target='_blank'>browser-use</a> framework",
             "type": "select",
             "value": settings["browser_model_provider"],
-            "options": [{"value": p.name, "label": p.value} for p in ModelProvider],
+            "options": cast(list[FieldOption], get_providers("chat")),
         }
     )
     browser_model_fields.append(
@@ -371,6 +437,16 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Exact name of model from selected provider",
             "type": "text",
             "value": settings["browser_model_name"],
+        }
+    )
+
+    browser_model_fields.append(
+        {
+            "id": "browser_model_api_base",
+            "title": "Web Browser model API base URL",
+            "description": "API base URL for web browser model. Leave empty for default. Only relevant for Azure, local and custom (other) providers.",
+            "type": "text",
+            "value": settings["browser_model_api_base"],
         }
     )
 
@@ -386,9 +462,39 @@ def convert_out(settings: Settings) -> SettingsOutput:
 
     browser_model_fields.append(
         {
+            "id": "browser_model_rl_requests",
+            "title": "Web Browser model rate limit requests",
+            "description": "Rate limit requests for web browser model.",
+            "type": "number",
+            "value": settings["browser_model_rl_requests"],
+        }
+    )
+
+    browser_model_fields.append(
+        {
+            "id": "browser_model_rl_input",
+            "title": "Web Browser model rate limit input",
+            "description": "Rate limit input for web browser model.",
+            "type": "number",
+            "value": settings["browser_model_rl_input"],
+        }
+    )
+
+    browser_model_fields.append(
+        {
+            "id": "browser_model_rl_output",
+            "title": "Web Browser model rate limit output",
+            "description": "Rate limit output for web browser model.",
+            "type": "number",
+            "value": settings["browser_model_rl_output"],
+        }
+    )
+
+    browser_model_fields.append(
+        {
             "id": "browser_model_kwargs",
             "title": "Web Browser model additional parameters",
-            "description": "Any other parameters supported by the model. Format is KEY=VALUE on individual lines, just like .env file.",
+            "description": "Any other parameters supported by <a href='https://docs.litellm.ai/docs/set_keys' target='_blank'>LiteLLM</a>. Format is KEY=VALUE on individual lines, just like .env file.",
             "type": "textarea",
             "value": _dict_to_env(settings["browser_model_kwargs"]),
         }
@@ -401,25 +507,6 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "fields": browser_model_fields,
         "tab": "agent",
     }
-
-    # # Memory settings section
-    # memory_fields: list[SettingsField] = []
-    # memory_fields.append(
-    #     {
-    #         "id": "memory_settings",
-    #         "title": "Memory Settings",
-    #         "description": "<settings for memory>",
-    #         "type": "text",
-    #         "value": "",
-    #     }
-    # )
-
-    # memory_section: SettingsSection = {
-    #     "id": "memory",
-    #     "title": "Memory Settings",
-    #     "description": "<settings for memory management here>",
-    #     "fields": memory_fields,
-    # }
 
     # basic auth section
     auth_fields: list[SettingsField] = []
@@ -469,31 +556,23 @@ def convert_out(settings: Settings) -> SettingsOutput:
 
     # api keys model section
     api_keys_fields: list[SettingsField] = []
-    api_keys_fields.append(_get_api_key_field(settings, "openai", "OpenAI API Key"))
-    api_keys_fields.append(
-        _get_api_key_field(settings, "anthropic", "Anthropic API Key")
-    )
-    api_keys_fields.append(_get_api_key_field(settings, "chutes", "Chutes API Key"))
-    api_keys_fields.append(_get_api_key_field(settings, "deepseek", "DeepSeek API Key"))
-    api_keys_fields.append(_get_api_key_field(settings, "google", "Google API Key"))
-    api_keys_fields.append(_get_api_key_field(settings, "groq", "Groq API Key"))
-    api_keys_fields.append(
-        _get_api_key_field(settings, "huggingface", "HuggingFace API Key")
-    )
-    api_keys_fields.append(
-        _get_api_key_field(settings, "mistralai", "MistralAI API Key")
-    )
-    api_keys_fields.append(
-        _get_api_key_field(settings, "openrouter", "OpenRouter API Key")
-    )
-    api_keys_fields.append(
-        _get_api_key_field(settings, "sambanova", "Sambanova API Key")
-    )
+
+    # Collect unique providers from both chat and embedding sections
+    providers_seen: set[str] = set()
+    for p_type in ("chat", "embedding"):
+        for provider in get_providers(p_type):
+            pid_lower = provider["value"].lower()
+            if pid_lower in providers_seen:
+                continue
+            providers_seen.add(pid_lower)
+            api_keys_fields.append(
+                _get_api_key_field(settings, pid_lower, provider["label"])
+            )
 
     api_keys_section: SettingsSection = {
         "id": "api_keys",
         "title": "API Keys",
-        "description": "API keys for model providers and services used by Agent Zero.",
+        "description": "API keys for model providers and services used by Agent Zero. You can set multiple API keys separated by a comma (,). They will be used in round-robin fashion.",
         "fields": api_keys_fields,
         "tab": "external",
     }
@@ -503,29 +582,16 @@ def convert_out(settings: Settings) -> SettingsOutput:
 
     agent_fields.append(
         {
-            "id": "agent_prompts_subdir",
-            "title": "A0 Prompts Subdirectory",
-            "description": "Subdirectory of /prompts folder to be used by default agent no. 0. Subordinate agents can be spawned with other subdirectories, that is on their superior agent to decide. This setting affects the behaviour of the top level agent you communicate with.",
+            "id": "agent_profile",
+            "title": "Default agent profile",
+            "description": "Subdirectory of /agents folder to be used by default agent no. 0. Subordinate agents can be spawned with other profiles, that is on their superior agent to decide. This setting affects the behaviour of the top level agent you communicate with.",
             "type": "select",
-            "value": settings["agent_prompts_subdir"],
+            "value": settings["agent_profile"],
             "options": [
                 {"value": subdir, "label": subdir}
-                for subdir in files.get_subdirectories("prompts")
+                for subdir in files.get_subdirectories("agents")
+                if subdir != "_example"
             ],
-        }
-    )
-
-    agent_fields.append(
-        {
-            "id": "agent_memory_subdir",
-            "title": "Memory Subdirectory",
-            "description": "Subdirectory of /memory folder to use for agent memory storage. Used to separate memory storage between different instances.",
-            "type": "text",
-            "value": settings["agent_memory_subdir"],
-            # "options": [
-            #     {"value": subdir, "label": subdir}
-            #     for subdir in files.get_subdirectories("memory", exclude="embeddings")
-            # ],
         }
     )
 
@@ -548,6 +614,169 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "title": "Agent Config",
         "description": "Agent parameters.",
         "fields": agent_fields,
+        "tab": "agent",
+    }
+
+    memory_fields: list[SettingsField] = []
+
+    memory_fields.append(
+        {
+            "id": "agent_memory_subdir",
+            "title": "Memory Subdirectory",
+            "description": "Subdirectory of /memory folder to use for agent memory storage. Used to separate memory storage between different instances.",
+            "type": "text",
+            "value": settings["agent_memory_subdir"],
+            # "options": [
+            #     {"value": subdir, "label": subdir}
+            #     for subdir in files.get_subdirectories("memory", exclude="embeddings")
+            # ],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_enabled",
+            "title": "Memory auto-recall enabled",
+            "description": "Agent Zero will automatically recall memories based on convesation context.",
+            "type": "switch",
+            "value": settings["memory_recall_enabled"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_query_prep",
+            "title": "Auto-recall AI query preparation",
+            "description": "Enables vector DB query preparation from conversation context by utility LLM for auto-recall. Improves search quality, adds 1 utility LLM call per auto-recall.",
+            "type": "switch",
+            "value": settings["memory_recall_query_prep"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_post_filter",
+            "title": "Auto-recall AI post-filtering",
+            "description": "Enables memory relevance filtering by utility LLM for auto-recall. Improves search quality, adds 1 utility LLM call per auto-recall.",
+            "type": "switch",
+            "value": settings["memory_recall_post_filter"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_interval",
+            "title": "Memory auto-recall interval",
+            "description": "Memories are recalled after every user or superior agent message. During agent's monologue, memories are recalled every X turns based on this parameter.",
+            "type": "range",
+            "min": 1,
+            "max": 10,
+            "step": 1,
+            "value": settings["memory_recall_interval"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_history_len",
+            "title": "Memory auto-recall history length",
+            "description": "The length of conversation history passed to memory recall LLM for context (in characters).",
+            "type": "number",
+            "value": settings["memory_recall_history_len"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_similarity_threshold",
+            "title": "Memory auto-recall similarity threshold",
+            "description": "The threshold for similarity search in memory recall (0 = no similarity, 1 = exact match).",
+            "type": "range",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": settings["memory_recall_similarity_threshold"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_memories_max_search",
+            "title": "Memory auto-recall max memories to search",
+            "description": "The maximum number of memories returned by vector DB for further processing.",
+            "type": "number",
+            "value": settings["memory_recall_memories_max_search"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_memories_max_result",
+            "title": "Memory auto-recall max memories to use",
+            "description": "The maximum number of memories to inject into A0's context window.",
+            "type": "number",
+            "value": settings["memory_recall_memories_max_result"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_solutions_max_search",
+            "title": "Memory auto-recall max solutions to search",
+            "description": "The maximum number of solutions returned by vector DB for further processing.",
+            "type": "number",
+            "value": settings["memory_recall_solutions_max_search"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_recall_solutions_max_result",
+            "title": "Memory auto-recall max solutions to use",
+            "description": "The maximum number of solutions to inject into A0's context window.",
+            "type": "number",
+            "value": settings["memory_recall_solutions_max_result"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_memorize_enabled",
+            "title": "Auto-memorize enabled",
+            "description": "A0 will automatically memorize facts and solutions from conversation history.",
+            "type": "switch",
+            "value": settings["memory_memorize_enabled"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_memorize_consolidation",
+            "title": "Auto-memorize AI consolidation",
+            "description": "A0 will automatically consolidate similar memories using utility LLM. Improves memory quality over time, adds 2 utility LLM calls per memory.",
+            "type": "switch",
+            "value": settings["memory_memorize_consolidation"],
+        }
+    )
+
+    memory_fields.append(
+        {
+            "id": "memory_memorize_replace_threshold",
+            "title": "Auto-memorize replacement threshold",
+            "description": "Only applies when AI consolidation is disabled. Replaces previous similar memories with new ones based on this threshold. 0 = replace even if not similar at all, 1 = replace only if exact match.",
+            "type": "range",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": settings["memory_memorize_replace_threshold"],
+        }
+    )
+
+    memory_section: SettingsSection = {
+        "id": "memory",
+        "title": "Memory",
+        "description": "Configuration of A0's memory system. A0 memorizes and recalls memories automatically to help it's context awareness.",
+        "fields": memory_fields,
         "tab": "agent",
     }
 
@@ -617,14 +846,64 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "developer",
     }
 
+    # code_exec_fields: list[SettingsField] = []
+
+    # code_exec_fields.append(
+    #     {
+    #         "id": "code_exec_ssh_enabled",
+    #         "title": "Use SSH for code execution",
+    #         "description": "Code execution will use SSH to connect to the terminal. When disabled, a local python terminal interface is used instead. SSH should only be used in development environment or when encountering issues with the local python terminal interface.",
+    #         "type": "switch",
+    #         "value": settings["code_exec_ssh_enabled"],
+    #     }
+    # )
+
+    # code_exec_fields.append(
+    #     {
+    #         "id": "code_exec_ssh_addr",
+    #         "title": "Code execution SSH address",
+    #         "description": "Address of the SSH server for code execution. Only applies when SSH is enabled.",
+    #         "type": "text",
+    #         "value": settings["code_exec_ssh_addr"],
+    #     }
+    # )
+
+    # code_exec_fields.append(
+    #     {
+    #         "id": "code_exec_ssh_port",
+    #         "title": "Code execution SSH port",
+    #         "description": "Port of the SSH server for code execution. Only applies when SSH is enabled.",
+    #         "type": "text",
+    #         "value": settings["code_exec_ssh_port"],
+    #     }
+    # )
+
+    # code_exec_section: SettingsSection = {
+    #     "id": "code_exec",
+    #     "title": "Code execution",
+    #     "description": "Configuration of code execution by the agent.",
+    #     "fields": code_exec_fields,
+    #     "tab": "developer",
+    # }
+
     # Speech to text section
     stt_fields: list[SettingsField] = []
 
     stt_fields.append(
         {
+            "id": "stt_microphone_section",
+            "title": "Microphone device",
+            "description": "Select the microphone device to use for speech-to-text.",
+            "value": "<x-component path='/settings/speech/microphone.html' />",
+            "type": "html",
+        }
+    )
+
+    stt_fields.append(
+        {
             "id": "stt_model_size",
-            "title": "Model Size",
-            "description": "Select the speech recognition model size",
+            "title": "Speech-to-text model size",
+            "description": "Select the speech-to-text model size",
             "type": "select",
             "value": settings["stt_model_size"],
             "options": [
@@ -641,7 +920,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
     stt_fields.append(
         {
             "id": "stt_language",
-            "title": "Language Code",
+            "title": "Speech-to-text language code",
             "description": "Language code (e.g. en, fr, it)",
             "type": "text",
             "value": settings["stt_language"],
@@ -651,8 +930,8 @@ def convert_out(settings: Settings) -> SettingsOutput:
     stt_fields.append(
         {
             "id": "stt_silence_threshold",
-            "title": "Silence threshold",
-            "description": "Silence detection threshold. Lower values are more sensitive.",
+            "title": "Microphone silence threshold",
+            "description": "Silence detection threshold. Lower values are more sensitive to noise.",
             "type": "range",
             "min": 0,
             "max": 1,
@@ -664,8 +943,8 @@ def convert_out(settings: Settings) -> SettingsOutput:
     stt_fields.append(
         {
             "id": "stt_silence_duration",
-            "title": "Silence duration (ms)",
-            "description": "Duration of silence before the server considers speaking to have ended.",
+            "title": "Microphone silence duration (ms)",
+            "description": "Duration of silence before the system considers speaking to have ended.",
             "type": "text",
             "value": settings["stt_silence_duration"],
         }
@@ -674,18 +953,31 @@ def convert_out(settings: Settings) -> SettingsOutput:
     stt_fields.append(
         {
             "id": "stt_waiting_timeout",
-            "title": "Waiting timeout (ms)",
-            "description": "Duration before the server closes the microphone.",
+            "title": "Microphone waiting timeout (ms)",
+            "description": "Duration of silence before the system closes the microphone.",
             "type": "text",
             "value": settings["stt_waiting_timeout"],
         }
     )
 
-    stt_section: SettingsSection = {
-        "id": "stt",
-        "title": "Speech to Text",
-        "description": "Voice transcription preferences and server turn detection settings.",
-        "fields": stt_fields,
+    # TTS fields
+    tts_fields: list[SettingsField] = []
+
+    tts_fields.append(
+        {
+            "id": "tts_kokoro",
+            "title": "Enable Kokoro TTS",
+            "description": "Enable higher quality server-side AI (Kokoro) instead of browser-based text-to-speech.",
+            "type": "switch",
+            "value": settings["tts_kokoro"],
+        }
+    )
+
+    speech_section: SettingsSection = {
+        "id": "speech",
+        "title": "Speech",
+        "description": "Voice transcription and speech synthesis settings.",
+        "fields": stt_fields + tts_fields,
         "tab": "agent",
     }
 
@@ -747,7 +1039,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
         {
             "id": "mcp_server_enabled",
             "title": "Enable A0 MCP Server",
-            "description": "Expose Agent Zero as an SSE MCP server. This will make this A0 instance available to MCP clients.",
+            "description": "Expose Agent Zero as an SSE/HTTP MCP server. This will make this A0 instance available to MCP clients.",
             "type": "switch",
             "value": settings["mcp_server_enabled"],
         }
@@ -770,6 +1062,50 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "description": "Agent Zero can be exposed as an SSE MCP server. See <a href=\"javascript:openModal('settings/mcp/server/example.html')\">connection example</a>.",
         "fields": mcp_server_fields,
         "tab": "mcp",
+    }
+
+    # -------- A2A Section --------
+    a2a_fields: list[SettingsField] = []
+
+    a2a_fields.append(
+        {
+            "id": "a2a_server_enabled",
+            "title": "Enable A2A server",
+            "description": "Expose Agent Zero as A2A server. This allows other agents to connect to A0 via A2A protocol.",
+            "type": "switch",
+            "value": settings["a2a_server_enabled"],
+        }
+    )
+
+    a2a_section: SettingsSection = {
+        "id": "a2a_server",
+        "title": "A0 A2A Server",
+        "description": "Agent Zero can be exposed as an A2A server. See <a href=\"javascript:openModal('settings/a2a/a2a-connection.html')\">connection example</a>.",
+        "fields": a2a_fields,
+        "tab": "mcp",
+    }
+
+
+    # External API section
+    external_api_fields: list[SettingsField] = []
+
+    external_api_fields.append(
+        {
+            "id": "external_api_examples",
+            "title": "API Examples",
+            "description": "View examples for using Agent Zero's external API endpoints with API key authentication.",
+            "type": "button",
+            "value": "Show API Examples",
+        }
+    )
+
+    external_api_section: SettingsSection = {
+        "id": "external_api",
+        "title": "External API",
+        "description": "Agent Zero provides external API endpoints for integration with other applications. "
+                       "These endpoints use API key authentication and support text messages and file attachments.",
+        "fields": external_api_fields,
+        "tab": "external",
     }
 
     # Backup & Restore section
@@ -812,16 +1148,19 @@ def convert_out(settings: Settings) -> SettingsOutput:
             agent_section,
             chat_model_section,
             util_model_section,
-            embed_model_section,
             browser_model_section,
-            # memory_section,
-            stt_section,
+            embed_model_section,
+            memory_section,
+            speech_section,
             api_keys_section,
             auth_section,
             mcp_client_section,
             mcp_server_section,
+            a2a_section,
+            external_api_section,
             backup_section,
             dev_section,
+            # code_exec_section,
         ]
     }
     return result
@@ -829,11 +1168,12 @@ def convert_out(settings: Settings) -> SettingsOutput:
 
 def _get_api_key_field(settings: Settings, provider: str, title: str) -> SettingsField:
     key = settings["api_keys"].get(provider, models.get_api_key(provider))
+    # For API keys, use simple asterisk placeholder for existing keys
     return {
         "id": f"api_key_{provider}",
         "title": title,
-        "type": "password",
-        "value": (PASSWORD_PLACEHOLDER if key and key != "None" else ""),
+        "type": "text",
+        "value": (API_KEY_PLACEHOLDER if key and key != "None" else ""),
     }
 
 
@@ -842,7 +1182,13 @@ def convert_in(settings: dict) -> Settings:
     for section in settings["sections"]:
         if "fields" in section:
             for field in section["fields"]:
-                if field["value"] != PASSWORD_PLACEHOLDER:
+                # Skip saving if value is a placeholder
+                should_skip = (
+                    field["value"] == PASSWORD_PLACEHOLDER or
+                    field["value"] == API_KEY_PLACEHOLDER
+                )
+
+                if not should_skip:
                     if field["id"].endswith("_kwargs"):
                         current[field["id"]] = _env_to_dict(field["value"])
                     elif field["id"].startswith("api_key_"):
@@ -884,7 +1230,7 @@ def normalize_settings(settings: Settings) -> Settings:
     # adjust settings values to match current version if needed
     if "version" not in copy or copy["version"] != default["version"]:
         _adjust_to_version(copy, default)
-        copy["version"] = default["version"] # sync version
+        copy["version"] = default["version"]  # sync version
 
     # remove keys that are not in default
     keys_to_remove = [key for key in copy if key not in default]
@@ -898,6 +1244,8 @@ def normalize_settings(settings: Settings) -> Settings:
         else:
             try:
                 copy[key] = type(value)(copy[key])  # type: ignore
+                if isinstance(copy[key], str):
+                    copy[key] = copy[key].strip()  # strip strings
             except (ValueError, TypeError):
                 copy[key] = value  # make default instead
 
@@ -911,8 +1259,9 @@ def _adjust_to_version(settings: Settings, default: Settings):
     # starting with 0.9, the default prompt subfolder for agent no. 0 is agent0
     # switch to agent0 if the old default is used from v0.8
     if "version" not in settings or settings["version"].startswith("v0.8"):
-        if "agent_prompts_subdir" not in settings or settings["agent_prompts_subdir"] == "default":
-            settings["agent_prompts_subdir"] = "agent0"
+        if "agent_profile" not in settings or settings["agent_profile"] == "default":
+            settings["agent_profile"] = "agent0"
+
 
 def _read_settings_file() -> Settings | None:
     if os.path.exists(SETTINGS_FILE):
@@ -956,12 +1305,11 @@ def _write_sensitive_settings(settings: Settings):
 
 
 def get_default_settings() -> Settings:
-    from models import ModelProvider
-
     return Settings(
         version=_get_version(),
-        chat_model_provider=ModelProvider.OPENAI.name,
-        chat_model_name="gpt-4.1",
+        chat_model_provider="openrouter",
+        chat_model_name="openai/gpt-5",
+        chat_model_api_base="",
         chat_model_kwargs={"temperature": "0"},
         chat_model_ctx_length=100000,
         chat_model_ctx_history=0.7,
@@ -969,28 +1317,47 @@ def get_default_settings() -> Settings:
         chat_model_rl_requests=0,
         chat_model_rl_input=0,
         chat_model_rl_output=0,
-        util_model_provider=ModelProvider.OPENAI.name,
-        util_model_name="gpt-4.1-nano",
+        util_model_provider="openrouter",
+        util_model_name="openai/gpt-5-mini",
+        util_model_api_base="",
         util_model_ctx_length=100000,
         util_model_ctx_input=0.7,
         util_model_kwargs={"temperature": "0"},
         util_model_rl_requests=0,
         util_model_rl_input=0,
         util_model_rl_output=0,
-        embed_model_provider=ModelProvider.HUGGINGFACE.name,
+        embed_model_provider="huggingface",
         embed_model_name="sentence-transformers/all-MiniLM-L6-v2",
+        embed_model_api_base="",
         embed_model_kwargs={},
         embed_model_rl_requests=0,
         embed_model_rl_input=0,
-        browser_model_provider=ModelProvider.OPENAI.name,
-        browser_model_name="gpt-4.1",
+        browser_model_provider="openrouter",
+        browser_model_name="openai/gpt-5",
+        browser_model_api_base="",
         browser_model_vision=True,
+        browser_model_rl_requests=0,
+        browser_model_rl_input=0,
+        browser_model_rl_output=0,
         browser_model_kwargs={"temperature": "0"},
+        memory_recall_enabled=True,
+        memory_recall_interval=3,
+        memory_recall_history_len=10000,
+        memory_recall_memories_max_search=12,
+        memory_recall_solutions_max_search=8,
+        memory_recall_memories_max_result=5,
+        memory_recall_solutions_max_result=3,
+        memory_recall_similarity_threshold=0.7,
+        memory_recall_query_prep=True,
+        memory_recall_post_filter=True,
+        memory_memorize_enabled=True,
+        memory_memorize_consolidation=True,
+        memory_memorize_replace_threshold=0.9,
         api_keys={},
         auth_login="",
         auth_password="",
         root_password="",
-        agent_prompts_subdir="agent0",
+        agent_profile="agent0",
         agent_memory_subdir="default",
         agent_knowledge_subdir="custom",
         rfc_auto_docker=True,
@@ -1003,11 +1370,13 @@ def get_default_settings() -> Settings:
         stt_silence_threshold=0.3,
         stt_silence_duration=1000,
         stt_waiting_timeout=2000,
+        tts_kokoro=True,
         mcp_servers='{\n    "mcpServers": {}\n}',
-        mcp_client_init_timeout=5,
+        mcp_client_init_timeout=10,
         mcp_client_tool_timeout=120,
         mcp_server_enabled=False,
         mcp_server_token=create_auth_token(),
+        a2a_server_enabled=False,
     )
 
 
@@ -1105,6 +1474,18 @@ def _apply_settings(previous: Settings | None):
                 update_mcp_token, current_token
             )  # TODO overkill, replace with background task
 
+        # update token in a2a server
+        if not previous or current_token != previous["mcp_server_token"]:
+
+            async def update_a2a_token(token: str):
+                from python.helpers.fasta2a_server import DynamicA2AProxy
+
+                DynamicA2AProxy.get_instance().reconfigure(token=token)
+
+            task4 = defer.DeferredTask().start_task(
+                update_a2a_token, current_token
+            )  # TODO overkill, replace with background task
+
 
 def _env_to_dict(data: str):
     env_dict = {}
@@ -1145,9 +1526,9 @@ def set_root_password(password: str):
 def get_runtime_config(set: Settings):
     if runtime.is_dockerized():
         return {
+            "code_exec_ssh_enabled": False,
             "code_exec_ssh_addr": "localhost",
             "code_exec_ssh_port": 22,
-            "code_exec_http_port": 80,
             "code_exec_ssh_user": "root",
         }
     else:
@@ -1159,20 +1540,19 @@ def get_runtime_config(set: Settings):
         if host.endswith("/"):
             host = host[:-1]
         return {
+            "code_exec_ssh_enabled": True,
             "code_exec_ssh_addr": host,
             "code_exec_ssh_port": set["rfc_port_ssh"],
-            "code_exec_http_port": set["rfc_port_http"],
             "code_exec_ssh_user": "root",
         }
 
 
 def create_auth_token() -> str:
+    runtime_id = runtime.get_persistent_id()
     username = dotenv.get_dotenv_value(dotenv.KEY_AUTH_LOGIN) or ""
     password = dotenv.get_dotenv_value(dotenv.KEY_AUTH_PASSWORD) or ""
-    if not username or not password:
-        return "0"
     # use base64 encoding for a more compact token with alphanumeric chars
-    hash_bytes = hashlib.sha256(f"{username}:{password}".encode()).digest()
+    hash_bytes = hashlib.sha256(f"{runtime_id}:{username}:{password}".encode()).digest()
     # encode as base64 and remove any non-alphanumeric chars (like +, /, =)
     b64_token = base64.urlsafe_b64encode(hash_bytes).decode().replace("=", "")
     return b64_token[:16]

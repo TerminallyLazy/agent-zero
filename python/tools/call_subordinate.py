@@ -16,19 +16,27 @@ class Delegation(Tool):
             sub.set_data(Agent.DATA_NAME_SUPERIOR, self.agent)
             self.agent.set_data(Agent.DATA_NAME_SUBORDINATE, sub)
             # set default prompt profile to new agents
-            sub.config.prompts_subdir = "default"
+            sub.config.profile = ""
 
         # add user message to subordinate agent
         subordinate: Agent = self.agent.get_data(Agent.DATA_NAME_SUBORDINATE)
         subordinate.hist_add_user_message(UserMessage(message=message, attachments=[]))
 
         # set subordinate prompt profile if provided, if not, keep original
-        prompt_profile = kwargs.get("prompt_profile")
-        if prompt_profile:
-            subordinate.config.prompts_subdir = prompt_profile
+        agent_profile = kwargs.get("profile")
+        if agent_profile:
+            subordinate.config.profile = agent_profile
 
         # run subordinate monologue
         result = await subordinate.monologue()
 
         # result
         return Response(message=result, break_loop=False)
+
+    def get_log_object(self):
+        return self.agent.context.log.log(
+            type="tool",
+            heading=f"icon://communication {self.agent.agent_name}: Calling Subordinate Agent",
+            content="",
+            kvps=self.args,
+        )

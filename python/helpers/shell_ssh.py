@@ -28,11 +28,20 @@ class SSHInteractiveSession:
         self.last_command = b""
         self.trimmed_command_length = 0  # Initialize trimmed_command_length
 
-    async def connect(self):
-        # try 3 times with wait and then except
+    async def connect(self, keepalive_interval: int = 5):
+        """
+        Establish the SSH connection and start an interactive shell.
+
+        Parameters
+        ----------
+        keepalive_interval : int
+            Interval in **seconds** between keep-alive packets sent by Paramiko.
+            A value ≤ 0 disables Paramiko’s keep-alive feature.
+        """
         errors = 0
         while True:
             try:
+                # --- establish TCP/SSH session ---------------------------------
                 self.client.connect(
                     self.hostname,
                     self.port,
@@ -41,14 +50,25 @@ class SSHInteractiveSession:
                     allow_agent=False,
                     look_for_keys=False,
                 )
-                self.shell = self.client.invoke_shell(width=160, height=48)
-                # self.shell.send(f'PS1="{SSHInteractiveSession.ps1_label}"'.encode())
-                # return
-                while True:  # wait for end of initial output
+
+                # --------- NEW: enable transport-level keep-alives -------------
+                transport = self.client.get_transport()
+                if transport and keepalive_interval > 0:
+                    # sends an SSH_MSG_IGNORE every <keepalive_interval> seconds
+                    transport.set_keepalive(keepalive_interval)
+                # ----------------------------------------------------------------
+
+                # invoke interactive shell
+                self.shell = self.client.invoke_shell(width=100, height=50)
+                self.shell.send("stty -echo\n".encode())  # disable local echo
+
+                # wait for initial prompt/output to settle
+                while True:
                     full, part = await self.read_output()
                     if full and not part:
                         return
                     time.sleep(0.1)
+
             except Exception as e:
                 errors += 1
                 if errors < 3:
@@ -58,18 +78,17 @@ class SSHInteractiveSession:
                         content=f"SSH Connection attempt {errors}...",
                         temp=True,
                     )
-
                     time.sleep(5)
                 else:
                     raise e
 
-    def close(self):
+    async def close(self):
         if self.shell:
             self.shell.close()
         if self.client:
             self.client.close()
 
-    def send_command(self, command: str):
+    async def send_command(self, command: str):
         if not self.shell:
             raise Exception("Shell not connected")
         self.full_output = b""
@@ -100,32 +119,32 @@ class SSHInteractiveSession:
             # data = self.shell.recv(1024)
             data = self.receive_bytes()
 
-            # Trim own command from output
-            if (
-                self.last_command
-                and len(self.last_command) > self.trimmed_command_length
-            ):
-                command_to_trim = self.last_command[self.trimmed_command_length :]
-                data_to_trim = leftover + data
+            # # Trim own command from output
+            # if (
+            #     self.last_command
+            #     and len(self.last_command) > self.trimmed_command_length
+            # ):
+            #     command_to_trim = self.last_command[self.trimmed_command_length :]
+            #     data_to_trim = leftover + data
 
-                trim_com, trim_out = calculate_valid_match_lengths(
-                    command_to_trim,
-                    data_to_trim,
-                    deviation_threshold=8,
-                    deviation_reset=2,
-                    ignore_patterns=[
-                        rb"\x1b\[\?\d{4}[a-zA-Z](?:> )?",  # ANSI escape sequences
-                        rb"\r",  # Carriage return
-                        rb">\s",  # Greater-than symbol
-                    ],
-                    debug=False,
-                )
+            #     trim_com, trim_out = calculate_valid_match_lengths(
+            #         command_to_trim,
+            #         data_to_trim,
+            #         deviation_threshold=8,
+            #         deviation_reset=2,
+            #         ignore_patterns=[
+            #             rb"\x1b\[\?\d{4}[a-zA-Z](?:> )?",  # ANSI escape sequences
+            #             rb"\r",  # Carriage return
+            #             rb">\s",  # Greater-than symbol
+            #         ],
+            #         debug=False,
+            #     )
 
-                leftover = b""
-                if trim_com > 0 and trim_out > 0:
-                    data = data_to_trim[trim_out:]
-                    leftover = data
-                    self.trimmed_command_length += trim_com
+            #     leftover = b""
+            #     if trim_com > 0 and trim_out > 0:
+            #         data = data_to_trim[trim_out:]
+            #         leftover = data
+            #         self.trimmed_command_length += trim_com
 
             partial_output += data
             self.full_output += data
@@ -135,8 +154,8 @@ class SSHInteractiveSession:
         decoded_partial_output = partial_output.decode("utf-8", errors="replace")
         decoded_full_output = self.full_output.decode("utf-8", errors="replace")
 
-        decoded_partial_output = self.clean_string(decoded_partial_output)
-        decoded_full_output = self.clean_string(decoded_full_output)
+        decoded_partial_output = clean_string(decoded_partial_output)
+        decoded_full_output = clean_string(decoded_full_output)
 
         return decoded_full_output, decoded_partial_output
 
@@ -188,26 +207,34 @@ class SSHInteractiveSession:
 
         return data
 
-    def clean_string(self, input_string):
-        # Remove ANSI escape codes
-        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-        cleaned = ansi_escape.sub("", input_string)
+def clean_string(input_string):
+    # Remove ANSI escape codes
+    ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+    cleaned = ansi_escape.sub("", input_string)
 
-        # Replace '\r\n' with '\n'
-        cleaned = cleaned.replace("\r\n", "\n")
+    # remove null bytes
+    cleaned = cleaned.replace("\x00", "")
 
-        # remove leading \r
-        cleaned = cleaned.lstrip("\r")
+    # remove ipython \r\r\n> sequences from the start
+    cleaned = re.sub(r'^[ \r]*(?:\r*\n>[ \r]*)*', '', cleaned)
+    # also remove any amount of '> ' sequences from the start
+    cleaned = re.sub(r'^(>\s*)+', '', cleaned)
 
-        # Split the string by newline characters to process each segment separately
-        lines = cleaned.split("\n")
+    # Replace '\r\n' with '\n'
+    cleaned = cleaned.replace("\r\n", "\n")
 
-        for i in range(len(lines)):
-            # Handle carriage returns '\r' by splitting and taking the last part
-            parts = [part for part in lines[i].split("\r") if part.strip()]
-            if parts:
-                lines[i] = parts[
-                    -1
-                ].rstrip()  # Overwrite with the last part after the last '\r'
+    # remove leading \r and spaces
+    cleaned = cleaned.lstrip("\r ")
 
-        return "\n".join(lines)
+    # Split the string by newline characters to process each segment separately
+    lines = cleaned.split("\n")
+
+    for i in range(len(lines)):
+        # Handle carriage returns '\r' by splitting and taking the last part
+        parts = [part for part in lines[i].split("\r") if part.strip()]
+        if parts:
+            lines[i] = parts[
+                -1
+            ].rstrip()  # Overwrite with the last part after the last '\r'
+
+    return "\n".join(lines)

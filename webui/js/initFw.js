@@ -1,9 +1,14 @@
+import * as initializer from "./initializer.js"
 import * as _modals from "./modals.js";
 import * as _components from "./components.js";
 
-await import("./alpine.min.js");
+// initialize required elements
+await initializer.initialize()
 
-// add x-destroy directive
+// import alpine library
+await import("../vendor/alpine/alpine.min.js");
+
+// add x-destroy directive to alpine
 Alpine.directive(
   "destroy",
   (el, { expression }, { evaluateLater, cleanup }) => {

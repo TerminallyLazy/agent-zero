@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from agent import Agent
+from agent import Agent, LoopData
 from python.helpers.print_style import PrintStyle
 from python.helpers.strings import sanitize_string
 
@@ -13,11 +13,12 @@ class Response:
 
 class Tool:
 
-    def __init__(self, agent: Agent, name: str, method: str | None, args: dict[str,str], message: str, **kwargs) -> None:
+    def __init__(self, agent: Agent, name: str, method: str | None, args: dict[str,str], message: str, loop_data: LoopData | None, **kwargs) -> None:
         self.agent = agent
         self.name = name
         self.method = method
         self.args = args
+        self.loop_data = loop_data
         self.message = message
 
     @abstractmethod
@@ -42,9 +43,9 @@ class Tool:
 
     def get_log_object(self):
         if self.method:
-            heading = f"{self.agent.agent_name}: Using tool '{self.name}:{self.method}'"
+            heading = f"icon://construction {self.agent.agent_name}: Using tool '{self.name}:{self.method}'"
         else:
-            heading = f"{self.agent.agent_name}: Using tool '{self.name}'"
+            heading = f"icon://construction {self.agent.agent_name}: Using tool '{self.name}'"
         return self.agent.context.log.log(type="tool", heading=heading, content="", kvps=self.args)
 
     def nice_key(self, key:str):
