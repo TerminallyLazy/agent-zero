@@ -44,3 +44,7 @@ instruments/**
 agent_history.gif
 
 tests/
+
+*.whl
+*.tar.gz
+*.egg-info/

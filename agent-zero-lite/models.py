@@ -36,7 +36,19 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain.embeddings.base import Embeddings
-from sentence_transformers import SentenceTransformer
+
+# Optional dependency: sentence-transformers (CPU/ML extras)
+try:
+    from sentence_transformers import SentenceTransformer  # type: ignore
+except ImportError:  # pragma: no cover
+    class SentenceTransformer:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "sentence-transformers is not installed. Install extras with\n"
+                "  pip install \"agent-zero-lite[ml]\"\n"
+                "or install it directly:\n"
+                "  pip install sentence-transformers"
+            )
 
 
 # disable extra logging, must be done repeatedly, otherwise browser-use will turn it back on for some reason

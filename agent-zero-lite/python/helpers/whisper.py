@@ -1,10 +1,15 @@
 import base64
 import warnings
-import whisper
 import tempfile
 import asyncio
 from python.helpers import runtime, rfc, settings, files
 from python.helpers.print_style import PrintStyle
+
+# Optional dependency: openai-whisper (audio extra)
+try:
+    import whisper  # type: ignore
+except ImportError as _e:  # pragma: no cover
+    whisper = None  # type: ignore
 
 # Suppress FutureWarning from torch.load
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -23,6 +28,14 @@ async def preload(model_name:str):
         
 async def _preload(model_name:str):
     global _model, _model_name, is_updating_model
+
+    if whisper is None:
+        raise ImportError(
+            "openai-whisper is not installed. Install extras with\n"
+            "  pip install \"agent-zero-lite[audio]\"\n"
+            "or install it directly:\n"
+            "  pip install openai-whisper"
+        )
 
     while is_updating_model:
         await asyncio.sleep(0.1)

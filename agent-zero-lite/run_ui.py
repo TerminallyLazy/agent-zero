@@ -9,7 +9,7 @@ from functools import wraps
 import threading
 from flask import Flask, request, Response, session
 from flask_basicauth import BasicAuth
-import initialize
+import importlib
 from python.helpers import files, mcp_server
 from python.helpers.files import get_abs_path
 from python.helpers import runtime, dotenv, process
@@ -150,7 +150,9 @@ def main():
     
     # Initialize the agent
     try:
-        agent_config = initialize.initialize_agent()
+        # Import lazily to avoid module resolution edge cases in certain installers
+        init_mod = importlib.import_module("initialize")
+        agent_config = init_mod.initialize_agent()  # type: ignore[attr-defined]
         PrintStyle(font_color="green").print("Agent Zero Lite initialized successfully")
     except Exception as e:
         PrintStyle(font_color="red").print(f"Failed to initialize Agent Zero Lite: {e}")

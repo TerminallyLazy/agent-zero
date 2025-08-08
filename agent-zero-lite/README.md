@@ -25,21 +25,40 @@ A lightweight, cross-platform implementation of Agent Zero that maintains core f
 
 ## Quick Start
 
-1. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Install (CPU-only by default):
+```bash
+pip install agent-zero-lite
+```
 
-2. **Configure environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys
-   ```
+- Optional extras:
+  - CPU ML helpers (additional ONNX/Transformers utilities):
+    ```bash
+    pip install "agent-zero-lite[cpu]"
+    ```
+  - Transformers stack (CPU) and ONNX runtime (sentence-transformers included by default):
+    ```bash
+    pip install "agent-zero-lite[ml]"
+    ```
+  - Audio transcription (Whisper, CPU):
+    ```bash
+    pip install "agent-zero-lite[audio]"
+    ```
+  - GPU stack (advanced; choose your CUDA build of torch separately if needed):
+    ```bash
+    pip install "agent-zero-lite[gpu]"
+    # For PyTorch CUDA builds, see: https://pytorch.org/get-started/locally/
+    ```
 
-3. **Start the Web UI:**
-   ```bash
-   python run_ui.py
-   ```
+2. Configure environment:
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+3. Start the Web UI:
+```bash
+python run_ui.py
+```
 
 4. **Open browser:**
    ```
