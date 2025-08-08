@@ -40,3 +40,11 @@ instruments/**
 # Global rule to include .gitkeep files anywhere
 !**/.gitkeep
 agent_history.gif
+
+tests/
+
+.bmad-core/
+.claude/
+CLAUDE.md
+INITIAL.md
+PRPs/
