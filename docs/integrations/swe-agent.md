@@ -25,7 +25,13 @@ The following SWE tools are provided and follow the Tool contract:
     - `install_command` (e.g., "pip install -e .[dev]" or "pnpm install")
     - `test_command` (e.g., "pytest -q" or "pnpm test")
     - `coverage_command` (optional, e.g., "pytest --cov")
-- `swe_code_review`: static analysis planning and findings outline
+- `swe_code_review`: static checks and basic grep-based findings
+  - Args:
+    - `target_paths`: list of paths to scan (default ["." ])
+    - `ruleset` (string, default "default")
+    - `max_findings` (int, default 50)
+    - `run` ("true"/"false", default "true") to execute checks via CodeExecution
+    - `patterns` (list of regex strings) to customize findings
 - `swe_docs`: documentation generator for API/ADR/runbooks
 
 All tools inherit from `python/helpers/tool.py`, return `Response(message, break_loop)`, and integrate with lifecycle logging.
