@@ -1,7 +1,8 @@
 import argparse
 import inspect
+import secrets
 from typing import TypeVar, Callable, Awaitable, Union, overload, cast
-from python.helpers import dotenv, rfc, settings
+from python.helpers import dotenv, rfc, settings, files
 import asyncio
 import threading
 import queue
@@ -12,6 +13,7 @@ R = TypeVar('R')
 parser = argparse.ArgumentParser()
 args = {}
 dockerman = None
+runtime_id = None
 
 
 def initialize():
@@ -38,7 +40,6 @@ def initialize():
             key = key.lstrip("-")
             args[key] = value
 
-
 def get_arg(name: str):
     global args
     return args.get(name, None)
@@ -48,7 +49,7 @@ def has_arg(name: str):
     return name in args
 
 def is_dockerized() -> bool:
-    return get_arg("dockerized")
+    return bool(get_arg("dockerized"))
 
 def is_development() -> bool:
     return not is_dockerized()
@@ -57,6 +58,19 @@ def get_local_url():
     if is_dockerized():
         return "host.docker.internal"
     return "127.0.0.1"
+
+def get_runtime_id() -> str:
+    global runtime_id
+    if not runtime_id:
+        runtime_id = secrets.token_hex(8)   
+    return runtime_id
+
+def get_persistent_id() -> str:
+    id = dotenv.get_dotenv_value("A0_PERSISTENT_RUNTIME_ID")
+    if not id:
+        id = secrets.token_hex(16)
+        dotenv.save_dotenv_value("A0_PERSISTENT_RUNTIME_ID", id)
+    return id
 
 @overload
 async def call_development_function(func: Callable[..., Awaitable[T]], *args, **kwargs) -> T: ...
@@ -68,10 +82,11 @@ async def call_development_function(func: Union[Callable[..., T], Callable[..., 
     if is_development():
         url = _get_rfc_url()
         password = _get_rfc_password()
+        module = files.deabsolute_path(func.__code__.co_filename).replace("/", ".").removesuffix(".py") # __module__ is not reliable
         result = await rfc.call_rfc(
             url=url,
             password=password,
-            module=func.__module__,
+            module=module,
             function_name=func.__name__,
             args=list(args),
             kwargs=kwargs,

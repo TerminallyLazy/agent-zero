@@ -28,8 +28,14 @@ import uuid
 from python.helpers import knowledge_import
 from python.helpers.log import Log, LogItem
 from enum import Enum
-from agent import Agent, ModelConfig
+from agent import Agent
 import models
+import logging
+from simpleeval import simple_eval
+
+
+# Raise the log level so WARNING messages aren't shown
+logging.getLogger("langchain_core.vectorstores.base").setLevel(logging.ERROR)
 
 
 class MyFaiss(FAISS):
@@ -93,7 +99,7 @@ class Memory:
     @staticmethod
     def initialize(
         log_item: LogItem | None,
-        model_config: ModelConfig,
+        model_config: models.ModelConfig,
         memory_subdir: str,
         in_memory=False,
     ) -> tuple[MyFaiss, bool]:
@@ -117,14 +123,13 @@ class Memory:
             os.makedirs(em_dir, exist_ok=True)
             store = LocalFileStore(em_dir)
 
-        embeddings_model = models.get_model(
-            models.ModelType.EMBEDDING,
+        embeddings_model = models.get_embedding_model(
             model_config.provider,
             model_config.name,
-            **model_config.kwargs,
+            **model_config.build_kwargs(),
         )
         embeddings_model_id = files.safe_file_name(
-            model_config.provider.name + "_" + model_config.name
+            model_config.provider + "_" + model_config.name
         )
 
         # here we setup the embeddings model with the chosen cache storage
@@ -155,7 +160,7 @@ class Memory:
             if files.exists(emb_set_file):
                 embedding_set = json.loads(files.read_file(emb_set_file))
                 if (
-                    embedding_set["model_provider"] == model_config.provider.name
+                    embedding_set["model_provider"] == model_config.provider
                     and embedding_set["model_name"] == model_config.name
                 ):
                     # model matches
@@ -195,7 +200,7 @@ class Memory:
                 meta_file_path,
                 json.dumps(
                     {
-                        "model_provider": model_config.provider.name,
+                        "model_provider": model_config.provider,
                         "model_name": model_config.name,
                     }
                 ),
@@ -295,11 +300,6 @@ class Memory:
     ):
         comparator = Memory._get_comparator(filter) if filter else None
 
-        # rate limiter
-        await self.agent.rate_limiter(
-            model_config=self.agent.config.embeddings_model, input=query
-        )
-
         return await self.db.asearch(
             query,
             search_type="similarity_score_threshold",
@@ -344,7 +344,9 @@ class Memory:
 
     async def delete_documents_by_ids(self, ids: list[str]):
         # aget_by_ids is not yet implemented in faiss, need to do a workaround
-        rem_docs = await self.db.aget_by_ids(ids)  # existing docs to remove (prevents error)
+        rem_docs = await self.db.aget_by_ids(
+            ids
+        )  # existing docs to remove (prevents error)
         if rem_docs:
             rem_ids = [doc.metadata["id"] for doc in rem_docs]  # ids to remove
             await self.db.adelete(ids=rem_ids)
@@ -369,12 +371,6 @@ class Memory:
                 if not doc.metadata.get("area", ""):
                     doc.metadata["area"] = Memory.Area.MAIN.value
 
-            # rate limiter
-            docs_txt = "".join(self.format_docs_plain(docs))
-            await self.agent.rate_limiter(
-                model_config=self.agent.config.embeddings_model, input=docs_txt
-            )
-
             await self.db.aadd_documents(documents=docs, ids=ids)
             self._save_db()  # persist
         return ids
@@ -391,9 +387,10 @@ class Memory:
     def _get_comparator(condition: str):
         def comparator(data: dict[str, Any]):
             try:
-                return eval(condition, {}, data)
+                result = simple_eval(condition, names=data)
+                return result
             except Exception as e:
-                # PrintStyle.error(f"Error evaluating condition: {e}")
+                PrintStyle.error(f"Error evaluating condition: {e}")
                 return False
 
         return comparator

@@ -1,11 +1,7 @@
-import time
-from datetime import datetime
-from python.helpers.api import ApiHandler
-from flask import Request, Response
+from python.helpers.api import ApiHandler, Request, Response
 
-from agent import AgentContext
+from agent import AgentContext, AgentContextType
 
-from python.helpers import persist_chat
 from python.helpers.task_scheduler import TaskScheduler
 from python.helpers.localization import Localization
 from python.helpers.dotenv import get_dotenv_value
@@ -14,8 +10,9 @@ from python.helpers.dotenv import get_dotenv_value
 class Poll(ApiHandler):
 
     async def process(self, input: dict, request: Request) -> dict | Response:
-        ctxid = input.get("context", None)
+        ctxid = input.get("context", "")
         from_no = input.get("log_from", 0)
+        notifications_from = input.get("notifications_from", 0)
 
         # Get timezone from input (default to dotenv default or UTC if not provided)
         timezone = input.get("timezone", get_dotenv_value("DEFAULT_USER_TIMEZONE", "UTC"))
@@ -25,6 +22,10 @@ class Poll(ApiHandler):
         context = self.get_context(ctxid)
 
         logs = context.log.output(start=from_no)
+
+        # Get notifications from global notification manager
+        notification_manager = AgentContext.get_notification_manager()
+        notifications = notification_manager.output(start=notifications_from)
 
         # loop AgentContext._contexts
 
@@ -47,6 +48,11 @@ class Poll(ApiHandler):
             if ctx.id in processed_contexts:
                 continue
 
+            # Skip BACKGROUND contexts as they should be invisible to users
+            if ctx.type == AgentContextType.BACKGROUND:
+                processed_contexts.add(ctx.id)
+                continue
+
             # Create the base context data that will be returned
             context_data = ctx.serialize()
 
@@ -65,7 +71,7 @@ class Poll(ApiHandler):
                     # Add task details to context_data with the same field names
                     # as used in scheduler endpoints to maintain UI compatibility
                     context_data.update({
-                        "task_name": task_details.get("name"), # name is for context, task_name for the task name
+                        "task_name": task_details.get("name"),  # name is for context, task_name for the task name
                         "uuid": task_details.get("uuid"),
                         "state": task_details.get("state"),
                         "type": task_details.get("type"),
@@ -105,4 +111,7 @@ class Poll(ApiHandler):
             "log_progress": context.log.progress,
             "log_progress_active": context.log.progress_active,
             "paused": context.paused,
+            "notifications": notifications,
+            "notifications_guid": notification_manager.guid,
+            "notifications_version": len(notification_manager.updates),
         }

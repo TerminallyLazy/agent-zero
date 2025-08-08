@@ -36,12 +36,14 @@ class VectorDB:
     _cached_embeddings: dict[str, CacheBackedEmbeddings] = {}
 
     @staticmethod
-    def _get_embeddings(agent: Agent):
+    def _get_embeddings(agent: Agent, cache: bool = True):
         model = agent.get_embedding_model()
+        if not cache:
+            return model  # return raw embeddings if cache is False
         namespace = getattr(
             model,
-            "model",
-            getattr(model, "model_name", "default"),
+            "model_name",
+            "default",
         )
         if namespace not in VectorDB._cached_embeddings:
             store = InMemoryByteStore()
@@ -54,9 +56,10 @@ class VectorDB:
             )
         return VectorDB._cached_embeddings[namespace]
 
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent, cache: bool = True):
         self.agent = agent
-        self.embeddings = self._get_embeddings(agent)
+        self.cache = cache  # store cache preference
+        self.embeddings = self._get_embeddings(agent, cache=cache)
         self.index = faiss.IndexFlatIP(len(self.embeddings.embed_query("example")))
 
         self.db = MyFaiss(
@@ -73,11 +76,6 @@ class VectorDB:
         self, query: str, limit: int, threshold: float, filter: str = ""
     ):
         comparator = get_comparator(filter) if filter else None
-
-        # rate limiter
-        await self.agent.rate_limiter(
-            model_config=self.agent.config.embeddings_model, input=query
-        )
 
         return await self.db.asearch(
             query,
@@ -105,12 +103,6 @@ class VectorDB:
         if ids:
             for doc, id in zip(docs, ids):
                 doc.metadata["id"] = id  # add ids to documents metadata
-
-            # rate limiter
-            docs_txt = "".join(format_docs_plain(docs))
-            await self.agent.rate_limiter(
-                model_config=self.agent.config.embeddings_model, input=docs_txt
-            )
 
             self.db.add_documents(documents=docs, ids=ids)
         return ids
