@@ -190,3 +190,66 @@ Use Delegation to split planner/programmer/reviewer flows while keeping the swe-
 ```
 
 You can follow up with additional Delegation calls for programmer and reviewer roles, each time setting "prompt_profile": "swe-agent" and providing the appropriate role-specific message context.
+### Autonomous and Parallel Orchestration
+
+Use the swe_orchestrator tool to run multiple subordinate flows or safe terminal tasks concurrently with bounded concurrency.
+
+Args:
+- tasks: list of task objects
+  - Subordinate task:
+    - kind: "subordinate"
+    - message: string
+    - prompt_profile: optional, default "swe-agent"
+    - timeout: seconds, default 600
+    - retries: integer, default 0
+  - Terminal task:
+    - kind: "terminal"
+    - code: read-only shell command
+    - timeout: seconds, default 600
+- max_parallel: integer, default 3
+- stop_on_error: "true"/"false", default "false"
+- allow_write_tools: "true"/"false", default "false" (write-like terminal commands are denied unless true)
+- dry_run: "true"/"false", default "true"
+- fasta2a_enabled: "true"/"false", default "false" (reserved for future inter-agent servers)
+
+Examples:
+
+Run two planner flows in parallel:
+```json
+{
+  "thoughts": ["Run planner flows in parallel for backend and frontend"],
+  "tool_name": "swe_orchestrator",
+  "tool_args": {
+    "max_parallel": 2,
+    "stop_on_error": "false",
+    "dry_run": "false",
+    "tasks": [
+      { "kind": "subordinate", "prompt_profile": "swe-agent", "message": "Planner: Analyze backend/ and propose a 3-step plan.", "timeout": 600 },
+      { "kind": "subordinate", "prompt_profile": "swe-agent", "message": "Planner: Analyze frontend/ and propose a 3-step plan.", "timeout": 600 }
+    ]
+  }
+}
+```
+
+Parallel static checks (read-only):
+```json
+{
+  "thoughts": ["Run grep-based checks across src and tests in parallel"],
+  "tool_name": "swe_orchestrator",
+  "tool_args": {
+    "max_parallel": 3,
+    "dry_run": "false",
+    "tasks": [
+      { "kind": "terminal", "code": "rg -n -e 'TODO|FIXME' src || true", "timeout": 180 },
+      { "kind": "terminal", "code": "rg -n -e 'password\\\\s*=' tests || true", "timeout": 180 }
+    ]
+  }
+}
+```
+
+Safety:
+- Non-destructive by default. Terminal tasks that appear to write or delete are denied unless allow_write_tools is set to "true". Prefer using swe_code_gen for writes.
+- Use conservative max_parallel values (2–4) to avoid resource contention.
+
+Inter-agent servers:
+- fasta2a integration is stubbed. Set fasta2a_enabled once an endpoint and auth are configured; otherwise, the tool uses in-process asyncio orchestration.
