@@ -581,6 +581,114 @@ globalThis.pauseAgent = async function (paused) {
   }
 };
 
+globalThis.takeBrowserControl = async function () {
+  try {
+    // Get browser control information
+    const resp = await fetchApi("/browser_control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context }),
+    });
+    
+    const data = await resp.json();
+    
+    if (data.error) {
+      globalThis.toastError(`Browser Control Error: ${data.error}`);
+      return;
+    }
+    
+    if (!data.devtools_link) {
+      globalThis.toastError("DevTools link not available");
+      return;
+    }
+    
+    // Call browser agent with takeover parameter
+    const message = "Take control of browser";
+    const takeoverResp = await sendJsonData("/message", {
+      text: `!browser "${message}" takeover=true`,
+      context: context,
+    });
+    
+    // Show instructions based on available control options
+    let instructions = "Browser control activated!\n\n";
+    let linkToCopy = null;
+    
+    if (data.control_options && data.control_options.length > 0) {
+      data.control_options.forEach((option, index) => {
+        if (option.type === "cdp") {
+          instructions += `🌐 DevTools Control:\n`;
+          instructions += `1. Copy this link: ${option.devtools_link}\n`;
+          instructions += `2. Paste it into Chrome's address bar\n`;
+          instructions += `3. Use DevTools to inspect and interact\n\n`;
+          if (!linkToCopy) linkToCopy = option.devtools_link;
+        } else if (option.type === "vnc") {
+          instructions += `🖥️ VNC Control:\n`;
+          instructions += `1. Connect VNC client to localhost:${option.display_port}\n`;
+          instructions += `2. Or use web VNC if available\n`;
+          instructions += `3. Interact directly with browser window\n\n`;
+        }
+      });
+    } else {
+      // Fallback for backward compatibility
+      if (data.devtools_link) {
+        instructions += `To take control:\n1. Copy this DevTools link: ${data.devtools_link}\n2. Paste it into Chrome's address bar\n3. Use DevTools to inspect and interact with the page\n\n`;
+        linkToCopy = data.devtools_link;
+      } else if (data.vnc_url) {
+        instructions += `VNC Control:\n1. Connect VNC client to ${data.vnc_url}\n2. Interact directly with browser window\n\n`;
+      }
+    }
+    
+    instructions += "When finished, click Resume to continue automation";
+    instructions += `\n\nEnvironment: ${data.environment || 'unknown'}`;
+    
+    globalThis.toastInfo(instructions);
+    
+    // Copy primary link to clipboard if possible
+    if (linkToCopy && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(linkToCopy);
+        globalThis.toastSuccess("Control link copied to clipboard!");
+      } catch (e) {
+        console.log("Could not copy to clipboard:", e);
+      }
+    }
+    
+  } catch (e) {
+    globalThis.toastFetchError("Error taking browser control", e);
+  }
+};
+
+// Check browser control availability
+globalThis.updateBrowserControlStatus = async function () {
+  try {
+    const resp = await fetchApi("/browser_control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context }),
+    });
+    
+    const data = await resp.json();
+    
+    // Update the browserControlActive state
+    const inputSection = document.getElementById("input-section");
+    if (inputSection && inputSection._x_dataStack) {
+      const alpineData = inputSection._x_dataStack[0];
+      if (alpineData) {
+        alpineData.browserControlActive = data.active && !data.error;
+      }
+    }
+  } catch (e) {
+    // Silently fail - browser control not available
+    const inputSection = document.getElementById("input-section");
+    if (inputSection && inputSection._x_dataStack) {
+      const alpineData = inputSection._x_dataStack[0];
+      if (alpineData) {
+        alpineData.browserControlActive = false;
+      }
+    }
+  }
+};
+
 globalThis.resetChat = async function (ctxid = null) {
   try {
     const resp = await sendJsonData("/chat_reset", {
@@ -1077,6 +1185,9 @@ async function startPolling() {
 }
 
 document.addEventListener("DOMContentLoaded", startPolling);
+
+// Check browser control status periodically
+setInterval(updateBrowserControlStatus, 2000);
 
 // Setup event handlers once the DOM is fully loaded
 document.addEventListener("DOMContentLoaded", function () {

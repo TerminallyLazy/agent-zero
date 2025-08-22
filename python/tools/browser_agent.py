@@ -1,5 +1,7 @@
 import asyncio
 import time
+import os
+import subprocess
 from typing import Optional, cast
 from agent import Agent, InterventionException
 from pathlib import Path
@@ -29,20 +31,108 @@ class State:
         self.use_agent: Optional[browser_use.Agent] = None
         self.secrets_dict: Optional[dict[str, str]] = None
         self.iter_no = 0
+        self.ws_endpoint: Optional[str] = None
+        self.vnc_url: Optional[str] = None
+        self.display_port: Optional[int] = None
+        self.is_docker = self._detect_docker_environment()
 
     def __del__(self):
         self.kill_task()
+
+    def _detect_docker_environment(self) -> bool:
+        """Detect if running inside Docker container"""
+        try:
+            # Check for common Docker indicators
+            if os.path.exists('/.dockerenv'):
+                return True
+            if os.path.exists('/proc/1/cgroup'):
+                with open('/proc/1/cgroup', 'r') as f:
+                    content = f.read()
+                    if 'docker' in content or 'containerd' in content:
+                        return True
+            return False
+        except Exception:
+            return False
+
+    def _setup_virtual_display(self) -> Optional[int]:
+        """Setup virtual display for headless Docker environment"""
+        if not self.is_docker:
+            return None
+            
+        try:
+            # Find available display port
+            for display_num in range(1, 100):
+                display_port = 5900 + display_num
+                # Check if port is available
+                result = subprocess.run(['netstat', '-ln'], 
+                                      capture_output=True, text=True)
+                if f':{display_port} ' not in result.stdout:
+                    # Start Xvfb on this display
+                    subprocess.Popen([
+                        'Xvfb', f':{display_num}', 
+                        '-screen', '0', '1920x1080x24',
+                        '-ac', '+extension', 'GLX'
+                    ])
+                    
+                    # Start x11vnc for remote access
+                    subprocess.Popen([
+                        'x11vnc', '-display', f':{display_num}',
+                        '-rfbport', str(display_port),
+                        '-forever', '-shared', '-nopw'
+                    ])
+                    
+                    # Set DISPLAY environment variable
+                    os.environ['DISPLAY'] = f':{display_num}'
+                    
+                    PrintStyle().print(f"Virtual display started on :{display_num}, VNC port {display_port}")
+                    return display_port
+            
+            PrintStyle().warning("Could not find available display port")
+            return None
+            
+        except Exception as e:
+            PrintStyle().warning(f"Failed to setup virtual display: {e}")
+            return None
 
     async def _initialize(self):
         if self.browser_session:
             return
 
+        # Setup virtual display for Docker environment
+        if self.is_docker:
+            self.display_port = self._setup_virtual_display()
+            if self.display_port:
+                self.vnc_url = f"vnc://localhost:{self.display_port}"
+
         # for some reason we need to provide exact path to headless shell, otherwise it looks for headed browser
         pw_binary = ensure_playwright_binary()
 
+        # Configure browser args based on environment
+        browser_args = ["--remote-debugging-port=0"]  # Always enable CDP
+        
+        if self.is_docker:
+            # Docker-specific args
+            browser_args.extend([
+                "--no-sandbox",
+                "--disable-dev-shm-usage", 
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding"
+            ])
+            # Run headful if we have virtual display, headless otherwise
+            headless_mode = self.display_port is None
+            if not headless_mode:
+                browser_args.append("--start-maximized")
+        else:
+            # Local development - can run headful or headless
+            headless_mode = True
+            browser_args.append("--headless=new")
+
         self.browser_session = browser_use.BrowserSession(
             browser_profile=browser_use.BrowserProfile(
-                headless=True,
+                headless=headless_mode,
                 disable_security=True,
                 chromium_sandbox=False,
                 accept_downloads=True,
@@ -53,9 +143,9 @@ class State:
                 minimum_wait_page_load_time=1.0,
                 wait_for_network_idle_page_load_time=2.0,
                 maximum_wait_page_load_time=10.0,
-                screen={"width": 1024, "height": 2048},
-                viewport={"width": 1024, "height": 2048},
-                args=["--headless=new"],
+                screen={"width": 1920, "height": 1080},
+                viewport={"width": 1920, "height": 1080},
+                args=browser_args,
                 # Use a unique user data directory to avoid conflicts
                 user_data_dir=str(
                     Path.home()
@@ -68,6 +158,37 @@ class State:
         )
 
         await self.browser_session.start() if self.browser_session else None
+        
+        # Capture CDP WebSocket endpoint after browser starts
+        if self.browser_session and self.browser_session.browser_context:
+            browser = self.browser_session.browser_context.browser
+            # Get the WebSocket endpoint for DevTools connection
+            try:
+                # Try multiple approaches to get CDP endpoint
+                if hasattr(browser, '_connection') and hasattr(browser._connection, '_transport'):
+                    self.ws_endpoint = getattr(browser._connection._transport, '_ws_endpoint', None)
+                elif hasattr(browser, 'new_browser_ws_endpoint'):
+                    self.ws_endpoint = browser.new_browser_ws_endpoint()
+                else:
+                    # Try to extract from browser debug options if available
+                    if hasattr(browser, '_impl_obj') and hasattr(browser._impl_obj, '_connection'):
+                        conn = browser._impl_obj._connection
+                        if hasattr(conn, '_transport') and hasattr(conn._transport, '_ws_endpoint'):
+                            self.ws_endpoint = conn._transport._ws_endpoint
+                        else:
+                            self.ws_endpoint = None
+                    else:
+                        self.ws_endpoint = None
+                        
+                if self.ws_endpoint:
+                    PrintStyle().print(f"CDP WebSocket endpoint captured: {self.ws_endpoint}")
+                else:
+                    PrintStyle().warning("CDP WebSocket endpoint not available - browser control may not work")
+                    
+            except (AttributeError, Exception) as e:
+                PrintStyle().warning(f"Unable to capture CDP WebSocket endpoint: {e}")
+                self.ws_endpoint = None
+        
         # self.override_hooks()
 
         # Add init script to the browser session
@@ -184,13 +305,106 @@ class State:
             return await self.use_agent.browser_session.get_selector_map()
         return {}
 
+    async def hand_over_control(self):
+        """
+        Pause browser_use.Agent and expose control options for manual interaction.
+        """
+        # Prepare control options
+        control_options = []
+        msg_parts = ["🔎 Manual browser control requested.\n"]
+        
+        # CDP Control (for local development and Chrome DevTools)
+        if self.ws_endpoint:
+            ws_path = self.ws_endpoint.replace("ws://", "").replace("wss://", "")
+            devtools_link = f"chrome-devtools://devtools/bundled/inspector.html?ws={ws_path}"
+            control_options.append({
+                "type": "cdp",
+                "devtools_link": devtools_link,
+                "ws_endpoint": self.ws_endpoint
+            })
+            msg_parts.extend([
+                f"🌐 **DevTools Control (Recommended)**:",
+                f"DevTools Link: {devtools_link}",
+                "",
+                "To use DevTools:",
+                "1. Copy the DevTools link above",
+                "2. Paste it into Chrome's address bar", 
+                "3. Use DevTools to inspect and interact with the page",
+                ""
+            ])
+        
+        # VNC Control (for Docker containers)
+        if self.vnc_url and self.display_port:
+            control_options.append({
+                "type": "vnc", 
+                "vnc_url": self.vnc_url,
+                "display_port": self.display_port
+            })
+            msg_parts.extend([
+                f"🖥️ **VNC Control (Docker/Headless)**:",
+                f"VNC URL: {self.vnc_url}",
+                f"VNC Port: {self.display_port}",
+                "",
+                "To use VNC:",
+                f"1. Connect with VNC client to localhost:{self.display_port}",
+                "2. Or use web VNC at http://localhost:6080/vnc.html (if noVNC is setup)",
+                "3. Interact directly with the browser window",
+                ""
+            ])
+        
+        if not control_options:
+            msg = "❌ Browser control not available - no CDP or VNC endpoints found"
+            PrintStyle().warning(msg)
+            return {"error": msg}
+        
+        msg_parts.extend([
+            "4. When finished, click the **Resume** button to continue automation",
+            "",
+            f"🔍 Environment: {'Docker' if self.is_docker else 'Local'}"
+        ])
+        
+        msg = "\n".join(msg_parts)
+        
+        # Pause the agent - this will block wait_if_paused() calls
+        self.agent.context.paused = True
+        self.agent.hist_add_ai_response(msg)
+        
+        result = {
+            "message": msg,
+            "control_options": control_options,
+            "environment": "docker" if self.is_docker else "local"
+        }
+        
+        # Add primary control method for backward compatibility
+        if control_options:
+            primary = control_options[0]
+            if primary["type"] == "cdp":
+                result["devtools_link"] = primary["devtools_link"]
+                result["ws_endpoint"] = primary["ws_endpoint"]
+            elif primary["type"] == "vnc":
+                result["vnc_url"] = primary["vnc_url"]
+                result["display_port"] = primary["display_port"]
+        
+        return result
+
 
 class BrowserAgent(Tool):
 
-    async def execute(self, message="", reset="", **kwargs):
+    async def execute(self, message="", reset="", takeover="", **kwargs):
         self.guid = str(uuid.uuid4())
         reset = str(reset).lower().strip() == "true"
+        takeover = str(takeover).lower().strip() == "true"
         await self.prepare_state(reset=reset)
+        
+        # Check if user wants to take manual control
+        if takeover and self.state:
+            control_result = await self.state.hand_over_control()
+            if control_result:
+                return Response(
+                    message=control_result["message"],
+                    break_loop=False,
+                )
+        
         task = self.state.start_task(message) if self.state else None
 
         # wait for browser agent to finish and update progress with timeout

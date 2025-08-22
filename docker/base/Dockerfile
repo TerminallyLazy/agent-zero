@@ -30,6 +30,9 @@ RUN bash /ins/install_python.sh
 # install searxng
 RUN bash /ins/install_searxng.sh
 
+# install noVNC for browser control
+RUN bash /ins/install_novnc.sh
+
 # configure ssh
 RUN bash /ins/configure_ssh.sh
 
