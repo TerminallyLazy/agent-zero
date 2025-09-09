@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="index.css">
     <link rel="stylesheet" href="css/messages.css">
     <link rel="stylesheet" href="components/messages/action-buttons/simple-action-buttons.css">
+    <link rel="stylesheet" href="components/welcome/welcome-screen.css">
     <link rel="stylesheet" href="css/toast.css">
     <link rel="stylesheet" href="css/settings.css">
     <link rel="stylesheet" href="css/file_browser.css">
@@ -175,7 +176,7 @@
                         </svg>Settings</button>
                     <button class="config-button" id="memory-dash"
                         @click="openModal('settings/memory/memory-dashboard.html');">Memory</button>
-
+                    <button class="config-button" id="dashboard" @click="deselectChat()">Dashboard</button>
 
                 </div>
 
@@ -364,7 +365,18 @@
                 <!-- Notification Toggle positioned next to time-date -->
                 <x-component path="notifications/notification-icons.html"></x-component>
             </div>
-            <div id="chat-history">
+            
+            <!-- Welcome Screen Component -->
+            <div x-data="{ get hasContext() { return globalThis.getContext && globalThis.getContext(); } }" 
+                 x-show="!hasContext" 
+                 id="welcome-screen-container">
+                <x-component path="welcome/welcome-screen.html"></x-component>
+            </div>
+            
+            <!-- Chat History -->
+            <div x-data="{ get hasContext() { return globalThis.getContext && globalThis.getContext(); } }" 
+                 x-show="hasContext" 
+                 id="chat-history">
             </div>
 
             <!-- NEW: Toast Stack Component -->
@@ -1752,6 +1764,7 @@
 
     <!-- Register Service Worker for offline support and caching -->
     <script>
+<<<<<<< HEAD
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('js/sw.js').then(registration => {
@@ -1761,6 +1774,17 @@
                 });
             });
         }
+=======
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('js/sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+>>>>>>> ad28629 (  Add welcome screen component with dashboard functionality)
     </script>
 
 </body>
