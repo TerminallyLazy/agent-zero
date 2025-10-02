@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="index.css">
     <link rel="stylesheet" href="css/messages.css">
     <link rel="stylesheet" href="components/messages/action-buttons/simple-action-buttons.css">
-    <link rel="stylesheet" href="components/welcome/welcome-screen.css">
     <link rel="stylesheet" href="css/toast.css">
     <link rel="stylesheet" href="css/settings.css">
     <link rel="stylesheet" href="css/file_browser.css">
@@ -365,28 +364,20 @@
                 <!-- Notification Toggle positioned next to time-date -->
                 <x-component path="notifications/notification-icons.html"></x-component>
             </div>
-            
+
             <!-- Welcome Screen Component -->
-            <div id="welcome-screen-container"
-                 x-data="{ get isVisible() { return $store.welcomeStore.isVisible; } }"
-                 x-show="isVisible"
-                 x-transition:leave="transition ease-out duration-700"
-                 x-transition:leave-start="opacity-100 transform translate-y-0"
-                 x-transition:leave-end="opacity-0 transform -translate-y-full">
+            <div x-data x-show="$store.welcomeStore && $store.welcomeStore.isVisible">
                 <x-component path="welcome/welcome-screen.html"></x-component>
             </div>
 
             <!-- Chat History -->
-            <div x-data="{ get isVisible() { return $store.welcomeStore.isVisible; } }"
-                 x-show="!isVisible"
-                 id="chat-history">
-            </div>
+            <div id="chat-history" x-data x-show="!$store.welcomeStore || !$store.welcomeStore.isVisible"></div>
 
                             <!-- NEW: Toast Stack Component -->
                             <div style="position: relative; height: 0;">
                                 <x-component path="notifications/notification-toast-stack.html"></x-component>
                             </div>
-        
+
                             <div id="toast" class="toast">
                                 <div class="toast__content">
                                     <div class="toast__title"></div>
@@ -396,11 +387,11 @@
                                 <button class="toast__copy" style="display: none;">Copy</button>
                                 <button class="toast__close">Close</button>
                             </div>
-        
+
                             <div id="input-section" x-data="{
                                 paused: false
                             }">
-        
+
                             <div id="progress-bar-box">
                                 <h4 id="progress-bar-h">
                                     <span id="progress-bar-i">|></span><span id="progress-bar"></span>

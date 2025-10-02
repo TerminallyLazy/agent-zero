@@ -1,21 +1,23 @@
 import { createStore } from "/js/AlpineStore.js";
+import { store as contextStore } from "/components/chat/context/context-store.js";
 
 const model = {
   // State
   isVisible: true,
 
   init() {
-    this.initialize();
-  },
-
-  initialize() {
     // Initialize visibility based on current context
     this.updateVisibility();
+
+    // Watch for context changes with faster polling for immediate response
+    setInterval(() => {
+      this.updateVisibility();
+    }, 50); // 50ms for very responsive updates
   },
 
   // Update visibility based on current context
   updateVisibility() {
-    const hasContext = !!globalThis.getContext();
+    const hasContext = !!(globalThis.getContext && globalThis.getContext());
     this.isVisible = !hasContext;
   },
 
@@ -29,34 +31,29 @@ const model = {
     this.isVisible = true;
   },
 
-  // Check if dark mode is active
-  get isDarkMode() {
-    return document.body.classList.contains('dark-mode');
-  },
-
   // Execute an action by ID
   executeAction(actionId) {
-    switch(actionId) {
-      case 'new-chat':
+    switch (actionId) {
+      case "new-chat":
         if (globalThis.newChat) {
           globalThis.newChat();
         }
         break;
-      case 'settings':
+      case "settings":
         // Open settings modal
-        const settingsButton = document.getElementById('settings');
+        const settingsButton = document.getElementById("settings");
         if (settingsButton) {
           settingsButton.click();
         }
         break;
-      case 'website':
-        window.open('https://agent-zero.ai', '_blank');
+      case "website":
+        window.open("https://agent-zero.ai", "_blank");
         break;
-      case 'github':
-        window.open('https://github.com/agent0ai/agent-zero', '_blank');
+      case "github":
+        window.open("https://github.com/agent0ai/agent-zero", "_blank");
         break;
     }
-  }
+  },
 };
 
 // Create and export the store
