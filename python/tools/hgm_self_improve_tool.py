@@ -105,18 +105,316 @@ Metadata saved to: {metadata_file}
         )
 
     async def _expand(self) -> Response:
-        """Create new agent variant from promising node"""
-        # Stub for future implementation
+        """
+        Create new agent variant from promising node
+
+        Process:
+        1. Get candidate nodes (mean_utility > 0)
+        2. Use Thompson Sampling to select parent
+        3. Generate child via HGMUtils.sample_child()
+        4. Add child to tree structure
+        5. Update metadata
+        """
+        # Get HGM state from agent data
+        nodes: Dict[int, TreeNode] = self.agent.get_data('hgm_nodes')
+        if nodes is None:
+            return Response(
+                message="HGM system not initialized. Run with operation='initialize' first.",
+                break_loop=False
+            )
+
+        config = self.agent.get_data('hgm_config') or {}
+        output_dir = self.agent.get_data('hgm_output_dir')
+
+        # Get configuration parameters
+        alpha = config.get('alpha', 1.0)
+        beta = config.get('beta', 1.0)
+        cool_down = config.get('cool_down', True)
+        n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
+        max_task_evals = config.get('max_task_evals', 1000)
+
+        # Filter candidate nodes (must have mean_utility > 0)
+        candidate_nodes = [node for node in nodes.values() if node.mean_utility > 0]
+
+        if not candidate_nodes:
+            # No candidates yet, use root node
+            candidate_nodes = [nodes[0]]
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Expand - Node Selection",
+            content=f"Found {len(candidate_nodes)} candidate nodes for expansion"
+        )
+
+        # Prepare evaluations for Thompson Sampling
+        evaluations = [
+            node.get_descendant_evals(num_pseudo=10)
+            for node in candidate_nodes
+        ]
+
+        # Use Thompson Sampling to select parent node
+        selected_idx = thompson_sample(
+            evaluations=evaluations,
+            alpha=alpha,
+            beta=beta,
+            cool_down=cool_down,
+            n_task_evals=n_task_evals,
+            max_task_evals=max_task_evals
+        )
+
+        parent_node = candidate_nodes[selected_idx]
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Expand - Parent Selected",
+            content=f"Selected node {parent_node.node_id} as parent (mean utility: {parent_node.mean_utility:.3f})"
+        )
+
+        # Initialize HGMUtils
+        from python.helpers.hgm_utils import HGMUtils
+
+        git_dir = self.args.get('git_dir', os.getcwd())
+        base_commit = self.args.get('base_commit', 'HEAD')
+        total_tasks = self.args.get('total_tasks', [])
+
+        hgm_utils = HGMUtils(
+            agent=self.agent,
+            output_dir=output_dir,
+            git_dir=git_dir,
+            base_commit=base_commit,
+            total_tasks=total_tasks
+        )
+
+        # Generate child agent version
+        new_commit_id, child_node_id = await hgm_utils.sample_child(
+            parent_node=parent_node,
+            max_attempts=config.get('max_child_attempts', 3)
+        )
+
+        if new_commit_id is None or child_node_id is None:
+            return Response(
+                message=f"Failed to generate child from node {parent_node.node_id} after {config.get('max_child_attempts', 3)} attempts",
+                break_loop=False
+            )
+
+        # Create new child node
+        child_node = TreeNode(
+            commit_id=new_commit_id,
+            parent_id=parent_node.commit_id,
+            node_id=child_node_id
+        )
+
+        # Add child to parent's children list
+        parent_node.add_child(child_node)
+
+        # Update nodes dictionary
+        nodes[child_node_id] = child_node
+        self.agent.set_data('hgm_nodes', nodes)
+
+        # Update next node ID
+        self.agent.set_data('hgm_next_node_id', child_node_id + 1)
+
+        # Save tree metadata
+        metadata_file = os.path.join(output_dir, 'hgm_metadata.json')
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        metadata['total_nodes'] = len(nodes)
+        metadata['last_expand'] = {
+            'parent_node_id': parent_node.node_id,
+            'child_node_id': child_node_id,
+            'commit_id': new_commit_id,
+            'timestamp': time.time()
+        }
+
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Expand - Success",
+            content=f"Created child node {child_node_id} from parent {parent_node.node_id}"
+        )
+
         return Response(
-            message="Expand operation not yet implemented",
+            message=f"""Successfully expanded from node {parent_node.node_id}
+
+Parent node: {parent_node}
+Child node:  {child_node}
+New commit:  {new_commit_id}
+
+Total nodes in tree: {len(nodes)}
+""",
             break_loop=False
         )
 
     async def _evaluate(self) -> Response:
-        """Evaluate agent on a task"""
-        # Stub for future implementation
+        """
+        Evaluate agent on a task
+
+        Process:
+        1. Get nodes with available tasks
+        2. Use Thompson Sampling to select node
+        3. Select an available task
+        4. Evaluate via HGMUtils.eval_agent()
+        5. Update utility measures
+        6. Update metadata
+        """
+        # Get HGM state from agent data
+        nodes: Dict[int, TreeNode] = self.agent.get_data('hgm_nodes')
+        if nodes is None:
+            return Response(
+                message="HGM system not initialized. Run with operation='initialize' first.",
+                break_loop=False
+            )
+
+        config = self.agent.get_data('hgm_config') or {}
+        output_dir = self.agent.get_data('hgm_output_dir')
+        submitted_ids = self.agent.get_data('hgm_submitted_ids') or set()
+
+        # Get configuration parameters
+        alpha = config.get('alpha', 1.0)
+        beta = config.get('beta', 1.0)
+        cool_down = config.get('cool_down', True)
+        n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
+        max_task_evals = config.get('max_task_evals', 1000)
+
+        # Initialize HGMUtils
+        git_dir = self.args.get('git_dir', os.getcwd())
+        base_commit = self.args.get('base_commit', 'HEAD')
+        total_tasks = self.args.get('total_tasks', [])
+
+        from python.helpers.hgm_utils import HGMUtils
+
+        hgm_utils = HGMUtils(
+            agent=self.agent,
+            output_dir=output_dir,
+            git_dir=git_dir,
+            base_commit=base_commit,
+            total_tasks=total_tasks
+        )
+
+        # Get nodes that have available tasks
+        available_nodes = []
+        for node in nodes.values():
+            # Load node metadata to check evaluated tasks
+            metadata = hgm_utils.load_node_metadata(node)
+            if metadata is None:
+                metadata = {'evaluated_tasks': {}}
+
+            evaluated_task_ids = set(metadata.get('evaluated_tasks', {}).keys())
+            node_available_tasks = [t for t in total_tasks if t not in evaluated_task_ids]
+
+            if node_available_tasks:
+                available_nodes.append(node)
+
+        if not available_nodes:
+            return Response(
+                message="No nodes with available tasks. All evaluations complete!",
+                break_loop=False
+            )
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Evaluate - Node Selection",
+            content=f"Found {len(available_nodes)} nodes with available tasks"
+        )
+
+        # Prepare evaluations for Thompson Sampling
+        evaluations = [
+            node.utility_measures if node.utility_measures else [0]
+            for node in available_nodes
+        ]
+
+        # Use Thompson Sampling to select node
+        selected_idx = thompson_sample(
+            evaluations=evaluations,
+            alpha=alpha,
+            beta=beta,
+            cool_down=cool_down,
+            n_task_evals=n_task_evals,
+            max_task_evals=max_task_evals
+        )
+
+        selected_node = available_nodes[selected_idx]
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Evaluate - Node Selected",
+            content=f"Selected node {selected_node.node_id} for evaluation (mean utility: {selected_node.mean_utility:.3f})"
+        )
+
+        # Get available tasks for this node
+        metadata = hgm_utils.load_node_metadata(selected_node)
+        if metadata is None:
+            metadata = {'evaluated_tasks': {}}
+
+        evaluated_task_ids = set(metadata.get('evaluated_tasks', {}).keys())
+        node_available_tasks = [t for t in total_tasks if t not in evaluated_task_ids]
+
+        # Select number of tasks to evaluate
+        num_tasks = self.args.get('num_tasks', 1)
+        tasks_to_eval = node_available_tasks[:num_tasks]
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Evaluate - Tasks Selected",
+            content=f"Evaluating {len(tasks_to_eval)} tasks: {tasks_to_eval}"
+        )
+
+        # Evaluate agent on tasks
+        results = await hgm_utils.eval_agent(
+            node=selected_node,
+            tasks=tasks_to_eval
+        )
+
+        # Update utility measures
+        selected_node.utility_measures.extend(results)
+
+        # Update task evaluation counter
+        n_task_evals += len(tasks_to_eval)
+        self.agent.set_data('hgm_n_task_evals', n_task_evals)
+
+        # Update nodes in agent data
+        self.agent.set_data('hgm_nodes', nodes)
+
+        # Save tree metadata
+        metadata_file = os.path.join(output_dir, 'hgm_metadata.json')
+        with open(metadata_file, 'r') as f:
+            tree_metadata = json.load(f)
+
+        tree_metadata['total_evals'] = sum(len(node.utility_measures) for node in nodes.values())
+        tree_metadata['n_task_evals'] = n_task_evals
+        tree_metadata['last_evaluate'] = {
+            'node_id': selected_node.node_id,
+            'tasks': tasks_to_eval,
+            'results': results,
+            'timestamp': time.time()
+        }
+
+        with open(metadata_file, 'w') as f:
+            json.dump(tree_metadata, f, indent=2)
+
+        success_count = sum(results)
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Evaluate - Complete",
+            content=f"Node {selected_node.node_id} evaluation: {success_count}/{len(results)} tasks passed"
+        )
+
         return Response(
-            message="Evaluate operation not yet implemented",
+            message=f"""Successfully evaluated node {selected_node.node_id}
+
+Tasks evaluated: {tasks_to_eval}
+Results: {results}
+Success rate: {success_count}/{len(results)} ({success_count/len(results)*100:.1f}%)
+
+Node statistics:
+  Total evaluations: {len(selected_node.utility_measures)}
+  Mean utility: {selected_node.mean_utility:.3f}
+
+Progress: {n_task_evals} / {max_task_evals} task evaluations
+""",
             break_loop=False
         )
 
