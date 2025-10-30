@@ -15,6 +15,8 @@ class RepoSolver(Tool):
     """
 
     async def execute(self, **kwargs) -> Response:
+        await self.agent.handle_intervention()
+
         mode = self.args.get('mode', 'solve')
         git_dir = self.args.get('git_dir', '')
         base_commit = self.args.get('base_commit', '')
@@ -56,14 +58,6 @@ class RepoSolver(Tool):
     async def _identify_tests(self, git_dir: str, base_commit: str, problem_statement: str, instance_id: str) -> Response:
         """Identify regression tests for the problem"""
 
-        # Create prompt for subordinate agent
-        test_identification_prompt = self.agent.read_prompt(
-            "agent.system.tool.repo_solver.md",
-            operation="identify_tests",
-            git_dir=git_dir,
-            problem_statement=problem_statement
-        )
-
         # Use call_subordinate to analyze repository
         delegation = Delegation(
             agent=self.agent,
@@ -93,10 +87,8 @@ Be concise and specific.""",
             loop_data=None
         )
 
-        # Execute delegation with message and reset from args
-        message_text = delegation.args.get('message', '')
-        reset_flag = delegation.args.get('reset', 'true')
-        response = await delegation.execute(message=message_text, reset=reset_flag)
+        # Execute delegation
+        response = await delegation.execute()
 
         # Store test information in agent data
         self.agent.set_data(f"repo_solver_{instance_id}_tests", response.message)
@@ -153,10 +145,8 @@ When you're done, I will generate a diff of your changes.
             loop_data=None
         )
 
-        # Execute delegation with message and reset from args
-        message_text = delegation.args.get('message', '')
-        reset_flag = delegation.args.get('reset', 'true')
-        response = await delegation.execute(message=message_text, reset=reset_flag)
+        # Execute delegation
+        response = await delegation.execute()
 
         # Check timeout
         if time.time() - start_time > timeout:
@@ -170,11 +160,15 @@ When you're done, I will generate a diff of your changes.
 
         git_tool = GitOperations(
             agent=self.agent,
+            name="git_operations_tool",
+            method=None,
             args={
                 'operation': 'diff',
                 'git_dir': git_dir,
                 'base_commit': base_commit
-            }
+            },
+            message="Generating diff",
+            loop_data=None
         )
 
         diff_response = await git_tool.execute()
@@ -229,10 +223,8 @@ Execute the tests and report:
             loop_data=None
         )
 
-        # Execute delegation with message and reset from args
-        message_text = delegation.args.get('message', '')
-        reset_flag = delegation.args.get('reset', 'true')
-        response = await delegation.execute(message=message_text, reset=reset_flag)
+        # Execute delegation
+        response = await delegation.execute()
 
         # Store test results
         self.agent.set_data(f"repo_solver_{instance_id}_test_results", response.message)
