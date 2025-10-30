@@ -20,6 +20,12 @@ from typing import Dict, List, Optional, Tuple, Any
 
 from python.helpers.hgm_tree import TreeNode
 from python.helpers.tool import Response
+from python.helpers.hgm_task_manager import (
+    TaskPool,
+    TaskManager,
+    TaskResult,
+    TaskSelectionStrategy
+)
 
 
 class HGMUtils:
@@ -31,7 +37,8 @@ class HGMUtils:
         output_dir: str,
         git_dir: str,
         base_commit: str,
-        total_tasks: List[str]
+        total_tasks: List[str],
+        task_selection_strategy: TaskSelectionStrategy = TaskSelectionStrategy.RANDOM
     ):
         """
         Initialize HGM utilities
@@ -42,15 +49,27 @@ class HGMUtils:
             git_dir: Path to git repository being improved
             base_commit: Base commit for comparisons
             total_tasks: List of all task IDs available for evaluation
+            task_selection_strategy: Strategy for selecting tasks (default: RANDOM)
         """
         self.agent = agent
         self.output_dir = output_dir
         self.git_dir = git_dir
         self.base_commit = base_commit
         self.total_tasks = total_tasks
+        self.task_selection_strategy = task_selection_strategy
 
         # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
+
+        # Initialize task management system
+        task_pool = TaskPool(
+            task_ids=total_tasks,
+            metadata_file=os.path.join(output_dir, 'task_metadata.json')
+        )
+        self.task_manager = TaskManager(
+            task_pool=task_pool,
+            cache_file=os.path.join(output_dir, 'task_cache.json')
+        )
 
     async def sample_child(
         self,
@@ -243,7 +262,7 @@ Please implement the necessary changes to address this problem. Make targeted im
 
         Args:
             node: TreeNode to evaluate
-            tasks: Specific tasks to evaluate on (if None, selects randomly)
+            tasks: Specific tasks to evaluate on (if None, uses task manager selection)
             num_tasks: Number of tasks to evaluate if tasks is None
 
         Returns:
@@ -252,7 +271,7 @@ Please implement the necessary changes to address this problem. Make targeted im
         if node.commit_id == "failed":
             return [0] * num_tasks
 
-        # Load node metadata
+        # Load node metadata for backward compatibility
         metadata_path = self._get_metadata_path(node.commit_id)
         if os.path.exists(metadata_path):
             with open(metadata_path, 'r') as f:
@@ -267,17 +286,22 @@ Please implement the necessary changes to address this problem. Make targeted im
                 'empty_patch_ids': []
             }
 
-        # Select tasks if not provided
+        # Select tasks if not provided - use task manager
         if tasks is None:
-            evaluated_task_ids = set(metadata.get('evaluated_tasks', {}).keys())
-            available_tasks = [t for t in self.total_tasks if t not in evaluated_task_ids]
+            # Check cache first
+            available_tasks = self.task_manager.get_available_tasks(node.node_id)
 
             if not available_tasks:
-                # All tasks evaluated, return existing results
-                return [metadata['evaluated_tasks'][t] for t in self.total_tasks[:num_tasks]]
+                # All tasks evaluated, return cached results
+                cached_results = self.task_manager.get_node_results(node.node_id)
+                return [1 if r.success else 0 for r in list(cached_results.values())[:num_tasks]]
 
-            # Select random tasks
-            tasks = random.sample(available_tasks, min(num_tasks, len(available_tasks)))
+            # Use task manager to select tasks with strategy
+            tasks = self.task_manager.select_tasks(
+                node_id=node.node_id,
+                num_tasks=num_tasks,
+                strategy=self.task_selection_strategy
+            )
 
         self.agent.context.log.log(
             type="hgm",
@@ -324,15 +348,30 @@ Please implement the necessary changes to address this problem. Make targeted im
             )
 
             try:
+                import time
+                start_time = time.time()
                 response = await repo_solver.execute()
+                execution_time = time.time() - start_time
 
                 # Check if solution was successful (simplified - would check tests)
                 success = "success" in response.message.lower()
                 result_value = 1 if success else 0
 
                 results.append(result_value)
-                metadata['evaluated_tasks'][task_id] = result_value
 
+                # Cache result in task manager
+                task_result = TaskResult(
+                    task_id=task_id,
+                    node_id=node.node_id,
+                    commit_id=node.commit_id,
+                    success=success,
+                    execution_time=execution_time,
+                    timestamp=time.time()
+                )
+                self.task_manager.cache_result(task_result)
+
+                # Update legacy metadata for backward compatibility
+                metadata['evaluated_tasks'][task_id] = result_value
                 if success:
                     metadata['resolved_ids'].append(task_id)
                 else:
@@ -345,6 +384,18 @@ Please implement the necessary changes to address this problem. Make targeted im
                     content=f"Error evaluating task {task_id}: {str(e)}"
                 )
                 results.append(0)
+
+                # Cache failure
+                task_result = TaskResult(
+                    task_id=task_id,
+                    node_id=node.node_id,
+                    commit_id=node.commit_id,
+                    success=False,
+                    error_message=str(e),
+                    timestamp=time.time()
+                )
+                self.task_manager.cache_result(task_result)
+
                 metadata['unresolved_ids'].append(task_id)
 
         # Update metadata
