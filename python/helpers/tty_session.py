@@ -7,8 +7,10 @@ if _IS_WIN:
 
 
 #  Make stdin / stdout tolerant to broken UTF-8 so input() never aborts
-sys.stdin.reconfigure(errors="replace")  # type: ignore
-sys.stdout.reconfigure(errors="replace")  # type: ignore
+if hasattr(sys.stdin, 'reconfigure'):
+    sys.stdin.reconfigure(errors="replace")  # type: ignore
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(errors="replace")  # type: ignore
 
 
 # ──────────────────────────── PUBLIC CLASS ────────────────────────────
