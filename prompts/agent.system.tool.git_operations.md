@@ -14,7 +14,6 @@ This tool performs git operations on repositories.
 - `target_commit` (string): Target commit for reset
 - `hard` (boolean): Whether to do hard reset
 - `limit` (integer): Number of commits for get_log
-- `session` (integer): Terminal session to use (default: 0)
 
 **Example:**
 ```json

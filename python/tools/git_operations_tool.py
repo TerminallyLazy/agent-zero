@@ -1,10 +1,19 @@
 # python/tools/git_operations_tool.py
 from python.helpers.tool import Tool, Response
 import os
+import subprocess
+import tempfile
 
 class GitOperations(Tool):
     """
     Tool for performing git operations on repositories.
+
+    This tool uses subprocess to execute git commands directly rather than CodeExecution
+    because:
+    1. Better for unit testing - subprocess calls can be easily mocked
+    2. Stateless operations - no session state to manage
+    3. More direct control - immediate feedback without terminal session overhead
+    4. Simpler error handling - direct capture of stdout/stderr
 
     Operations:
     - diff: Generate diff against a base commit
@@ -14,6 +23,8 @@ class GitOperations(Tool):
     """
 
     async def execute(self, **kwargs) -> Response:
+        await self.agent.handle_intervention()
+
         operation = self.args.get('operation', '').lower()
         git_dir = self.args.get('git_dir', '')
 
@@ -50,8 +61,6 @@ class GitOperations(Tool):
         """Generate diff against base commit"""
         base_commit = self.args.get('base_commit', 'HEAD')
 
-        # Use subprocess directly for reliability
-        import subprocess
         try:
             result = subprocess.run(
                 ['git', 'diff', base_commit],
@@ -88,8 +97,6 @@ class GitOperations(Tool):
             )
 
         # Write patch to temp file
-        import tempfile
-        import subprocess
         with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
             f.write(patch_content)
             patch_file = f.name
@@ -131,7 +138,6 @@ class GitOperations(Tool):
 
         reset_type = '--hard' if hard else '--soft'
 
-        import subprocess
         try:
             result = subprocess.run(
                 ['git', 'reset', reset_type, target_commit],
@@ -161,7 +167,6 @@ class GitOperations(Tool):
         """Get commit log"""
         limit = self.args.get('limit', 10)
 
-        import subprocess
         try:
             result = subprocess.run(
                 ['git', 'log', '-n', str(limit), '--oneline'],
