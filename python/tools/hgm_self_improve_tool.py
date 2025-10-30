@@ -2,6 +2,7 @@
 from python.helpers.tool import Tool, Response
 from python.helpers.hgm_tree import TreeNode
 from python.helpers.hgm_thompson import thompson_sample
+from python.helpers.hgm_config import HGMConfig
 import json
 import os
 import time
@@ -38,11 +39,48 @@ class HGMSelfImprove(Tool):
                 break_loop=False
             )
 
+    def _get_config(self) -> HGMConfig:
+        """
+        Get HGMConfig object from agent data.
+        Falls back to creating from dict or default if not found.
+        """
+        # Try to get config object first
+        config_obj = self.agent.get_data('hgm_config_object')
+        if config_obj is not None and isinstance(config_obj, HGMConfig):
+            return config_obj
+
+        # Fall back to dict
+        config_dict = self.agent.get_data('hgm_config')
+        if config_dict is not None:
+            config = HGMConfig.from_dict(config_dict)
+            # Cache the object for future use
+            self.agent.set_data('hgm_config_object', config)
+            return config
+
+        # Fall back to default
+        config = HGMConfig.create_default()
+        self.agent.set_data('hgm_config', config.to_dict())
+        self.agent.set_data('hgm_config_object', config)
+        return config
+
     async def _initialize(self) -> Response:
         """Setup initial agent version and create root node"""
         output_dir = self.args.get('output_dir', 'output_hgm')
         agent_profile = self.args.get('agent_profile', 'default')
-        config = self.args.get('config', {})
+        config_input = self.args.get('config', {})
+
+        # Convert to HGMConfig with validation
+        if isinstance(config_input, dict):
+            config = HGMConfig.from_dict(config_input)
+        elif isinstance(config_input, HGMConfig):
+            config = config_input
+        else:
+            config = HGMConfig.create_default()
+
+        # Store both dict and HGMConfig object
+        # Dict for backward compatibility, object for type-safe access
+        self.agent.set_data('hgm_config', config.to_dict())
+        self.agent.set_data('hgm_config_object', config)
 
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
@@ -76,7 +114,6 @@ class HGMSelfImprove(Tool):
         self.agent.set_data('hgm_nodes', nodes)
         self.agent.set_data('hgm_submitted_ids', set())
         self.agent.set_data('hgm_n_task_evals', 0)
-        self.agent.set_data('hgm_config', config)
         self.agent.set_data('hgm_output_dir', output_dir)
         self.agent.set_data('hgm_agent_profile', agent_profile)
         self.agent.set_data('hgm_next_node_id', 1)
@@ -86,7 +123,7 @@ class HGMSelfImprove(Tool):
             'root_node': root_node.to_dict(),
             'initial_commit': initial_commit,
             'agent_profile': agent_profile,
-            'config': config,
+            'config': config.to_dict(),
             'created_at': time.time()
         }
 
@@ -101,6 +138,9 @@ Root node: {root_node}
 Initial commit: {initial_commit}
 Output directory: {output_dir}
 Agent profile: {agent_profile}
+
+Configuration:
+{str(config)}
 
 Metadata saved to: {metadata_file}
 """,
@@ -126,15 +166,9 @@ Metadata saved to: {metadata_file}
                 break_loop=False
             )
 
-        config = self.agent.get_data('hgm_config') or {}
+        config = self._get_config()
         output_dir = self.agent.get_data('hgm_output_dir')
-
-        # Get configuration parameters
-        alpha = config.get('alpha', 1.0)
-        beta = config.get('beta', 1.0)
-        cool_down = config.get('cool_down', True)
         n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
-        max_task_evals = config.get('max_task_evals', 1000)
 
         # Filter candidate nodes (must have mean_utility > 0)
         candidate_nodes = [node for node in nodes.values() if node.mean_utility > 0]
@@ -158,11 +192,11 @@ Metadata saved to: {metadata_file}
         # Use Thompson Sampling to select parent node
         selected_idx = thompson_sample(
             evaluations=evaluations,
-            alpha=alpha,
-            beta=beta,
-            cool_down=cool_down,
+            alpha=config.alpha,
+            beta=config.beta,
+            cool_down=config.cool_down,
             n_task_evals=n_task_evals,
-            max_task_evals=max_task_evals
+            max_task_evals=config.max_task_evals
         )
 
         parent_node = candidate_nodes[selected_idx]
@@ -191,12 +225,12 @@ Metadata saved to: {metadata_file}
         # Generate child agent version
         new_commit_id, child_node_id = await hgm_utils.sample_child(
             parent_node=parent_node,
-            max_attempts=config.get('max_child_attempts', 3)
+            max_attempts=config.max_attempts_per_child
         )
 
         if new_commit_id is None or child_node_id is None:
             return Response(
-                message=f"Failed to generate child from node {parent_node.node_id} after {config.get('max_child_attempts', 3)} attempts",
+                message=f"Failed to generate child from node {parent_node.node_id} after {config.max_attempts_per_child} attempts",
                 break_loop=False
             )
 
@@ -271,16 +305,10 @@ Total nodes in tree: {len(nodes)}
                 break_loop=False
             )
 
-        config = self.agent.get_data('hgm_config') or {}
+        config = self._get_config()
         output_dir = self.agent.get_data('hgm_output_dir')
         submitted_ids = self.agent.get_data('hgm_submitted_ids') or set()
-
-        # Get configuration parameters
-        alpha = config.get('alpha', 1.0)
-        beta = config.get('beta', 1.0)
-        cool_down = config.get('cool_down', True)
         n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
-        max_task_evals = config.get('max_task_evals', 1000)
 
         # Initialize HGMUtils
         git_dir = self.args.get('git_dir', os.getcwd())
@@ -332,11 +360,11 @@ Total nodes in tree: {len(nodes)}
         # Use Thompson Sampling to select node
         selected_idx = thompson_sample(
             evaluations=evaluations,
-            alpha=alpha,
-            beta=beta,
-            cool_down=cool_down,
+            alpha=config.alpha,
+            beta=config.beta,
+            cool_down=config.cool_down,
             n_task_evals=n_task_evals,
-            max_task_evals=max_task_evals
+            max_task_evals=config.max_task_evals
         )
 
         selected_node = available_nodes[selected_idx]
@@ -416,7 +444,7 @@ Node statistics:
   Total evaluations: {len(selected_node.utility_measures)}
   Mean utility: {selected_node.mean_utility:.3f}
 
-Progress: {n_task_evals} / {max_task_evals} task evaluations
+Progress: {n_task_evals} / {config.max_task_evals} task evaluations
 """,
             break_loop=False
         )
@@ -444,10 +472,8 @@ Progress: {n_task_evals} / {max_task_evals} task evaluations
                 break_loop=False
             )
 
-        config = self.agent.get_data('hgm_config') or {}
+        config = self._get_config()
         n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
-        max_task_evals = config.get('max_task_evals', 1000)
-        alpha = config.get('alpha', 1.0)
 
         # Get run parameters
         iterations = self.args.get('iterations', 10)
@@ -456,7 +482,7 @@ Progress: {n_task_evals} / {max_task_evals} task evaluations
         self.agent.context.log.log(
             type="hgm",
             heading="Run - Starting",
-            content=f"Running {iterations} iterations with alpha={alpha}"
+            content=f"Running {iterations} iterations with alpha={config.alpha}"
         )
 
         # Track pending operations
@@ -466,11 +492,11 @@ Progress: {n_task_evals} / {max_task_evals} task evaluations
         for i in range(iterations):
             # Check if we've hit max task evaluations
             n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
-            if n_task_evals >= max_task_evals:
+            if n_task_evals >= config.max_task_evals:
                 self.agent.context.log.log(
                     type="hgm",
                     heading="Run - Complete",
-                    content=f"Reached max task evaluations ({max_task_evals})"
+                    content=f"Reached max task evaluations ({config.max_task_evals})"
                 )
                 break
 
@@ -480,12 +506,12 @@ Progress: {n_task_evals} / {max_task_evals} task evaluations
 
             # Decision rule: expand vs evaluate
             # if n_task_evals**alpha >= len(nodes) - 1 + n_pending_expands
-            should_expand = (n_task_evals ** alpha) >= (num_nodes - 1 + n_pending_expands)
+            should_expand = (n_task_evals ** config.alpha) >= (num_nodes - 1 + n_pending_expands)
 
             self.agent.context.log.log(
                 type="hgm",
                 heading=f"Run - Iteration {i+1}/{iterations}",
-                content=f"Decision: {'EXPAND' if should_expand else 'EVALUATE'} (n_task_evals={n_task_evals}, nodes={num_nodes}, alpha={alpha})"
+                content=f"Decision: {'EXPAND' if should_expand else 'EVALUATE'} (n_task_evals={n_task_evals}, nodes={num_nodes}, alpha={config.alpha})"
             )
 
             if should_expand:
