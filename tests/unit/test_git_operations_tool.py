@@ -88,3 +88,81 @@ async def test_diff_versus_commit(temp_git_repo, agent_setup):
     assert 'diff --git' in response.message
     assert '-initial content' in response.message
     assert '+modified content' in response.message
+
+@pytest.mark.asyncio
+async def test_apply_patch(temp_git_repo, agent_setup):
+    """Verify patch application to repository"""
+    git_dir, base_commit = temp_git_repo
+    agent = agent_setup
+
+    # Generate a patch
+    patch_content = """diff --git a/test.txt b/test.txt
+index 1234567..abcdefg 100644
+--- a/test.txt
++++ b/test.txt
+@@ -1 +1 @@
+-modified content
++patched content
+"""
+
+    # Apply patch
+    tool = GitOperations(
+        agent=agent,
+        name="git_operations_tool",
+        method=None,
+        args={
+            'operation': 'apply_patch',
+            'git_dir': git_dir,
+            'patch_content': patch_content
+        },
+        message="",
+        loop_data=None
+    )
+
+    response = await tool.execute()
+
+    # Verify patch was applied
+    test_file = os.path.join(git_dir, 'test.txt')
+    with open(test_file, 'r') as f:
+        content = f.read()
+
+    assert 'patched content' in content
+
+@pytest.mark.asyncio
+async def test_reset_to_commit(temp_git_repo, agent_setup):
+    """Verify repository reset to specific commit"""
+    git_dir, base_commit = temp_git_repo
+    agent = agent_setup
+
+    # Commit the current changes
+    subprocess.run(['git', 'add', '.'], cwd=git_dir, check=True)
+    subprocess.run(['git', 'commit', '-m', 'Second commit'], cwd=git_dir, check=True)
+
+    # Reset to base commit
+    tool = GitOperations(
+        agent=agent,
+        name="git_operations_tool",
+        method=None,
+        args={
+            'operation': 'reset',
+            'git_dir': git_dir,
+            'target_commit': base_commit,
+            'hard': True
+        },
+        message="",
+        loop_data=None
+    )
+
+    response = await tool.execute()
+
+    # Verify reset worked
+    result = subprocess.run(
+        ['git', 'rev-parse', 'HEAD'],
+        cwd=git_dir,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    current_commit = result.stdout.strip()
+
+    assert current_commit == base_commit
