@@ -4,6 +4,17 @@
 **/__pycache__/
 **/.conda/
 
+# Python artifacts
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Serena MCP server files
+.serena/
+
 #Ignore cursor rules
 .cursor/
 .windsurf/
