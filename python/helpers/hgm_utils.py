@@ -442,16 +442,16 @@ Please implement the necessary changes to address this problem. Make targeted im
         """
         from python.tools.diagnostic_tool import Diagnostic
 
-        # Prepare diagnostic context
-        analysis_type = self._strategy_to_analysis_type(entry)
+        # Map entry to diagnostic strategy
+        strategy = self._entry_to_strategy(entry)
 
         diagnostic = Diagnostic(
             agent=self.agent,
             name="diagnostic_analysis",
             method=None,
             args={
-                'analysis_type': analysis_type,
-                'log_content': parent_metadata.get('logs', 'No logs available'),
+                'strategy': strategy,
+                'log_file': '',  # Could pass log file path if available
                 'problem_statement': entry if entry not in ['solve_empty_patches', 'solve_stochasticity', 'solve_contextlength'] else f"Strategy: {entry}",
                 'generated_patch': parent_metadata.get('last_patch', ''),
                 'test_patch': '',
@@ -465,22 +465,42 @@ Please implement the necessary changes to address this problem. Make targeted im
             response = await diagnostic.execute()
 
             # Extract problem statement from diagnostic response
-            # The response should contain improvement suggestions
+            # The response should contain improvement suggestions in JSON format
             if response.message:
                 # Save diagnostic results
                 diag_path = os.path.join(output_dir, 'diagnosis.json')
                 with open(diag_path, 'w') as f:
                     json.dump({
                         'strategy': entry,
-                        'analysis_type': analysis_type,
+                        'diagnostic_strategy': strategy,
                         'diagnosis': response.message
                     }, f, indent=2)
 
-                # Format as problem statement
-                problem_statement = f"""Problem Diagnosis for Agent Improvement
+                # Parse JSON response to get problem_description field
+                try:
+                    diagnosis_data = json.loads(response.message)
+                    if 'problem_description' in diagnosis_data:
+                        problem_statement = diagnosis_data['problem_description']
+                    else:
+                        # Fallback: Use implementation_suggestion
+                        problem_statement = f"""Problem Diagnosis for Agent Improvement
 
 Strategy: {entry}
-Analysis Type: {analysis_type}
+Diagnostic Strategy: {strategy}
+
+Implementation Suggestion:
+{diagnosis_data.get('implementation_suggestion', 'No specific suggestion provided')}
+
+Improvement Proposal:
+{diagnosis_data.get('improvement_proposal', 'No proposal provided')}
+
+Please implement improvements to address the identified issues."""
+                except json.JSONDecodeError:
+                    # Fallback if response is not JSON
+                    problem_statement = f"""Problem Diagnosis for Agent Improvement
+
+Strategy: {entry}
+Diagnostic Strategy: {strategy}
 
 {response.message}
 
@@ -497,16 +517,17 @@ Please implement improvements to address the identified issues."""
 
         return None
 
-    def _strategy_to_analysis_type(self, strategy: str) -> str:
-        """Convert strategy to diagnostic analysis type"""
-        if strategy == "solve_empty_patches":
+    def _entry_to_strategy(self, entry: str) -> str:
+        """Convert choose_entry() result to diagnostic strategy"""
+        if entry == "solve_empty_patches":
             return "empty_patch"
-        elif strategy == "solve_stochasticity":
+        elif entry == "solve_stochasticity":
             return "stochasticity"
-        elif strategy == "solve_contextlength":
-            return "failure_analysis"  # Context length is a type of failure
+        elif entry == "solve_contextlength":
+            return "contextlength"
         else:
-            return "failure_analysis"
+            # Task-specific entry uses general SWE analysis
+            return "swe"
 
     def _get_metadata_path(self, commit_id: str) -> str:
         """Get metadata file path for a commit"""

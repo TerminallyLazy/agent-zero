@@ -15,6 +15,7 @@ class HGMSelfImprove(Tool):
     - initialize: Setup initial agent version and root node
     - expand: Create new agent variant from promising node
     - evaluate: Evaluate agent on a task
+    - run: Execute self-improvement loop (expand/evaluate cycles)
     - status: Report current tree statistics
     """
 
@@ -27,6 +28,8 @@ class HGMSelfImprove(Tool):
             return await self._expand()
         elif operation == 'evaluate':
             return await self._evaluate()
+        elif operation == 'run':
+            return await self._run()
         elif operation == 'status':
             return await self._status()
         else:
@@ -417,6 +420,167 @@ Progress: {n_task_evals} / {max_task_evals} task evaluations
 """,
             break_loop=False
         )
+
+    async def _run(self) -> Response:
+        """
+        Run the self-improvement loop
+
+        Main orchestration loop that coordinates expand and evaluate operations.
+        Uses the decision rule from original HGM:
+        if n_task_evals**alpha >= len(nodes) - 1 + n_pending_expands:
+            expand()  # Create new agent variant
+        else:
+            evaluate()  # Evaluate existing agent
+
+        Parameters:
+        - iterations: Number of expand/evaluate cycles to run (default: 10)
+        - max_concurrent: Maximum concurrent operations (default: 1 for sequential)
+        """
+        # Get HGM state
+        nodes: Dict[int, TreeNode] = self.agent.get_data('hgm_nodes')
+        if nodes is None:
+            return Response(
+                message="HGM system not initialized. Run with operation='initialize' first.",
+                break_loop=False
+            )
+
+        config = self.agent.get_data('hgm_config') or {}
+        n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
+        max_task_evals = config.get('max_task_evals', 1000)
+        alpha = config.get('alpha', 1.0)
+
+        # Get run parameters
+        iterations = self.args.get('iterations', 10)
+        max_concurrent = self.args.get('max_concurrent', 1)
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Run - Starting",
+            content=f"Running {iterations} iterations with alpha={alpha}"
+        )
+
+        # Track pending operations
+        n_pending_expands = 0
+        results = []
+
+        for i in range(iterations):
+            # Check if we've hit max task evaluations
+            n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
+            if n_task_evals >= max_task_evals:
+                self.agent.context.log.log(
+                    type="hgm",
+                    heading="Run - Complete",
+                    content=f"Reached max task evaluations ({max_task_evals})"
+                )
+                break
+
+            # Get current number of nodes
+            nodes = self.agent.get_data('hgm_nodes')
+            num_nodes = len(nodes)
+
+            # Decision rule: expand vs evaluate
+            # if n_task_evals**alpha >= len(nodes) - 1 + n_pending_expands
+            should_expand = (n_task_evals ** alpha) >= (num_nodes - 1 + n_pending_expands)
+
+            self.agent.context.log.log(
+                type="hgm",
+                heading=f"Run - Iteration {i+1}/{iterations}",
+                content=f"Decision: {'EXPAND' if should_expand else 'EVALUATE'} (n_task_evals={n_task_evals}, nodes={num_nodes}, alpha={alpha})"
+            )
+
+            if should_expand:
+                # Expand: create new agent variant
+                n_pending_expands += 1
+                try:
+                    response = await self._expand()
+                    n_pending_expands -= 1
+                    results.append({
+                        'iteration': i + 1,
+                        'operation': 'expand',
+                        'success': 'successfully expanded' in response.message.lower(),
+                        'message': response.message
+                    })
+                except Exception as e:
+                    n_pending_expands -= 1
+                    self.agent.context.log.log(
+                        type="hgm",
+                        heading="Run - Expand Error",
+                        content=f"Iteration {i+1} expand failed: {str(e)}"
+                    )
+                    results.append({
+                        'iteration': i + 1,
+                        'operation': 'expand',
+                        'success': False,
+                        'error': str(e)
+                    })
+            else:
+                # Evaluate: evaluate existing agent
+                try:
+                    response = await self._evaluate()
+                    results.append({
+                        'iteration': i + 1,
+                        'operation': 'evaluate',
+                        'success': 'successfully evaluated' in response.message.lower(),
+                        'message': response.message
+                    })
+                except Exception as e:
+                    self.agent.context.log.log(
+                        type="hgm",
+                        heading="Run - Evaluate Error",
+                        content=f"Iteration {i+1} evaluate failed: {str(e)}"
+                    )
+                    results.append({
+                        'iteration': i + 1,
+                        'operation': 'evaluate',
+                        'success': False,
+                        'error': str(e)
+                    })
+
+        # Generate summary
+        expand_count = sum(1 for r in results if r['operation'] == 'expand')
+        evaluate_count = sum(1 for r in results if r['operation'] == 'evaluate')
+        success_count = sum(1 for r in results if r.get('success', False))
+
+        nodes = self.agent.get_data('hgm_nodes')
+        n_task_evals = self.agent.get_data('hgm_n_task_evals') or 0
+
+        summary = f"""HGM Self-Improvement Run Complete
+
+Iterations completed: {len(results)}/{iterations}
+Operations:
+  - Expand: {expand_count}
+  - Evaluate: {evaluate_count}
+  - Success rate: {success_count}/{len(results)} ({success_count/len(results)*100:.1f}%)
+
+Final statistics:
+  - Total nodes: {len(nodes)}
+  - Task evaluations: {n_task_evals}/{max_task_evals}
+  - Tree depth: {self._calculate_tree_depth(nodes[0])}
+
+Best performing node:
+"""
+
+        # Find best node
+        if nodes:
+            best_node = max(nodes.values(), key=lambda n: (n.mean_utility, len(n.utility_measures)))
+            summary += f"  {best_node}\n"
+
+        self.agent.context.log.log(
+            type="hgm",
+            heading="Run - Complete",
+            content=summary
+        )
+
+        return Response(
+            message=summary,
+            break_loop=False
+        )
+
+    def _calculate_tree_depth(self, node: TreeNode, current_depth: int = 0) -> int:
+        """Calculate maximum depth of tree from given node"""
+        if not node.children:
+            return current_depth
+        return max(self._calculate_tree_depth(child, current_depth + 1) for child in node.children)
 
     async def _status(self) -> Response:
         """Report current tree statistics"""

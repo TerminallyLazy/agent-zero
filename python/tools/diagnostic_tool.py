@@ -7,14 +7,17 @@ class Diagnostic(Tool):
     """
     Tool for analyzing failed attempts and generating improvement recommendations.
 
-    Analysis types:
-    - failure_analysis: Analyze failed solution attempts
+    Analysis strategies:
+    - swe: Analyze SWE-bench failures (general)
     - empty_patch: Diagnose empty patch generation
-    - stochasticity: Analyze stochastic behavior issues
+    - stochasticity: Analyze consistency/stochastic behavior issues
+    - contextlength: Analyze context length issues
+    - polyglot: Analyze multi-language issues
+    - problem_description: Convert diagnosis to GitHub issue format
     """
 
     async def execute(self, **kwargs) -> Response:
-        analysis_type = self.args.get('analysis_type', 'failure_analysis')
+        strategy = self.args.get('strategy', 'swe')
         log_file = self.args.get('log_file', '')
         problem_statement = self.args.get('problem_statement', '')
 
@@ -31,27 +34,34 @@ class Diagnostic(Tool):
             with open(log_file, 'r') as f:
                 log_content = f.read()
 
-        if analysis_type == 'failure_analysis':
-            return await self._analyze_failure(log_content, problem_statement)
-        elif analysis_type == 'empty_patch':
+        # Route to appropriate analysis method
+        if strategy == 'swe':
+            return await self._analyze_swe(log_content, problem_statement)
+        elif strategy == 'empty_patch':
             return await self._analyze_empty_patch(log_content, problem_statement)
-        elif analysis_type == 'stochasticity':
+        elif strategy == 'stochasticity':
             return await self._analyze_stochasticity(log_content, problem_statement)
+        elif strategy == 'contextlength':
+            return await self._analyze_contextlength(log_content, problem_statement)
+        elif strategy == 'polyglot':
+            return await self._analyze_polyglot(log_content, problem_statement)
+        elif strategy == 'problem_description':
+            return await self._generate_problem_description()
         else:
             return Response(
-                message=f"Error: Unknown analysis_type '{analysis_type}'",
+                message=f"Error: Unknown strategy '{strategy}'",
                 break_loop=False
             )
 
-    async def _analyze_failure(self, log_content: str, problem_statement: str) -> Response:
-        """Analyze failed solution attempt"""
+    async def _analyze_swe(self, log_content: str, problem_statement: str) -> Response:
+        """Analyze SWE-bench failure using comprehensive diagnostic prompt"""
         generated_patch = self.args.get('generated_patch', '')
         test_results = self.args.get('test_results', '')
         test_patch = self.args.get('test_patch', '')
 
-        # Build analysis prompt
+        # Build analysis prompt using enhanced template
         prompt = self.agent.read_prompt(
-            "hgm.diagnostic.failure_analysis.md",
+            "hgm.diagnose.swe.md",
             log=log_content,
             issue=problem_statement,
             patch=generated_patch,
@@ -59,7 +69,137 @@ class Diagnostic(Tool):
             results=test_results
         )
 
-        # Use utility model for analysis
+        # Get diagnostic analysis
+        result = await self._get_diagnostic_response(prompt)
+
+        return Response(
+            message=json.dumps(result, indent=2),
+            break_loop=False
+        )
+
+    async def _analyze_empty_patch(self, log_content: str, problem_statement: str) -> Response:
+        """Diagnose empty patch generation"""
+        generated_patch = self.args.get('generated_patch', '')
+        test_results = self.args.get('test_results', '')
+
+        prompt = self.agent.read_prompt(
+            "hgm.diagnostic.empty_patch.md",
+            log=log_content,
+            issue=problem_statement,
+            patch=generated_patch,
+            results=test_results
+        )
+
+        result = await self._get_diagnostic_response(prompt)
+
+        return Response(
+            message=json.dumps(result, indent=2),
+            break_loop=False
+        )
+
+    async def _analyze_stochasticity(self, log_content: str, problem_statement: str) -> Response:
+        """Analyze stochastic behavior / consistency issues"""
+        test_results = self.args.get('test_results', '')
+
+        prompt = self.agent.read_prompt(
+            "hgm.diagnostic.stochasticity.md",
+            log=log_content,
+            issue=problem_statement,
+            results=test_results
+        )
+
+        result = await self._get_diagnostic_response(prompt)
+
+        return Response(
+            message=json.dumps(result, indent=2),
+            break_loop=False
+        )
+
+    async def _analyze_contextlength(self, log_content: str, problem_statement: str) -> Response:
+        """Analyze context length issues"""
+        # Use SWE prompt but focus on context-related aspects
+        generated_patch = self.args.get('generated_patch', '')
+        test_results = self.args.get('test_results', '')
+
+        prompt = self.agent.read_prompt(
+            "hgm.diagnose.swe.md",
+            log=log_content,
+            issue=problem_statement,
+            patch=generated_patch,
+            test_patch='',
+            results=test_results
+        )
+
+        # Add context-specific guidance
+        prompt += "\n\nIMPORTANT: Focus your analysis on context window limitations and how they affected the agent's performance."
+
+        result = await self._get_diagnostic_response(prompt)
+
+        return Response(
+            message=json.dumps(result, indent=2),
+            break_loop=False
+        )
+
+    async def _analyze_polyglot(self, log_content: str, problem_statement: str) -> Response:
+        """Analyze multi-language / polyglot issues"""
+        generated_patch = self.args.get('generated_patch', '')
+        test_results = self.args.get('test_results', '')
+
+        prompt = self.agent.read_prompt(
+            "hgm.diagnose.polyglot.md",
+            log=log_content,
+            issue=problem_statement,
+            patch=generated_patch,
+            results=test_results
+        )
+
+        result = await self._get_diagnostic_response(prompt)
+
+        return Response(
+            message=json.dumps(result, indent=2),
+            break_loop=False
+        )
+
+    async def _generate_problem_description(self) -> Response:
+        """Convert diagnosis to GitHub issue format"""
+        diagnosis = self.args.get('diagnosis', '')
+        agent_summary = self.args.get('agent_summary', 'Agent Zero HGM Self-Improving Coding Agent')
+
+        if not diagnosis:
+            return Response(
+                message="Error: No diagnosis provided. Run a diagnostic analysis first.",
+                break_loop=False
+            )
+
+        prompt = self.agent.read_prompt(
+            "hgm.problem_description.md",
+            agent_summary=agent_summary,
+            diagnosis=diagnosis
+        )
+
+        from langchain_core.messages import HumanMessage
+        messages = [HumanMessage(content=prompt)]
+
+        llm = self.agent.get_utility_model()
+        response = await llm.ainvoke(messages)
+
+        # Return the GitHub issue markdown directly
+        return Response(
+            message=response.content,
+            break_loop=False
+        )
+
+    async def _get_diagnostic_response(self, prompt: str) -> dict:
+        """
+        Send diagnostic prompt to LLM and parse JSON response.
+
+        Returns dict with required fields:
+        - log_summarization
+        - potential_improvements
+        - improvement_proposal
+        - implementation_suggestion
+        - problem_description
+        """
         from langchain_core.messages import HumanMessage
 
         messages = [HumanMessage(content=prompt)]
@@ -81,13 +221,16 @@ class Diagnostic(Tool):
                 json_end = content.rindex('```')
                 content = content[json_start:json_end].strip()
 
-            # Validate JSON structure
+            # Parse JSON
             result = json.loads(content)
+
+            # Validate required fields
             required_fields = [
                 'log_summarization',
                 'potential_improvements',
                 'improvement_proposal',
-                'implementation_suggestion'
+                'implementation_suggestion',
+                'problem_description'
             ]
 
             for field in required_fields:
@@ -98,78 +241,21 @@ class Diagnostic(Tool):
             if not isinstance(result['potential_improvements'], list):
                 result['potential_improvements'] = [str(result['potential_improvements'])]
 
-            return Response(
-                message=json.dumps(result, indent=2),
-                break_loop=False
-            )
+            return result
 
         except (json.JSONDecodeError, ValueError) as e:
-            # Return raw response if JSON parsing fails
+            # Return error structure if JSON parsing fails
             error_result = {
                 "error": "Failed to parse diagnostic response as JSON",
                 "raw_response": content,
-                "exception": str(e)
+                "exception": str(e),
+                "log_summarization": "[Parse error]",
+                "potential_improvements": [],
+                "improvement_proposal": "[Parse error]",
+                "implementation_suggestion": "[Parse error]",
+                "problem_description": "[Parse error]"
             }
-            return Response(
-                message=json.dumps(error_result, indent=2),
-                break_loop=False
-            )
-
-    async def _analyze_empty_patch(self, log_content: str, problem_statement: str) -> Response:
-        """Diagnose empty patch generation"""
-        prompt = self.agent.read_prompt(
-            "hgm.diagnostic.empty_patch.md",
-            log=log_content,
-            issue=problem_statement
-        )
-
-        from langchain_core.messages import HumanMessage
-        messages = [HumanMessage(content=prompt)]
-
-        llm = self.agent.get_utility_model()
-        response = await llm.ainvoke(messages)
-
-        # Return structured advice
-        result = {
-            "diagnosis": "Empty patch generated",
-            "log_summarization": log_content[:500] + "..." if len(log_content) > 500 else log_content,
-            "potential_causes": [
-                "Agent didn't understand the problem",
-                "Agent thought changes were not needed",
-                "Agent made changes outside the repository",
-                "Tool execution failed silently"
-            ],
-            "recommendations": response.content
-        }
-
-        return Response(
-            message=json.dumps(result, indent=2),
-            break_loop=False
-        )
-
-    async def _analyze_stochasticity(self, log_content: str, problem_statement: str) -> Response:
-        """Analyze stochastic behavior"""
-        prompt = self.agent.read_prompt(
-            "hgm.diagnostic.stochasticity.md",
-            log=log_content,
-            issue=problem_statement
-        )
-
-        from langchain_core.messages import HumanMessage
-        messages = [HumanMessage(content=prompt)]
-
-        llm = self.agent.get_utility_model()
-        response = await llm.ainvoke(messages)
-
-        result = {
-            "analysis_type": "stochasticity",
-            "observations": response.content
-        }
-
-        return Response(
-            message=json.dumps(result, indent=2),
-            break_loop=False
-        )
+            return error_result
 
     def get_log_object(self):
         return self.agent.context.log.log(

@@ -1,25 +1,86 @@
-You are diagnosing why an agent generated an empty patch (no code changes) when trying to solve a problem.
+# HGM Diagnostic Analysis - Empty Patch
 
-## Execution Log
+You are an expert AI system analyzer diagnosing why a coding agent failed to generate any code changes.
+
+## Agent Implementation Summary
+
+The coding agent uses:
+- **Tool-based architecture**: Async tools for git, repository operations
+- **Subordinate agent delegation**: Spawns sub-agents for implementation
+- **Problem-solving flow**: Analysis → Test identification → Patch generation
+
+## Analysis Context
+
+The agent was asked to solve a problem but generated NO code changes (empty patch).
+
+### Running Log
+```
 {{log}}
+```
 
-## Problem Statement
+### Problem Statement
+```
 {{issue}}
+```
 
-## Analysis Task
+### Generated Patch
+```
+{{patch}}
+```
 
-An empty patch usually means:
-1. The agent didn't understand what to do
-2. The agent thought no changes were needed
-3. The agent made changes in the wrong location
-4. The agent's tool calls failed without proper error handling
+### Test Results
+```
+{{results}}
+```
 
-Provide:
-1. **Most likely cause** based on the log
-2. **Specific recommendations** to prevent empty patches:
-   - Prompt improvements to clarify expectations
-   - Tool enhancements to verify changes
-   - Workflow modifications to validate progress
-3. **Example fix** showing what a good solution would look like
+## Required Analysis
 
-Be concrete and actionable.
+Diagnose why NO patch was generated. Provide JSON with these fields:
+
+### 1. log_summarization
+- Did the agent understand the problem?
+- Did it identify files to modify?
+- Where in the process did it fail to generate changes?
+- Did subordinate agents complete their work?
+
+### 2. potential_improvements
+List fixes for empty patch generation:
+- Ensure subordinate agents make actual changes
+- Verify modifications before completing
+- Add validation that changes were made
+- Improve problem understanding
+
+### 3. improvement_proposal
+Select the ONE most critical fix for empty patches:
+- What specific change would ensure patches are generated?
+- Why is this the root cause?
+
+### 4. implementation_suggestion
+Concrete steps to fix empty patch generation:
+- Which tool/function needs modification?
+- What validation should be added?
+- How to ensure changes are made?
+
+### 5. problem_description
+Format as GitHub issue:
+```
+Title: Fix empty patch generation in [specific scenario]
+
+Problem: Agent completes without making changes...
+Solution: Add validation/checks to ensure...
+Expected: Agent always generates patches when modifications are needed
+```
+
+## Response Format
+
+```json
+{
+  "log_summarization": "...",
+  "potential_improvements": ["...", "..."],
+  "improvement_proposal": "...",
+  "implementation_suggestion": "...",
+  "problem_description": "..."
+}
+```
+
+**Focus**: Ensure the agent actually implements the changes it identifies.
