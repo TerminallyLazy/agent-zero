@@ -36,6 +36,7 @@ async def call_extensions(extension_point: str, agent: "Agent|None" = None, **kw
 
     # call extensions
     for cls in classes:
+        ext_name = _get_file_from_module(cls.__module__)
         await cls(agent=agent).execute(**kwargs)
 
 

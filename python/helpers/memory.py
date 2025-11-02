@@ -60,14 +60,14 @@ class Memory:
         INSTRUMENTS = "instruments"
 
     index: dict[str, "MyFaiss"] = {}
-
+    
     @staticmethod
     async def get(agent: Agent):
         memory_subdir = agent.config.memory_subdir or "default"
         if Memory.index.get(memory_subdir) is None:
             log_item = agent.context.log.log(
                 type="util",
-                heading=f"Initializing VectorDB in '/{memory_subdir}'",
+                heading=f"Initalizing VectorDB in '/{memory_subdir}'",
             )
             db, created = Memory.initialize(
                 log_item,
@@ -78,11 +78,11 @@ class Memory:
             Memory.index[memory_subdir] = db
             wrap = Memory(db, memory_subdir=memory_subdir)
             if agent.config.knowledge_subdirs:
-                await wrap.preload_knowledge(
+                await wrap.preload_knowledege(
                     log_item, agent.config.knowledge_subdirs, memory_subdir
                 )
             return wrap
-        else:
+        else:   
             return Memory(
                 db=Memory.index[memory_subdir],
                 memory_subdir=memory_subdir,
@@ -208,7 +208,7 @@ class Memory:
                 # normalize_L2=True,
                 relevance_score_fn=Memory._cosine_normalizer,
             )
-
+            
             # insert docs if reindexing
             if docs:
                 PrintStyle.standard("Indexing memories...")
