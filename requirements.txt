@@ -46,3 +46,5 @@ imapclient>=3.0.1
 html2text>=2024.2.26
 beautifulsoup4>=4.12.3
 exchangelib>=5.4.3
+agent-client-protocol>=0.6.3
+requests>=2.31.0

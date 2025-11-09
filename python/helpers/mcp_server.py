@@ -3,7 +3,8 @@ from typing import Annotated, Literal, Union
 from urllib.parse import urlparse
 from openai import BaseModel
 from pydantic import Field
-from fastmcp import FastMCP
+# from fastmcp import FastMCP
+import fastmcp.server.http as fastmcp_server
 
 from agent import AgentContext, AgentContextType, UserMessage
 from python.helpers.persist_chat import remove_chat
@@ -17,7 +18,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from fastmcp.server.http import create_sse_app
 from starlette.requests import Request
 import threading
-
+from fastmcp import FastMCP
 _PRINTER = PrintStyle(italic=True, font_color="green", padding=False)
 
 
@@ -430,4 +431,4 @@ async def mcp_middleware(request: Request, call_next):
             status_code=403, detail="MCP server is disabled in settings."
         )
 
-    return await call_next(request)
+    return await call_next(request) 

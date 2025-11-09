@@ -11,7 +11,7 @@ import threading
 from flask import Flask, request, Response, session, redirect, url_for, render_template_string
 from werkzeug.wrappers.response import Response as BaseResponse
 import initialize
-from python.helpers import files, git, mcp_server, fasta2a_server
+from python.helpers import files, git, mcp_server, fasta2a_server, acp_server
 from python.helpers.files import get_abs_path
 from python.helpers import runtime, dotenv, process
 from python.helpers.extract_tools import load_classes_from_folder
@@ -237,10 +237,11 @@ def run():
     for handler in handlers:
         register_api_handler(webapp, handler)
 
-    # add the webapp, mcp, and a2a to the app
+    # add the webapp, mcp, a2a, and acp to the app
     middleware_routes = {
         "/mcp": ASGIMiddleware(app=mcp_server.DynamicMcpProxy.get_instance()),  # type: ignore
         "/a2a": ASGIMiddleware(app=fasta2a_server.DynamicA2AProxy.get_instance()),  # type: ignore
+        "/acp": ASGIMiddleware(app=acp_server.DynamicACPProxy.get_instance()),  # type: ignore
     }
 
     app = DispatcherMiddleware(webapp, middleware_routes)  # type: ignore
@@ -272,6 +273,7 @@ def init_a0():
     init_chats.result_sync()
 
     initialize.initialize_mcp()
+    initialize.initialize_acp()
     # start job loop
     initialize.initialize_job_loop()
     # preload

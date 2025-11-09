@@ -130,6 +130,13 @@ def initialize_mcp():
         return _initialize_mcp(set["mcp_servers"])
     return defer.DeferredTask().start_task(initialize_mcp_async)
 
+def initialize_acp():
+    """Initialize ACP server with current settings."""
+    async def initialize_acp_async():
+        from python.helpers.acp_server import DynamicACPProxy
+        DynamicACPProxy.get_instance().reconfigure()
+    return defer.DeferredTask().start_task(initialize_acp_async)
+
 def initialize_job_loop():
     from python.helpers.job_loop import run_loop
     return defer.DeferredTask("JobLoop").start_task(run_loop)

@@ -103,6 +103,10 @@ class Settings(TypedDict):
     mcp_server_enabled: bool
     mcp_server_token: str
 
+    acp_server_enabled: bool
+    acp_server_token: str
+    acp_max_sessions: int
+
     a2a_server_enabled: bool
 
     variables: str
@@ -1173,6 +1177,48 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "mcp",
     }
 
+    # -------- ACP Section --------
+    acp_server_fields: list[SettingsField] = []
+
+    acp_server_fields.append(
+        {
+            "id": "acp_server_enabled",
+            "title": "Enable A0 ACP Server",
+            "description": "Expose Agent Zero as an ACP (Agent Client Protocol) server. This will make this A0 instance available to ACP clients like Zed or Claude Code.",
+            "type": "switch",
+            "value": settings["acp_server_enabled"],
+        }
+    )
+
+    acp_server_fields.append(
+        {
+            "id": "acp_server_token",
+            "title": "ACP Server Token",
+            "description": "Token for ACP server authentication. Leave empty to share MCP server token.",
+            "type": "text",
+            "hidden": True,
+            "value": settings["acp_server_token"],
+        }
+    )
+
+    acp_server_fields.append(
+        {
+            "id": "acp_max_sessions",
+            "title": "Max Concurrent Sessions",
+            "description": "Maximum number of concurrent ACP sessions allowed.",
+            "type": "number",
+            "value": settings["acp_max_sessions"],
+        }
+    )
+
+    acp_server_section: SettingsSection = {
+        "id": "acp_server",
+        "title": "A0 ACP Server",
+        "description": "Agent Zero can be exposed as an ACP server for integration with ACP-compatible clients.",
+        "fields": acp_server_fields,
+        "tab": "mcp",
+    }
+
     # -------- A2A Section --------
     a2a_fields: list[SettingsField] = []
 
@@ -1267,6 +1313,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             auth_section,
             mcp_client_section,
             mcp_server_section,
+            acp_server_section,
             a2a_section,
             external_api_section,
             backup_section,
@@ -1498,6 +1545,9 @@ def get_default_settings() -> Settings:
         mcp_client_tool_timeout=120,
         mcp_server_enabled=False,
         mcp_server_token=create_auth_token(),
+        acp_server_enabled=True,
+        acp_server_token="",
+        acp_max_sessions=10,
         a2a_server_enabled=False,
         variables="",
         secrets="",
@@ -1609,6 +1659,18 @@ def _apply_settings(previous: Settings | None):
 
             task4 = defer.DeferredTask().start_task(
                 update_a2a_token, current_token
+            )  # TODO overkill, replace with background task
+
+        # update token in acp server
+        if not previous or current_token != previous.get("mcp_server_token"):
+
+            async def update_acp_token():
+                from python.helpers.acp_server import DynamicACPProxy
+
+                DynamicACPProxy.get_instance().reconfigure()
+
+            task5 = defer.DeferredTask().start_task(
+                update_acp_token
             )  # TODO overkill, replace with background task
 
 
