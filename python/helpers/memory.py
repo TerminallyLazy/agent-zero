@@ -69,7 +69,7 @@ class Memory:
                 type="util",
                 heading=f"Initializing VectorDB in '/{memory_subdir}'",
             )
-            db, created = Memory.initialize(
+            db, created = await Memory.initialize(
                 log_item,
                 agent.config.embeddings_model,
                 memory_subdir,
@@ -99,7 +99,7 @@ class Memory:
 
             agent_config = initialize.initialize_agent()
             model_config = agent_config.embeddings_model
-            db, _created = Memory.initialize(
+            db, _created = await Memory.initialize(
                 log_item=log_item,
                 model_config=model_config,
                 memory_subdir=memory_subdir,
@@ -121,7 +121,7 @@ class Memory:
         return await Memory.get(agent)
 
     @staticmethod
-    def initialize(
+    async def initialize(
         log_item: LogItem | None,
         model_config: models.ModelConfig,
         memory_subdir: str,
@@ -197,7 +197,7 @@ class Memory:
 
         # DB not loaded, create one
         if not db:
-            index = faiss.IndexFlatIP(len(embedder.embed_query("example")))
+            index = faiss.IndexFlatIP(len(await embedder.aembed_query("example")))
 
             db = MyFaiss(
                 embedding_function=embedder,

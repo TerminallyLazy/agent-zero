@@ -94,8 +94,8 @@ class DocumentQueryStore:
 
         return normalized
 
-    def init_vector_db(self):
-        return VectorDB(self.agent, cache=True)
+    async def init_vector_db(self):
+        return await VectorDB.create(self.agent, cache=True)
 
     async def add_document(
         self, text: str, document_uri: str, metadata: dict | None = None
@@ -143,7 +143,7 @@ class DocumentQueryStore:
         try:
             # Initialize vector db if not already initialized
             if not self.vector_db:
-                self.vector_db = self.init_vector_db()
+                self.vector_db = await self.init_vector_db()
 
             ids = await self.vector_db.insert_documents(docs)
             PrintStyle.standard(

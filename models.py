@@ -677,6 +677,24 @@ class LiteLLMEmbeddingWrapper(Embeddings):
         item = resp.data[0]  # type: ignore
         return item.get("embedding") if isinstance(item, dict) else item.embedding  # type: ignore
 
+    async def aembed_query(self, text: str) -> List[float]:
+        # Apply rate limiting if configured
+        await apply_rate_limiter(self.a0_model_conf, text)
+
+        resp = embedding(model=self.model_name, input=[text], **self.kwargs)
+        item = resp.data[0]  # type: ignore
+        return item.get("embedding") if isinstance(item, dict) else item.embedding  # type: ignore
+
+    async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
+        # Apply rate limiting if configured
+        await apply_rate_limiter(self.a0_model_conf, " ".join(texts))
+
+        resp = embedding(model=self.model_name, input=texts, **self.kwargs)
+        return [
+            item.get("embedding") if isinstance(item, dict) else item.embedding  # type: ignore
+            for item in resp.data  # type: ignore
+        ]
+
 
 class LocalSentenceTransformerWrapper(Embeddings):
     """Local wrapper for sentence-transformers models to avoid HuggingFace API calls"""
@@ -726,6 +744,23 @@ class LocalSentenceTransformerWrapper(Embeddings):
             embedding[0].tolist() if hasattr(embedding[0], "tolist") else embedding[0]
         )
         return result  # type: ignore
+
+    async def aembed_query(self, text: str) -> List[float]:
+        # Apply rate limiting if configured
+        await apply_rate_limiter(self.a0_model_conf, text)
+
+        embedding = self.model.encode([text], convert_to_tensor=False)  # type: ignore
+        result = (
+            embedding[0].tolist() if hasattr(embedding[0], "tolist") else embedding[0]
+        )
+        return result  # type: ignore
+
+    async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
+        # Apply rate limiting if configured
+        await apply_rate_limiter(self.a0_model_conf, " ".join(texts))
+
+        embeddings = self.model.encode(texts, convert_to_tensor=False)  # type: ignore
+        return embeddings.tolist() if hasattr(embeddings, "tolist") else embeddings  # type: ignore
 
 
 def _get_litellm_chat(

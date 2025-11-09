@@ -56,11 +56,18 @@ class VectorDB:
             )
         return VectorDB._cached_embeddings[namespace]
 
-    def __init__(self, agent: Agent, cache: bool = True):
+    def __init__(self, agent: Agent, cache: bool = True, embedding_dim: int | None = None):
         self.agent = agent
         self.cache = cache  # store cache preference
         self.embeddings = self._get_embeddings(agent, cache=cache)
-        self.index = faiss.IndexFlatIP(len(self.embeddings.embed_query("example")))
+
+        # If embedding_dim is provided, use it; otherwise compute it synchronously (legacy)
+        if embedding_dim is not None:
+            dim = embedding_dim
+        else:
+            dim = len(self.embeddings.embed_query("example"))
+
+        self.index = faiss.IndexFlatIP(dim)
 
         self.db = MyFaiss(
             embedding_function=self.embeddings,
@@ -71,6 +78,13 @@ class VectorDB:
             # normalize_L2=True,
             relevance_score_fn=cosine_normalizer,
         )
+
+    @staticmethod
+    async def create(agent: Agent, cache: bool = True):
+        """Async factory method to create VectorDB instance"""
+        embeddings = VectorDB._get_embeddings(agent, cache=cache)
+        embedding_dim = len(await embeddings.aembed_query("example"))
+        return VectorDB(agent, cache=cache, embedding_dim=embedding_dim)
 
     async def search_by_similarity_threshold(
         self, query: str, limit: int, threshold: float, filter: str = ""
