@@ -167,20 +167,6 @@ async def logout_handler():
     session.pop('authentication', None)
     return redirect(url_for('login_handler'))
 
-# Eden Clinical Inboxologist UI
-@webapp.route("/eden", methods=["GET"])
-@webapp.route("/eden/", methods=["GET"])
-@requires_auth
-async def serve_eden():
-    eden_index = files.read_file("eden_ui/index.html")
-    return eden_index
-
-# Serve Eden static files (CSS, JS)
-@webapp.route("/eden/<path:filename>", methods=["GET"])
-@requires_auth
-async def serve_eden_static(filename):
-    from flask import send_from_directory
-    return send_from_directory(get_abs_path("./eden_ui"), filename)
 
 # handle default address, load index
 @webapp.route("/", methods=["GET"])
@@ -212,6 +198,7 @@ def run():
     from a2wsgi import ASGIMiddleware
 
     PrintStyle().print("Starting server...")
+    PrintStyle().print("DEBUG: About to register handlers...")
 
     class NoRequestLoggingWSGIRequestHandler(WSGIRequestHandler):
         def log_request(self, code="-", size="-"):
@@ -248,9 +235,12 @@ def run():
         )
 
     # initialize and register API handlers
+    PrintStyle().print("DEBUG: Loading API handlers...")
     handlers = load_classes_from_folder("python/api", "*.py", ApiHandler)
+    PrintStyle().print(f"DEBUG: Loaded {len(handlers)} API handlers")
     for handler in handlers:
         register_api_handler(webapp, handler)
+    PrintStyle().print("DEBUG: API handlers registered")
 
     # Register Eden API handlers (in python/api/eden/)
     def register_eden_handler(app, handler: type[ApiHandler]):
@@ -284,6 +274,36 @@ def run():
         PrintStyle().print(f"Registered {len(eden_handlers)} Eden API handlers")
     except Exception as e:
         PrintStyle().print(f"Note: Eden API handlers not loaded: {e}")
+
+    # Register Eden UI routes
+    @webapp.route("/eden", methods=["GET"])
+    @webapp.route("/eden/", methods=["GET"])
+    async def serve_eden():
+        try:
+            eden_index = files.read_file("eden_ui/index.html")
+            if eden_index:
+                return eden_index
+            else:
+                return "Error: Eden index.html is empty", 500
+        except Exception as e:
+            return f"Error loading Eden UI: {str(e)}", 500
+
+    @webapp.route("/eden/css/<path:filename>", methods=["GET"])
+    async def serve_eden_css(filename):
+        from flask import send_from_directory
+        return send_from_directory(get_abs_path("./eden_ui/css"), filename)
+
+    @webapp.route("/eden/js/<path:filename>", methods=["GET"])
+    async def serve_eden_js(filename):
+        from flask import send_from_directory
+        return send_from_directory(get_abs_path("./eden_ui/js"), filename)
+
+    PrintStyle().print("Registered Eden UI routes at /eden")
+
+    # Debug: print all registered routes
+    PrintStyle().print("All registered routes:")
+    for rule in webapp.url_map.iter_rules():
+        PrintStyle().print(f"  {rule.rule} -> {rule.endpoint} [{', '.join(rule.methods)}]")
 
     # add the webapp, mcp, and a2a to the app
     middleware_routes = {
