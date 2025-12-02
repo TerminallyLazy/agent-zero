@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" :class="{ 'dark': darkMode }">
+<html lang="en" id="eden-root">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -219,8 +219,8 @@
                                     </div>
                                     <div class="flex items-center gap-2 mt-1">
                                         <template x-for="task in cluster.tasks.slice(0, 3)" :key="task.id">
-                                            <span class="text-xs" :title="task.category">
-                                                <span x-text="getCategoryIcon(task.category)"></span>
+                                            <span class="text-xs flex items-center" :title="task.category">
+                                                <span class="material-icons text-sm" x-text="getCategoryIcon(task.category)"></span>
                                                 <span :class="getStatusClass(task.status)" x-text="getStatusIcon(task.status)"></span>
                                             </span>
                                         </template>
@@ -242,12 +242,12 @@
                             <template x-for="cat in categories" :key="cat.id">
                                 <button @click="toggleCategory(cat.id)"
                                         class="w-full text-left p-2 rounded-lg transition-colors flex items-center justify-between"
-                                        :class="activeCategories.includes(cat.id) ? 'bg-gray-100' : 'hover:bg-gray-50'">
+                                        :class="activeCategories.includes(cat.id) ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700'">
                                     <div class="flex items-center gap-2">
-                                        <span x-text="cat.icon"></span>
+                                        <span class="material-icons text-base text-eden" x-text="cat.icon"></span>
                                         <span class="text-sm" x-text="cat.name"></span>
                                     </div>
-                                    <span class="text-xs text-slate" x-text="cat.count"></span>
+                                    <span class="text-xs text-slate dark:text-slate-dark" x-text="cat.count"></span>
                                 </button>
                             </template>
                         </div>
@@ -273,32 +273,32 @@
             </aside>
 
             <!-- Main Area -->
-            <main class="flex-1 overflow-y-auto p-6 bg-background">
+            <main class="flex-1 overflow-y-auto p-6 bg-background dark:bg-background-dark">
 
                 <!-- Clusters View -->
                 <div x-show="viewMode === 'clusters'" class="max-w-4xl mx-auto space-y-4">
                     <template x-for="cluster in filteredClusters" :key="cluster.id">
-                        <div class="bg-white rounded-xl border border-border shadow-sm overflow-hidden"
+                        <div class="bg-white dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark shadow-sm overflow-hidden"
                              :class="{ 'ring-2 ring-eden/30': selectedClusterId === cluster.id }">
 
                             <!-- Cluster Header -->
-                            <div class="p-4 border-b border-border flex items-center justify-between">
+                            <div class="p-4 border-b border-border dark:border-border-dark flex items-center justify-between">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                                        <span class="text-sm font-medium text-slate" x-text="cluster.patient.initials"></span>
+                                    <div class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                        <span class="text-sm font-medium text-slate dark:text-slate-dark" x-text="cluster.patient.initials"></span>
                                     </div>
                                     <div>
                                         <h3 class="font-semibold" x-text="cluster.patient.name"></h3>
-                                        <p class="text-xs text-slate" x-text="cluster.tasks.length + ' items'"></p>
+                                        <p class="text-xs text-slate dark:text-slate-dark" x-text="cluster.tasks.length + ' items'"></p>
                                     </div>
                                 </div>
                                 <div x-data="{ expanded: false }">
                                     <button @click="expanded = !expanded"
-                                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                         <span class="text-sm font-medium px-2 py-0.5 rounded-full"
                                               :class="getConfidenceClass(cluster.avgConfidence)"
                                               x-text="Math.round(cluster.avgConfidence) + '%'"></span>
-                                        <svg class="w-4 h-4 text-slate transition-transform"
+                                        <svg class="w-4 h-4 text-slate dark:text-slate-dark transition-transform"
                                              :class="{ 'rotate-180': expanded }"
                                              fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -306,14 +306,14 @@
                                     </button>
 
                                     <!-- Reasoning Panel (expandable) -->
-                                    <div x-show="expanded" x-collapse class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                        <h4 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Cluster Reasoning</h4>
+                                    <div x-show="expanded" x-collapse class="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                                        <h4 class="text-xs font-semibold text-slate dark:text-slate-dark uppercase tracking-wide mb-2">Cluster Reasoning</h4>
                                         <div class="font-mono text-xs space-y-1">
                                             <template x-for="(line, i) in cluster.reasoning" :key="i">
                                                 <div :class="{
                                                     'text-success': line.startsWith('✓'),
                                                     'text-pending': line.startsWith('⚠'),
-                                                    'font-semibold text-charcoal': line.startsWith('→')
+                                                    'font-semibold text-charcoal dark:text-charcoal-dark': line.startsWith('→')
                                                 }" x-text="line"></div>
                                             </template>
                                         </div>
@@ -322,14 +322,13 @@
                             </div>
 
                             <!-- Task List -->
-                            <div class="divide-y divide-border">
+                            <div class="divide-y divide-border dark:divide-border-dark">
                                 <template x-for="task in cluster.tasks" :key="task.id">
-                                    <div class="p-4 hover:bg-gray-50/50 transition-colors" x-data="{ showReasoning: false }">
+                                    <div class="p-4 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors" x-data="{ showReasoning: false }">
                                         <div class="flex items-start gap-3">
                                             <!-- Category Icon -->
-                                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                                                 :class="getCategoryBgClass(task.category)">
-                                                <span x-text="getCategoryIcon(task.category)"></span>
+                                            <div class="w-8 h-8 rounded-lg bg-eden/10 flex items-center justify-center flex-shrink-0">
+                                                <span class="material-icons text-eden text-lg" x-text="getCategoryIcon(task.category)"></span>
                                             </div>
 
                                             <!-- Task Content -->
@@ -445,14 +444,14 @@
                 <div x-show="viewMode === 'lanes'" class="h-full">
                     <div class="flex gap-4 h-full overflow-x-auto pb-4">
                         <template x-for="cat in categories" :key="cat.id">
-                            <div class="w-80 flex-shrink-0 bg-white rounded-xl border border-border flex flex-col max-h-full">
+                            <div class="w-80 flex-shrink-0 bg-white dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark flex flex-col max-h-full">
                                 <!-- Lane Header -->
-                                <div class="p-3 border-b border-border flex items-center justify-between">
+                                <div class="p-3 border-b border-border dark:border-border-dark flex items-center justify-between">
                                     <div class="flex items-center gap-2">
-                                        <span x-text="cat.icon"></span>
+                                        <span class="material-icons text-eden" x-text="cat.icon"></span>
                                         <span class="font-medium" x-text="cat.name"></span>
                                     </div>
-                                    <span class="text-xs text-slate bg-gray-100 px-2 py-0.5 rounded-full" x-text="getTasksByCategory(cat.id).length"></span>
+                                    <span class="text-xs text-slate dark:text-slate-dark bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full" x-text="getTasksByCategory(cat.id).length"></span>
                                 </div>
 
                                 <!-- Lane Content -->
@@ -512,25 +511,25 @@
                     </div>
 
                     <!-- Category Breakdown -->
-                    <div class="bg-white rounded-xl border border-border p-6 mb-6">
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark p-6 mb-6">
                         <h3 class="font-semibold mb-4">By Category</h3>
                         <div class="space-y-3">
                             <template x-for="cat in categories" :key="cat.id">
                                 <div class="flex items-center gap-3">
-                                    <span x-text="cat.icon" class="text-lg"></span>
+                                    <span class="material-icons text-lg text-eden" x-text="cat.icon"></span>
                                     <span class="w-24 text-sm" x-text="cat.name"></span>
-                                    <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div class="flex-1 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                         <div class="h-full bg-eden rounded-full transition-all"
                                              :style="'width: ' + (cat.count / stats.total * 100 || 0) + '%'"></div>
                                     </div>
-                                    <span class="text-sm text-slate w-12 text-right" x-text="cat.count"></span>
+                                    <span class="text-sm text-slate dark:text-slate-dark w-12 text-right" x-text="cat.count"></span>
                                 </div>
                             </template>
                         </div>
                     </div>
 
                     <!-- Recent Auto-Handled -->
-                    <div class="bg-white rounded-xl border border-border p-6">
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark p-6">
                         <h3 class="font-semibold mb-4">Recently Auto-Handled</h3>
                         <div class="space-y-3">
                             <template x-for="task in getAutoHandledTasks().slice(0, 5)" :key="task.id">
@@ -564,11 +563,11 @@
          x-transition:leave-end="opacity-0"
          class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
          @click.self="showSettings = false">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-            <div class="p-4 border-b border-border flex items-center justify-between">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div class="p-4 border-b border-border dark:border-border-dark flex items-center justify-between">
                 <h2 class="text-lg font-semibold">Settings</h2>
-                <button @click="showSettings = false" class="p-1 rounded hover:bg-gray-100">
-                    <svg class="w-5 h-5 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button @click="showSettings = false" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg class="w-5 h-5 text-slate dark:text-slate-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
@@ -577,15 +576,15 @@
                 <!-- EMR Connection -->
                 <div class="mb-8">
                     <h3 class="font-semibold mb-3">EMR Connection</h3>
-                    <div class="p-4 border border-border rounded-lg">
+                    <div class="p-4 border border-border dark:border-border-dark rounded-lg">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                                    <span class="text-lg">🏥</span>
+                                <div class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                    <span class="material-icons text-eden">local_hospital</span>
                                 </div>
                                 <div>
                                     <div class="font-medium">Dr. Chrono</div>
-                                    <div class="text-xs text-slate" x-text="emrConnected ? 'Connected' : 'Not connected'"></div>
+                                    <div class="text-xs text-slate dark:text-slate-dark" x-text="emrConnected ? 'Connected' : 'Not connected'"></div>
                                 </div>
                             </div>
                             <button @click="connectEMR()"
@@ -600,10 +599,10 @@
                 <!-- Confidence Threshold -->
                 <div class="mb-8">
                     <h3 class="font-semibold mb-3">Auto-Handle Threshold</h3>
-                    <p class="text-sm text-slate mb-3">Tasks above this confidence level will be handled automatically.</p>
+                    <p class="text-sm text-slate dark:text-slate-dark mb-3">Tasks above this confidence level will be handled automatically.</p>
                     <div class="flex items-center gap-4">
                         <input type="range" min="50" max="100" x-model="confidenceThreshold"
-                               class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                               class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer">
                         <span class="w-12 text-right font-medium" x-text="confidenceThreshold + '%'"></span>
                     </div>
                 </div>
@@ -612,15 +611,15 @@
                 <div class="mb-8">
                     <h3 class="font-semibold mb-3">Notifications</h3>
                     <div class="space-y-3">
-                        <label class="flex items-center justify-between p-3 border border-border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <label class="flex items-center justify-between p-3 border border-border dark:border-border-dark rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                             <span class="text-sm">Email Digest</span>
                             <input type="checkbox" x-model="notificationSettings.email" class="rounded text-eden focus:ring-eden">
                         </label>
-                        <label class="flex items-center justify-between p-3 border border-border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <label class="flex items-center justify-between p-3 border border-border dark:border-border-dark rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                             <span class="text-sm">Push Notifications</span>
                             <input type="checkbox" x-model="notificationSettings.push" class="rounded text-eden focus:ring-eden">
                         </label>
-                        <label class="flex items-center justify-between p-3 border border-border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <label class="flex items-center justify-between p-3 border border-border dark:border-border-dark rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                             <span class="text-sm">SMS Alerts (Escalations Only)</span>
                             <input type="checkbox" x-model="notificationSettings.sms" class="rounded text-eden focus:ring-eden">
                         </label>
@@ -630,11 +629,11 @@
                 <!-- Policies -->
                 <div>
                     <h3 class="font-semibold mb-3">Policies</h3>
-                    <p class="text-sm text-slate mb-3">Define rules in natural language. Eden will parse and apply them.</p>
+                    <p class="text-sm text-slate dark:text-slate-dark mb-3">Define rules in natural language. Eden will parse and apply them.</p>
                     <textarea x-model="policiesText"
                               rows="6"
                               placeholder="Always escalate abnormal A1C above 9&#10;Auto-approve lisinopril refills for stable patients&#10;Never auto-send results containing 'malignancy'"
-                              class="w-full p-3 border border-border rounded-lg text-sm font-mono focus:ring-2 focus:ring-eden focus:border-eden"></textarea>
+                              class="w-full p-3 border border-border dark:border-border-dark rounded-lg text-sm font-mono bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eden focus:border-eden"></textarea>
                     <button @click="savePolicies()"
                             class="mt-3 px-4 py-2 bg-eden text-white text-sm font-medium rounded-lg hover:bg-eden/90 transition-colors">
                         Save Policies
@@ -1088,6 +1087,9 @@ Route all messages mentioning chest pain to escalation immediately`,
             console.log('Eden Command Center initialized');
             this.loadData();
 
+            // Apply initial dark mode state
+            this.applyDarkMode();
+
             // Initialize chat with welcome message
             this.chatMessages = [{
                 id: 'welcome',
@@ -1100,6 +1102,7 @@ Route all messages mentioning chest pain to escalation immediately`,
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
                 if (!localStorage.getItem('eden-dark-mode')) {
                     this.darkMode = e.matches;
+                    this.applyDarkMode();
                 }
             });
         },
@@ -1117,6 +1120,16 @@ Route all messages mentioning chest pain to escalation immediately`,
         toggleDarkMode() {
             this.darkMode = !this.darkMode;
             localStorage.setItem('eden-dark-mode', this.darkMode.toString());
+            this.applyDarkMode();
+        },
+
+        applyDarkMode() {
+            const root = document.getElementById('eden-root');
+            if (this.darkMode) {
+                root.classList.add('dark');
+            } else {
+                root.classList.remove('dark');
+            }
         },
 
         // Chat Methods
