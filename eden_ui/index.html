@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eden | Clinical Inboxologist</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link href="css/eden.css" rel="stylesheet">
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-background text-charcoal font-sans antialiased" x-data="edenApp">
+
+    <!-- App Shell -->
+    <div class="h-screen flex flex-col overflow-hidden">
+
+        <!-- Top Bar -->
+        <header class="h-14 bg-white border-b border-border flex items-center justify-between px-4 flex-shrink-0">
+            <!-- Logo & Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-eden flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <span class="text-lg font-semibold">Eden</span>
+                <span class="text-sm text-slate">Command Center</span>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="hidden md:flex items-center gap-6 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-success"></span>
+                    <span class="text-slate">Auto:</span>
+                    <span class="font-semibold" x-text="stats.autoHandled">0</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-pending"></span>
+                    <span class="text-slate">Pending:</span>
+                    <span class="font-semibold" x-text="stats.pending">0</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-escalated"></span>
+                    <span class="text-slate">Escalated:</span>
+                    <span class="font-semibold" x-text="stats.escalated">0</span>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2">
+                <!-- Sync Button -->
+                <button @click="syncInbox()"
+                        class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                        :class="{ 'animate-spin': syncing }"
+                        title="Sync Inbox">
+                    <svg class="w-5 h-5 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+
+                <!-- Notifications -->
+                <button @click="showNotifications = !showNotifications"
+                        class="p-2 rounded-lg hover:bg-gray-100 transition-colors relative">
+                    <svg class="w-5 h-5 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    <span x-show="notifications.length > 0"
+                          class="absolute top-1 right-1 w-2 h-2 rounded-full bg-escalated"></span>
+                </button>
+
+                <!-- Settings -->
+                <button @click="showSettings = true"
+                        class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <svg class="w-5 h-5 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </button>
+
+                <!-- Profile -->
+                <button class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center ml-2">
+                    <span class="text-sm font-medium text-slate">DR</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex overflow-hidden">
+
+            <!-- Left Sidebar -->
+            <aside class="w-64 bg-white border-r border-border flex flex-col flex-shrink-0 overflow-hidden">
+
+                <!-- View Toggle -->
+                <div class="p-3 border-b border-border">
+                    <div class="flex rounded-lg bg-gray-100 p-1">
+                        <button @click="viewMode = 'clusters'"
+                                class="flex-1 py-1.5 px-3 text-sm font-medium rounded-md transition-colors"
+                                :class="viewMode === 'clusters' ? 'bg-white shadow-sm text-charcoal' : 'text-slate hover:text-charcoal'">
+                            Clusters
+                        </button>
+                        <button @click="viewMode = 'lanes'"
+                                class="flex-1 py-1.5 px-3 text-sm font-medium rounded-md transition-colors"
+                                :class="viewMode === 'lanes' ? 'bg-white shadow-sm text-charcoal' : 'text-slate hover:text-charcoal'">
+                            Lanes
+                        </button>
+                        <button @click="viewMode = 'summary'"
+                                class="flex-1 py-1.5 px-3 text-sm font-medium rounded-md transition-colors"
+                                :class="viewMode === 'summary' ? 'bg-white shadow-sm text-charcoal' : 'text-slate hover:text-charcoal'">
+                            Summary
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clusters List -->
+                <div x-show="viewMode === 'clusters'" class="flex-1 overflow-y-auto">
+                    <div class="p-3">
+                        <h3 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Patient Clusters</h3>
+                        <div class="space-y-1">
+                            <template x-for="cluster in clusters" :key="cluster.id">
+                                <button @click="selectCluster(cluster.id)"
+                                        class="w-full text-left p-2 rounded-lg transition-colors"
+                                        :class="selectedClusterId === cluster.id ? 'bg-eden/10 border border-eden/30' : 'hover:bg-gray-50'">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-medium text-sm" x-text="cluster.patient.name"></span>
+                                        <span class="text-xs px-1.5 py-0.5 rounded-full"
+                                              :class="getConfidenceClass(cluster.avgConfidence)"
+                                              x-text="Math.round(cluster.avgConfidence) + '%'"></span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <template x-for="task in cluster.tasks.slice(0, 3)" :key="task.id">
+                                            <span class="text-xs" :title="task.category">
+                                                <span x-text="getCategoryIcon(task.category)"></span>
+                                                <span :class="getStatusClass(task.status)" x-text="getStatusIcon(task.status)"></span>
+                                            </span>
+                                        </template>
+                                        <span x-show="cluster.tasks.length > 3" class="text-xs text-slate">
+                                            +<span x-text="cluster.tasks.length - 3"></span>
+                                        </span>
+                                    </div>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Filters (for Lanes view) -->
+                <div x-show="viewMode === 'lanes'" class="flex-1 overflow-y-auto">
+                    <div class="p-3">
+                        <h3 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Categories</h3>
+                        <div class="space-y-1">
+                            <template x-for="cat in categories" :key="cat.id">
+                                <button @click="toggleCategory(cat.id)"
+                                        class="w-full text-left p-2 rounded-lg transition-colors flex items-center justify-between"
+                                        :class="activeCategories.includes(cat.id) ? 'bg-gray-100' : 'hover:bg-gray-50'">
+                                    <div class="flex items-center gap-2">
+                                        <span x-text="cat.icon"></span>
+                                        <span class="text-sm" x-text="cat.name"></span>
+                                    </div>
+                                    <span class="text-xs text-slate" x-text="cat.count"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity Feed -->
+                <div class="border-t border-border p-3 flex-shrink-0">
+                    <h3 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Eden Activity</h3>
+                    <div class="space-y-2 max-h-32 overflow-y-auto">
+                        <template x-for="activity in recentActivity.slice(0, 5)" :key="activity.id">
+                            <div class="flex items-start gap-2 text-xs">
+                                <span class="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
+                                      :class="activity.type === 'auto' ? 'bg-success' : activity.type === 'pending' ? 'bg-pending' : 'bg-eden'"></span>
+                                <span class="text-slate" x-text="activity.message"></span>
+                            </div>
+                        </template>
+                        <div x-show="recentActivity.length === 0" class="text-xs text-slate italic">
+                            No recent activity
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Area -->
+            <main class="flex-1 overflow-y-auto p-6 bg-background">
+
+                <!-- Clusters View -->
+                <div x-show="viewMode === 'clusters'" class="max-w-4xl mx-auto space-y-4">
+                    <template x-for="cluster in filteredClusters" :key="cluster.id">
+                        <div class="bg-white rounded-xl border border-border shadow-sm overflow-hidden"
+                             :class="{ 'ring-2 ring-eden/30': selectedClusterId === cluster.id }">
+
+                            <!-- Cluster Header -->
+                            <div class="p-4 border-b border-border flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                        <span class="text-sm font-medium text-slate" x-text="cluster.patient.initials"></span>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold" x-text="cluster.patient.name"></h3>
+                                        <p class="text-xs text-slate" x-text="cluster.tasks.length + ' items'"></p>
+                                    </div>
+                                </div>
+                                <div x-data="{ expanded: false }">
+                                    <button @click="expanded = !expanded"
+                                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                                        <span class="text-sm font-medium px-2 py-0.5 rounded-full"
+                                              :class="getConfidenceClass(cluster.avgConfidence)"
+                                              x-text="Math.round(cluster.avgConfidence) + '%'"></span>
+                                        <svg class="w-4 h-4 text-slate transition-transform"
+                                             :class="{ 'rotate-180': expanded }"
+                                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                        </svg>
+                                    </button>
+
+                                    <!-- Reasoning Panel (expandable) -->
+                                    <div x-show="expanded" x-collapse class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <h4 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Cluster Reasoning</h4>
+                                        <div class="font-mono text-xs space-y-1">
+                                            <template x-for="(line, i) in cluster.reasoning" :key="i">
+                                                <div :class="{
+                                                    'text-success': line.startsWith('✓'),
+                                                    'text-pending': line.startsWith('⚠'),
+                                                    'font-semibold text-charcoal': line.startsWith('→')
+                                                }" x-text="line"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Task List -->
+                            <div class="divide-y divide-border">
+                                <template x-for="task in cluster.tasks" :key="task.id">
+                                    <div class="p-4 hover:bg-gray-50/50 transition-colors" x-data="{ showReasoning: false }">
+                                        <div class="flex items-start gap-3">
+                                            <!-- Category Icon -->
+                                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                 :class="getCategoryBgClass(task.category)">
+                                                <span x-text="getCategoryIcon(task.category)"></span>
+                                            </div>
+
+                                            <!-- Task Content -->
+                                            <div class="flex-1 min-w-0">
+                                                <div class="flex items-center gap-2 mb-1">
+                                                    <h4 class="font-medium text-sm" x-text="task.title"></h4>
+                                                    <span class="text-xs px-1.5 py-0.5 rounded-full"
+                                                          :class="getConfidenceClass(task.confidence)"
+                                                          x-text="Math.round(task.confidence) + '%'"></span>
+                                                    <span class="text-xs px-1.5 py-0.5 rounded-full"
+                                                          :class="getStatusBadgeClass(task.status)"
+                                                          x-text="task.status.replace('_', ' ')"></span>
+                                                </div>
+                                                <p class="text-sm text-slate line-clamp-2" x-text="task.summary"></p>
+
+                                                <!-- Draft Preview (if exists) -->
+                                                <div x-show="task.draftContent" class="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                                    <p class="text-xs text-slate italic line-clamp-2" x-text="task.draftContent"></p>
+                                                </div>
+
+                                                <!-- Task Reasoning (expandable) -->
+                                                <div x-show="showReasoning" x-collapse class="mt-3">
+                                                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 font-mono text-xs space-y-1">
+                                                        <template x-for="(line, i) in task.reasoning" :key="i">
+                                                            <div :class="{
+                                                                'text-success': line.startsWith('✓'),
+                                                                'text-pending': line.startsWith('⚠'),
+                                                                'font-semibold text-charcoal': line.startsWith('→')
+                                                            }" x-text="line"></div>
+                                                        </template>
+
+                                                        <!-- Confidence Breakdown -->
+                                                        <div class="mt-3 pt-3 border-t border-gray-200">
+                                                            <div class="text-slate mb-2">Confidence Breakdown</div>
+                                                            <template x-for="factor in task.confidenceFactors" :key="factor.name">
+                                                                <div class="flex items-center gap-2 py-1">
+                                                                    <span class="w-24 text-slate" x-text="factor.label"></span>
+                                                                    <div class="flex-1 h-1.5 bg-gray-200 rounded">
+                                                                        <div class="h-1.5 rounded transition-all"
+                                                                             :class="factor.score > 0.7 ? 'bg-eden' : factor.score > 0.4 ? 'bg-pending' : 'bg-escalated'"
+                                                                             :style="'width: ' + (factor.score * 100) + '%'"></div>
+                                                                    </div>
+                                                                    <span class="w-10 text-right text-slate" x-text="Math.round(factor.score * 100) + '%'"></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Actions -->
+                                            <div class="flex items-center gap-1 flex-shrink-0">
+                                                <button @click="showReasoning = !showReasoning"
+                                                        class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                                        title="Show reasoning">
+                                                    <svg class="w-4 h-4 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                    </svg>
+                                                </button>
+
+                                                <template x-if="task.status === 'needs_review' || task.status === 'pending'">
+                                                    <div class="flex items-center gap-1">
+                                                        <button @click="approveTask(task.id)"
+                                                                class="px-2.5 py-1 text-xs font-medium text-white bg-success rounded hover:bg-success/90 transition-colors">
+                                                            Approve
+                                                        </button>
+                                                        <button @click="editTask(task.id)"
+                                                                class="px-2.5 py-1 text-xs font-medium text-slate bg-gray-100 rounded hover:bg-gray-200 transition-colors">
+                                                            Edit
+                                                        </button>
+                                                        <button @click="escalateTask(task.id)"
+                                                                class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                                                title="Escalate">
+                                                            <svg class="w-4 h-4 text-escalated" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </template>
+
+                                                <template x-if="task.status === 'auto_handled'">
+                                                    <span class="text-xs text-success flex items-center gap-1">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                        </svg>
+                                                        Auto
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Empty State -->
+                    <div x-show="filteredClusters.length === 0" class="text-center py-12">
+                        <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-1">Inbox Clear</h3>
+                        <p class="text-slate">No pending tasks. Eden is monitoring your inbox.</p>
+                    </div>
+                </div>
+
+                <!-- Lanes View (Kanban) -->
+                <div x-show="viewMode === 'lanes'" class="h-full">
+                    <div class="flex gap-4 h-full overflow-x-auto pb-4">
+                        <template x-for="cat in categories" :key="cat.id">
+                            <div class="w-80 flex-shrink-0 bg-white rounded-xl border border-border flex flex-col max-h-full">
+                                <!-- Lane Header -->
+                                <div class="p-3 border-b border-border flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span x-text="cat.icon"></span>
+                                        <span class="font-medium" x-text="cat.name"></span>
+                                    </div>
+                                    <span class="text-xs text-slate bg-gray-100 px-2 py-0.5 rounded-full" x-text="getTasksByCategory(cat.id).length"></span>
+                                </div>
+
+                                <!-- Lane Content -->
+                                <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                                    <template x-for="task in getTasksByCategory(cat.id)" :key="task.id">
+                                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
+                                             @click="openTaskDetail(task)">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <span class="text-xs px-1.5 py-0.5 rounded-full"
+                                                      :class="getConfidenceClass(task.confidence)"
+                                                      x-text="Math.round(task.confidence) + '%'"></span>
+                                                <span class="text-xs px-1.5 py-0.5 rounded-full"
+                                                      :class="getStatusBadgeClass(task.status)"
+                                                      x-text="task.status.replace('_', ' ')"></span>
+                                            </div>
+                                            <h4 class="text-sm font-medium mb-1" x-text="task.patient.name"></h4>
+                                            <p class="text-xs text-slate line-clamp-2" x-text="task.title"></p>
+                                        </div>
+                                    </template>
+
+                                    <div x-show="getTasksByCategory(cat.id).length === 0"
+                                         class="text-center py-8 text-xs text-slate italic">
+                                        No tasks
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Summary View -->
+                <div x-show="viewMode === 'summary'" class="max-w-4xl mx-auto">
+                    <!-- Summary Header -->
+                    <div class="bg-white rounded-xl border border-border p-6 mb-6">
+                        <h2 class="text-xl font-semibold mb-4">Daily Summary</h2>
+                        <p class="text-slate text-sm mb-6" x-text="'Last updated: ' + new Date().toLocaleString()"></p>
+
+                        <!-- Stats Grid -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="p-4 bg-success/10 rounded-lg">
+                                <div class="text-2xl font-bold text-success" x-text="stats.autoHandled">0</div>
+                                <div class="text-sm text-slate">Auto-handled</div>
+                            </div>
+                            <div class="p-4 bg-pending/10 rounded-lg">
+                                <div class="text-2xl font-bold text-pending" x-text="stats.pending">0</div>
+                                <div class="text-sm text-slate">Pending Review</div>
+                            </div>
+                            <div class="p-4 bg-escalated/10 rounded-lg">
+                                <div class="text-2xl font-bold text-escalated" x-text="stats.escalated">0</div>
+                                <div class="text-sm text-slate">Escalated</div>
+                            </div>
+                            <div class="p-4 bg-eden/10 rounded-lg">
+                                <div class="text-2xl font-bold text-eden" x-text="stats.total">0</div>
+                                <div class="text-sm text-slate">Total Today</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Breakdown -->
+                    <div class="bg-white rounded-xl border border-border p-6 mb-6">
+                        <h3 class="font-semibold mb-4">By Category</h3>
+                        <div class="space-y-3">
+                            <template x-for="cat in categories" :key="cat.id">
+                                <div class="flex items-center gap-3">
+                                    <span x-text="cat.icon" class="text-lg"></span>
+                                    <span class="w-24 text-sm" x-text="cat.name"></span>
+                                    <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div class="h-full bg-eden rounded-full transition-all"
+                                             :style="'width: ' + (cat.count / stats.total * 100 || 0) + '%'"></div>
+                                    </div>
+                                    <span class="text-sm text-slate w-12 text-right" x-text="cat.count"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Recent Auto-Handled -->
+                    <div class="bg-white rounded-xl border border-border p-6">
+                        <h3 class="font-semibold mb-4">Recently Auto-Handled</h3>
+                        <div class="space-y-3">
+                            <template x-for="task in getAutoHandledTasks().slice(0, 5)" :key="task.id">
+                                <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                                    <span class="text-success">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                    </span>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-medium" x-text="task.patient.name + ' - ' + task.title"></div>
+                                        <div class="text-xs text-slate" x-text="task.category"></div>
+                                    </div>
+                                    <span class="text-xs text-slate" x-text="formatTime(task.resolvedAt)"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div x-show="showSettings"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+         @click.self="showSettings = false">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div class="p-4 border-b border-border flex items-center justify-between">
+                <h2 class="text-lg font-semibold">Settings</h2>
+                <button @click="showSettings = false" class="p-1 rounded hover:bg-gray-100">
+                    <svg class="w-5 h-5 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[calc(80vh-4rem)]">
+                <!-- EMR Connection -->
+                <div class="mb-8">
+                    <h3 class="font-semibold mb-3">EMR Connection</h3>
+                    <div class="p-4 border border-border rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                                    <span class="text-lg">🏥</span>
+                                </div>
+                                <div>
+                                    <div class="font-medium">Dr. Chrono</div>
+                                    <div class="text-xs text-slate" x-text="emrConnected ? 'Connected' : 'Not connected'"></div>
+                                </div>
+                            </div>
+                            <button @click="connectEMR()"
+                                    class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+                                    :class="emrConnected ? 'bg-gray-100 text-slate' : 'bg-eden text-white hover:bg-eden/90'">
+                                <span x-text="emrConnected ? 'Reconnect' : 'Connect'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Confidence Threshold -->
+                <div class="mb-8">
+                    <h3 class="font-semibold mb-3">Auto-Handle Threshold</h3>
+                    <p class="text-sm text-slate mb-3">Tasks above this confidence level will be handled automatically.</p>
+                    <div class="flex items-center gap-4">
+                        <input type="range" min="50" max="100" x-model="confidenceThreshold"
+                               class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <span class="w-12 text-right font-medium" x-text="confidenceThreshold + '%'"></span>
+                    </div>
+                </div>
+
+                <!-- Notifications -->
+                <div class="mb-8">
+                    <h3 class="font-semibold mb-3">Notifications</h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center justify-between p-3 border border-border rounded-lg cursor-pointer hover:bg-gray-50">
+                            <span class="text-sm">Email Digest</span>
+                            <input type="checkbox" x-model="notificationSettings.email" class="rounded text-eden focus:ring-eden">
+                        </label>
+                        <label class="flex items-center justify-between p-3 border border-border rounded-lg cursor-pointer hover:bg-gray-50">
+                            <span class="text-sm">Push Notifications</span>
+                            <input type="checkbox" x-model="notificationSettings.push" class="rounded text-eden focus:ring-eden">
+                        </label>
+                        <label class="flex items-center justify-between p-3 border border-border rounded-lg cursor-pointer hover:bg-gray-50">
+                            <span class="text-sm">SMS Alerts (Escalations Only)</span>
+                            <input type="checkbox" x-model="notificationSettings.sms" class="rounded text-eden focus:ring-eden">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Policies -->
+                <div>
+                    <h3 class="font-semibold mb-3">Policies</h3>
+                    <p class="text-sm text-slate mb-3">Define rules in natural language. Eden will parse and apply them.</p>
+                    <textarea x-model="policiesText"
+                              rows="6"
+                              placeholder="Always escalate abnormal A1C above 9&#10;Auto-approve lisinopril refills for stable patients&#10;Never auto-send results containing 'malignancy'"
+                              class="w-full p-3 border border-border rounded-lg text-sm font-mono focus:ring-2 focus:ring-eden focus:border-eden"></textarea>
+                    <button @click="savePolicies()"
+                            class="mt-3 px-4 py-2 bg-eden text-white text-sm font-medium rounded-lg hover:bg-eden/90 transition-colors">
+                        Save Policies
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Script -->
+    <script src="js/app.js"></script>
+</body>
+</html>
