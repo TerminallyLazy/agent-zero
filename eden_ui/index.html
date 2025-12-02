@@ -62,6 +62,13 @@
         .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
         .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
+        /* Status badge styles */
+        .status-auto_handled, .status-completed { background: rgba(21, 128, 61, 0.1); color: #15803D; }
+        .status-pending, .status-needs_review { background: rgba(217, 119, 6, 0.1); color: #D97706; }
+        .status-escalated { background: rgba(220, 38, 38, 0.1); color: #DC2626; }
+        .dark .status-auto_handled, .dark .status-completed { background: rgba(21, 128, 61, 0.2); color: #22C55E; }
+        .dark .status-pending, .dark .status-needs_review { background: rgba(217, 119, 6, 0.2); color: #FBBF24; }
+        .dark .status-escalated { background: rgba(220, 38, 38, 0.2); color: #F87171; }
     </style>
 
     <!-- Alpine.js -->
@@ -84,24 +91,24 @@
                     </svg>
                 </div>
                 <span class="text-lg font-semibold">Eden</span>
-                <span class="text-sm text-slate">Command Center</span>
+                <span class="text-sm text-slate dark:text-slate-dark">Command Center</span>
             </div>
 
             <!-- Summary Stats -->
             <div class="hidden md:flex items-center gap-6 text-sm">
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-success"></span>
-                    <span class="text-slate">Auto:</span>
+                    <span class="text-slate dark:text-slate-dark">Auto:</span>
                     <span class="font-semibold" x-text="stats.autoHandled">0</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-pending"></span>
-                    <span class="text-slate">Pending:</span>
+                    <span class="w-2 h-2 rounded-full bg-warning"></span>
+                    <span class="text-slate dark:text-slate-dark">Pending:</span>
                     <span class="font-semibold" x-text="stats.pending">0</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-escalated"></span>
-                    <span class="text-slate">Escalated:</span>
+                    <span class="text-slate dark:text-slate-dark">Escalated:</span>
                     <span class="font-semibold" x-text="stats.escalated">0</span>
                 </div>
             </div>
@@ -205,12 +212,12 @@
                 <!-- Clusters List -->
                 <div x-show="viewMode === 'clusters'" class="flex-1 overflow-y-auto">
                     <div class="p-3">
-                        <h3 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Patient Clusters</h3>
+                        <h3 class="text-xs font-semibold text-slate dark:text-slate-dark uppercase tracking-wide mb-2">Patient Clusters</h3>
                         <div class="space-y-1">
                             <template x-for="cluster in clusters" :key="cluster.id">
                                 <button @click="selectCluster(cluster.id)"
                                         class="w-full text-left p-2 rounded-lg transition-colors"
-                                        :class="selectedClusterId === cluster.id ? 'bg-eden/10 border border-eden/30' : 'hover:bg-gray-50'">
+                                        :class="selectedClusterId === cluster.id ? 'bg-eden/10 border border-eden/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'">
                                     <div class="flex items-center justify-between">
                                         <span class="font-medium text-sm" x-text="cluster.patient.name"></span>
                                         <span class="text-xs px-1.5 py-0.5 rounded-full"
@@ -224,7 +231,7 @@
                                                 <span :class="getStatusClass(task.status)" x-text="getStatusIcon(task.status)"></span>
                                             </span>
                                         </template>
-                                        <span x-show="cluster.tasks.length > 3" class="text-xs text-slate">
+                                        <span x-show="cluster.tasks.length > 3" class="text-xs text-slate dark:text-slate-dark">
                                             +<span x-text="cluster.tasks.length - 3"></span>
                                         </span>
                                     </div>
@@ -237,7 +244,7 @@
                 <!-- Category Filters (for Lanes view) -->
                 <div x-show="viewMode === 'lanes'" class="flex-1 overflow-y-auto">
                     <div class="p-3">
-                        <h3 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Categories</h3>
+                        <h3 class="text-xs font-semibold text-slate dark:text-slate-dark uppercase tracking-wide mb-2">Categories</h3>
                         <div class="space-y-1">
                             <template x-for="cat in categories" :key="cat.id">
                                 <button @click="toggleCategory(cat.id)"
@@ -255,17 +262,17 @@
                 </div>
 
                 <!-- Activity Feed -->
-                <div class="border-t border-border p-3 flex-shrink-0">
-                    <h3 class="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Eden Activity</h3>
+                <div class="border-t border-border dark:border-border-dark p-3 flex-shrink-0">
+                    <h3 class="text-xs font-semibold text-slate dark:text-slate-dark uppercase tracking-wide mb-2">Eden Activity</h3>
                     <div class="space-y-2 max-h-32 overflow-y-auto">
                         <template x-for="activity in recentActivity.slice(0, 5)" :key="activity.id">
                             <div class="flex items-start gap-2 text-xs">
                                 <span class="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
-                                      :class="activity.type === 'auto' ? 'bg-success' : activity.type === 'pending' ? 'bg-pending' : 'bg-eden'"></span>
-                                <span class="text-slate" x-text="activity.message"></span>
+                                      :class="activity.type === 'auto' ? 'bg-success' : activity.type === 'pending' ? 'bg-warning' : 'bg-eden'"></span>
+                                <span class="text-slate dark:text-slate-dark" x-text="activity.message"></span>
                             </div>
                         </template>
-                        <div x-show="recentActivity.length === 0" class="text-xs text-slate italic">
+                        <div x-show="recentActivity.length === 0" class="text-xs text-slate dark:text-slate-dark italic">
                             No recent activity
                         </div>
                     </div>
@@ -312,7 +319,7 @@
                                             <template x-for="(line, i) in cluster.reasoning" :key="i">
                                                 <div :class="{
                                                     'text-success': line.startsWith('✓'),
-                                                    'text-pending': line.startsWith('⚠'),
+                                                    'text-warning': line.startsWith('⚠'),
                                                     'font-semibold text-charcoal dark:text-charcoal-dark': line.startsWith('→')
                                                 }" x-text="line"></div>
                                             </template>
@@ -342,36 +349,36 @@
                                                           :class="getStatusBadgeClass(task.status)"
                                                           x-text="task.status.replace('_', ' ')"></span>
                                                 </div>
-                                                <p class="text-sm text-slate line-clamp-2" x-text="task.summary"></p>
+                                                <p class="text-sm text-slate dark:text-slate-dark line-clamp-2" x-text="task.summary"></p>
 
                                                 <!-- Draft Preview (if exists) -->
-                                                <div x-show="task.draftContent" class="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-                                                    <p class="text-xs text-slate italic line-clamp-2" x-text="task.draftContent"></p>
+                                                <div x-show="task.draftContent" class="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600">
+                                                    <p class="text-xs text-slate dark:text-slate-dark italic line-clamp-2" x-text="task.draftContent"></p>
                                                 </div>
 
                                                 <!-- Task Reasoning (expandable) -->
                                                 <div x-show="showReasoning" x-collapse class="mt-3">
-                                                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 font-mono text-xs space-y-1">
+                                                    <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 font-mono text-xs space-y-1">
                                                         <template x-for="(line, i) in task.reasoning" :key="i">
                                                             <div :class="{
                                                                 'text-success': line.startsWith('✓'),
-                                                                'text-pending': line.startsWith('⚠'),
-                                                                'font-semibold text-charcoal': line.startsWith('→')
+                                                                'text-warning': line.startsWith('⚠'),
+                                                                'font-semibold text-charcoal dark:text-charcoal-dark': line.startsWith('→')
                                                             }" x-text="line"></div>
                                                         </template>
 
                                                         <!-- Confidence Breakdown -->
-                                                        <div class="mt-3 pt-3 border-t border-gray-200">
-                                                            <div class="text-slate mb-2">Confidence Breakdown</div>
+                                                        <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                                                            <div class="text-slate dark:text-slate-dark mb-2">Confidence Breakdown</div>
                                                             <template x-for="factor in task.confidenceFactors" :key="factor.name">
                                                                 <div class="flex items-center gap-2 py-1">
-                                                                    <span class="w-24 text-slate" x-text="factor.label"></span>
-                                                                    <div class="flex-1 h-1.5 bg-gray-200 rounded">
+                                                                    <span class="w-24 text-slate dark:text-slate-dark" x-text="factor.label"></span>
+                                                                    <div class="flex-1 h-1.5 bg-gray-200 dark:bg-gray-600 rounded">
                                                                         <div class="h-1.5 rounded transition-all"
-                                                                             :class="factor.score > 0.7 ? 'bg-eden' : factor.score > 0.4 ? 'bg-pending' : 'bg-escalated'"
+                                                                             :class="factor.score > 0.7 ? 'bg-eden' : factor.score > 0.4 ? 'bg-warning' : 'bg-escalated'"
                                                                              :style="'width: ' + (factor.score * 100) + '%'"></div>
                                                                     </div>
-                                                                    <span class="w-10 text-right text-slate" x-text="Math.round(factor.score * 100) + '%'"></span>
+                                                                    <span class="w-10 text-right text-slate dark:text-slate-dark" x-text="Math.round(factor.score * 100) + '%'"></span>
                                                                 </div>
                                                             </template>
                                                         </div>
@@ -382,9 +389,9 @@
                                             <!-- Actions -->
                                             <div class="flex items-center gap-1 flex-shrink-0">
                                                 <button @click="showReasoning = !showReasoning"
-                                                        class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                                        class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                         title="Show reasoning">
-                                                    <svg class="w-4 h-4 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg class="w-4 h-4 text-slate dark:text-slate-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                                     </svg>
@@ -397,11 +404,11 @@
                                                             Approve
                                                         </button>
                                                         <button @click="editTask(task.id)"
-                                                                class="px-2.5 py-1 text-xs font-medium text-slate bg-gray-100 rounded hover:bg-gray-200 transition-colors">
+                                                                class="px-2.5 py-1 text-xs font-medium text-slate dark:text-slate-dark bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                                                             Edit
                                                         </button>
                                                         <button @click="escalateTask(task.id)"
-                                                                class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                                                class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                                 title="Escalate">
                                                             <svg class="w-4 h-4 text-escalated" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -429,14 +436,14 @@
 
                     <!-- Empty State -->
                     <div x-show="filteredClusters.length === 0" class="text-center py-12">
-                        <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                            <svg class="w-8 h-8 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-slate dark:text-slate-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                       d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                             </svg>
                         </div>
                         <h3 class="text-lg font-semibold mb-1">Inbox Clear</h3>
-                        <p class="text-slate">No pending tasks. Eden is monitoring your inbox.</p>
+                        <p class="text-slate dark:text-slate-dark">No pending tasks. Eden is monitoring your inbox.</p>
                     </div>
                 </div>
 
@@ -457,7 +464,7 @@
                                 <!-- Lane Content -->
                                 <div class="flex-1 overflow-y-auto p-3 space-y-2">
                                     <template x-for="task in getTasksByCategory(cat.id)" :key="task.id">
-                                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
+                                        <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 transition-colors cursor-pointer"
                                              @click="openTaskDetail(task)">
                                             <div class="flex items-center justify-between mb-2">
                                                 <span class="text-xs px-1.5 py-0.5 rounded-full"
@@ -468,12 +475,12 @@
                                                       x-text="task.status.replace('_', ' ')"></span>
                                             </div>
                                             <h4 class="text-sm font-medium mb-1" x-text="task.patient.name"></h4>
-                                            <p class="text-xs text-slate line-clamp-2" x-text="task.title"></p>
+                                            <p class="text-xs text-slate dark:text-slate-dark line-clamp-2" x-text="task.title"></p>
                                         </div>
                                     </template>
 
                                     <div x-show="getTasksByCategory(cat.id).length === 0"
-                                         class="text-center py-8 text-xs text-slate italic">
+                                         class="text-center py-8 text-xs text-slate dark:text-slate-dark italic">
                                         No tasks
                                     </div>
                                 </div>
@@ -485,27 +492,27 @@
                 <!-- Summary View -->
                 <div x-show="viewMode === 'summary'" class="max-w-4xl mx-auto">
                     <!-- Summary Header -->
-                    <div class="bg-white rounded-xl border border-border p-6 mb-6">
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark p-6 mb-6">
                         <h2 class="text-xl font-semibold mb-4">Daily Summary</h2>
-                        <p class="text-slate text-sm mb-6" x-text="'Last updated: ' + new Date().toLocaleString()"></p>
+                        <p class="text-slate dark:text-slate-dark text-sm mb-6" x-text="'Last updated: ' + new Date().toLocaleString()"></p>
 
                         <!-- Stats Grid -->
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div class="p-4 bg-success/10 rounded-lg">
                                 <div class="text-2xl font-bold text-success" x-text="stats.autoHandled">0</div>
-                                <div class="text-sm text-slate">Auto-handled</div>
+                                <div class="text-sm text-slate dark:text-slate-dark">Auto-handled</div>
                             </div>
-                            <div class="p-4 bg-pending/10 rounded-lg">
-                                <div class="text-2xl font-bold text-pending" x-text="stats.pending">0</div>
-                                <div class="text-sm text-slate">Pending Review</div>
+                            <div class="p-4 bg-warning/10 rounded-lg">
+                                <div class="text-2xl font-bold text-warning" x-text="stats.pending">0</div>
+                                <div class="text-sm text-slate dark:text-slate-dark">Pending Review</div>
                             </div>
                             <div class="p-4 bg-escalated/10 rounded-lg">
                                 <div class="text-2xl font-bold text-escalated" x-text="stats.escalated">0</div>
-                                <div class="text-sm text-slate">Escalated</div>
+                                <div class="text-sm text-slate dark:text-slate-dark">Escalated</div>
                             </div>
                             <div class="p-4 bg-eden/10 rounded-lg">
                                 <div class="text-2xl font-bold text-eden" x-text="stats.total">0</div>
-                                <div class="text-sm text-slate">Total Today</div>
+                                <div class="text-sm text-slate dark:text-slate-dark">Total Today</div>
                             </div>
                         </div>
                     </div>
@@ -533,7 +540,7 @@
                         <h3 class="font-semibold mb-4">Recently Auto-Handled</h3>
                         <div class="space-y-3">
                             <template x-for="task in getAutoHandledTasks().slice(0, 5)" :key="task.id">
-                                <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                                <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
                                     <span class="text-success">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -541,9 +548,9 @@
                                     </span>
                                     <div class="flex-1">
                                         <div class="text-sm font-medium" x-text="task.patient.name + ' - ' + task.title"></div>
-                                        <div class="text-xs text-slate" x-text="task.category"></div>
+                                        <div class="text-xs text-slate dark:text-slate-dark" x-text="task.category"></div>
                                     </div>
-                                    <span class="text-xs text-slate" x-text="formatTime(task.resolvedAt)"></span>
+                                    <span class="text-xs text-slate dark:text-slate-dark" x-text="formatTime(task.resolvedAt)"></span>
                                 </div>
                             </template>
                         </div>
@@ -589,7 +596,7 @@
                             </div>
                             <button @click="connectEMR()"
                                     class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
-                                    :class="emrConnected ? 'bg-gray-100 text-slate' : 'bg-eden text-white hover:bg-eden/90'">
+                                    :class="emrConnected ? 'bg-gray-100 dark:bg-gray-700 text-slate dark:text-slate-dark' : 'bg-eden text-white hover:bg-eden/90'">
                                 <span x-text="emrConnected ? 'Reconnect' : 'Connect'"></span>
                             </button>
                         </div>
