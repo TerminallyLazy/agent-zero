@@ -36,6 +36,10 @@ class TasksHandler(ApiHandler):
     def requires_auth(cls) -> bool:
         return True
 
+    @classmethod
+    def get_methods(cls) -> list[str]:
+        return ["GET", "POST", "PUT"]
+
     async def process(self, input: dict, request) -> dict:
         """Route task requests."""
         method = request.method

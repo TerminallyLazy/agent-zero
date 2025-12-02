@@ -167,6 +167,21 @@ async def logout_handler():
     session.pop('authentication', None)
     return redirect(url_for('login_handler'))
 
+# Eden Clinical Inboxologist UI
+@webapp.route("/eden", methods=["GET"])
+@webapp.route("/eden/", methods=["GET"])
+@requires_auth
+async def serve_eden():
+    eden_index = files.read_file("eden_ui/index.html")
+    return eden_index
+
+# Serve Eden static files (CSS, JS)
+@webapp.route("/eden/<path:filename>", methods=["GET"])
+@requires_auth
+async def serve_eden_static(filename):
+    from flask import send_from_directory
+    return send_from_directory(get_abs_path("./eden_ui"), filename)
+
 # handle default address, load index
 @webapp.route("/", methods=["GET"])
 @requires_auth
@@ -236,6 +251,39 @@ def run():
     handlers = load_classes_from_folder("python/api", "*.py", ApiHandler)
     for handler in handlers:
         register_api_handler(webapp, handler)
+
+    # Register Eden API handlers (in python/api/eden/)
+    def register_eden_handler(app, handler: type[ApiHandler]):
+        # Eden handlers get /eden/ prefix in their route
+        name = handler.__module__.split(".")[-1]
+        instance = handler(app, lock)
+
+        async def handler_wrap() -> BaseResponse:
+            return await instance.handle_request(request=request)
+
+        if handler.requires_loopback():
+            handler_wrap = requires_loopback(handler_wrap)
+        if handler.requires_auth():
+            handler_wrap = requires_auth(handler_wrap)
+        if handler.requires_api_key():
+            handler_wrap = requires_api_key(handler_wrap)
+        if handler.requires_csrf():
+            handler_wrap = csrf_protect(handler_wrap)
+
+        app.add_url_rule(
+            f"/eden/{name}",
+            f"/eden/{name}",
+            handler_wrap,
+            methods=handler.get_methods(),
+        )
+
+    try:
+        eden_handlers = load_classes_from_folder("python/api/eden", "*.py", ApiHandler)
+        for handler in eden_handlers:
+            register_eden_handler(webapp, handler)
+        PrintStyle().print(f"Registered {len(eden_handlers)} Eden API handlers")
+    except Exception as e:
+        PrintStyle().print(f"Note: Eden API handlers not loaded: {e}")
 
     # add the webapp, mcp, and a2a to the app
     middleware_routes = {

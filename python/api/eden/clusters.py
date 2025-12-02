@@ -42,6 +42,10 @@ class ClustersHandler(ApiHandler):
     def requires_auth(cls) -> bool:
         return True
 
+    @classmethod
+    def get_methods(cls) -> list[str]:
+        return ["GET", "POST"]
+
     async def process(self, input: dict, request) -> dict:
         """Process cluster requests."""
         method = request.method

@@ -39,6 +39,10 @@ class EMRConnectHandler(ApiHandler):
         # Callback needs to be accessible without auth
         return False
 
+    @classmethod
+    def get_methods(cls) -> list[str]:
+        return ["GET", "POST"]
+
     async def process(self, input: dict, request) -> dict:
         """Route EMR connection requests."""
         action = input.get("action", "connect")
