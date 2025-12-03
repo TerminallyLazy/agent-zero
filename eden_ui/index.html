@@ -1090,12 +1090,20 @@ Route all messages mentioning chest pain to escalation immediately`,
         },
 
         // Initialization
-        init() {
+        async init() {
             console.log('Eden Command Center initialized');
-            this.loadData();
 
             // Apply initial dark mode state
             this.applyDarkMode();
+
+            // Check for OAuth callback first
+            await this.handleOAuthCallback();
+
+            // Check EMR connection status
+            await this.checkEMRStatus();
+
+            // Load data
+            await this.loadData();
 
             // Initialize chat with welcome message
             this.chatMessages = [{
@@ -1116,10 +1124,15 @@ Route all messages mentioning chest pain to escalation immediately`,
 
         async loadData() {
             try {
-                // const data = await api('/clusters');
-                // this.clusters = data.clusters;
+                const data = await api('/clusters', { method: 'GET' });
+                if (data.clusters && data.clusters.length > 0) {
+                    this.clusters = data.clusters;
+                    this.updateCategoryCounts();
+                }
+                // If no clusters from API, keep using mock data
             } catch (error) {
-                console.error('Failed to load data:', error);
+                console.log('Using mock data (API not available):', error.message);
+                // Keep using MOCK_CLUSTERS defined above
             }
         },
 
@@ -1174,6 +1187,8 @@ Route all messages mentioning chest pain to escalation immediately`,
             // Build context from current state
             const context = this.buildConversationContext();
 
+            let responseContent = '';
+
             try {
                 // Call the chat API
                 const response = await api('/chat', {
@@ -1185,32 +1200,34 @@ Route all messages mentioning chest pain to escalation immediately`,
                     }),
                 });
 
-                // Add assistant response
-                this.chatMessages.push({
-                    id: `msg-${Date.now()}`,
-                    role: 'assistant',
-                    content: response.message || this.generateMockResponse(userMessage),
-                    timestamp: new Date().toISOString(),
-                });
-
-                // Update conversation history
-                this.conversationHistory.push(
-                    { role: 'user', content: userMessage },
-                    { role: 'assistant', content: response.message }
-                );
+                if (response.success && response.message) {
+                    responseContent = response.message;
+                } else if (response.error) {
+                    console.warn('Chat API error:', response.error);
+                    responseContent = this.generateMockResponse(userMessage);
+                } else {
+                    responseContent = response.message || this.generateMockResponse(userMessage);
+                }
 
             } catch (error) {
                 // Fallback to mock response if API not available
-                console.log('Using mock response (API not available)');
-                const mockResponse = this.generateMockResponse(userMessage);
-
-                this.chatMessages.push({
-                    id: `msg-${Date.now()}`,
-                    role: 'assistant',
-                    content: mockResponse,
-                    timestamp: new Date().toISOString(),
-                });
+                console.log('Using mock response (API not available):', error.message);
+                responseContent = this.generateMockResponse(userMessage);
             }
+
+            // Add assistant response
+            this.chatMessages.push({
+                id: `msg-${Date.now()}`,
+                role: 'assistant',
+                content: responseContent,
+                timestamp: new Date().toISOString(),
+            });
+
+            // Update conversation history
+            this.conversationHistory.push(
+                { role: 'user', content: userMessage },
+                { role: 'assistant', content: responseContent }
+            );
 
             this.isTyping = false;
 
@@ -1322,14 +1339,40 @@ These require your direct attention due to low confidence scores or policy rules
         async syncInbox() {
             this.syncing = true;
             try {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                this.recentActivity.unshift({
-                    id: `act-${Date.now()}`,
-                    type: 'processing',
-                    message: 'Inbox synced successfully',
-                });
+                // Try to sync from EMR if connected
+                if (this.emrConnected) {
+                    const response = await api('/emr_connect', {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'sync' }),
+                    });
+
+                    if (response.success) {
+                        this.recentActivity.unshift({
+                            id: `act-${Date.now()}`,
+                            type: 'auto',
+                            message: `Synced ${response.items_fetched} items from EMR`,
+                        });
+                        // Reload clusters after sync
+                        await this.loadData();
+                    } else {
+                        throw new Error(response.error || 'Sync failed');
+                    }
+                } else {
+                    // Just refresh data from backend
+                    await this.loadData();
+                    this.recentActivity.unshift({
+                        id: `act-${Date.now()}`,
+                        type: 'processing',
+                        message: 'Data refreshed',
+                    });
+                }
             } catch (error) {
                 console.error('Sync failed:', error);
+                this.recentActivity.unshift({
+                    id: `act-${Date.now()}`,
+                    type: 'escalated',
+                    message: `Sync failed: ${error.message}`,
+                });
             } finally {
                 this.syncing = false;
             }
@@ -1381,7 +1424,80 @@ These require your direct attention due to low confidence scores or policy rules
         },
 
         async connectEMR() {
-            window.location.href = '/eden/emr/connect';
+            try {
+                // Request authorization URL from backend
+                const response = await api('/emr_connect', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'connect' }),
+                });
+
+                if (response.authorization_url) {
+                    // Redirect to OAuth authorization page
+                    window.location.href = response.authorization_url;
+                } else if (response.setup_required) {
+                    alert('Dr. Chrono API credentials not configured. Please set DRCHRONO_CLIENT_ID and DRCHRONO_CLIENT_SECRET environment variables.');
+                } else if (response.error) {
+                    alert(`EMR Connection Error: ${response.error}`);
+                }
+            } catch (error) {
+                console.error('EMR connection failed:', error);
+                alert('Failed to initiate EMR connection. Please try again.');
+            }
+        },
+
+        async checkEMRStatus() {
+            try {
+                const response = await api('/emr_connect', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'status' }),
+                });
+                this.emrConnected = response.connected || false;
+                return response;
+            } catch (error) {
+                console.error('Failed to check EMR status:', error);
+                this.emrConnected = false;
+            }
+        },
+
+        async handleOAuthCallback() {
+            // Check if we're returning from OAuth
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const error = urlParams.get('error');
+
+            if (code || error) {
+                try {
+                    const response = await api('/emr_connect', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'callback',
+                            code: code,
+                            error: error,
+                            error_description: urlParams.get('error_description'),
+                        }),
+                    });
+
+                    if (response.success) {
+                        // Clear URL params and reload
+                        window.history.replaceState({}, document.title, '/eden');
+                        this.emrConnected = true;
+                        this.recentActivity.unshift({
+                            id: `act-${Date.now()}`,
+                            type: 'auto',
+                            message: 'Successfully connected to Dr. Chrono',
+                        });
+                        // Sync inbox after successful connection
+                        await this.syncInbox();
+                    } else {
+                        alert(`OAuth Error: ${response.error || 'Unknown error'}`);
+                        window.history.replaceState({}, document.title, '/eden');
+                    }
+                } catch (err) {
+                    console.error('OAuth callback failed:', err);
+                    alert('Failed to complete EMR connection.');
+                    window.history.replaceState({}, document.title, '/eden');
+                }
+            }
         },
 
         async savePolicies() {
