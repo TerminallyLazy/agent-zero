@@ -1,15 +1,21 @@
 """
 Eden API - EMR Connection Endpoints
 
-POST /eden/emr/connect - Initiate OAuth flow
-GET /eden/emr/callback - OAuth callback handler
-POST /eden/emr/sync - Manual inbox sync
-GET /eden/emr/status - Check connection status
+POST /eden/emr_connect - Handle all EMR connection actions:
+  - action: "connect" - Initiate OAuth flow
+  - action: "callback" - OAuth callback handler
+  - action: "sync" - Manual inbox sync
+  - action: "status" - Check connection status
+  - action: "disconnect" - Disconnect from EMR
+  - action: "save_credentials" - Save API credentials
+  - action: "get_credentials" - Get saved credentials (masked)
 """
 
 from datetime import datetime
 from typing import Optional
 import os
+import json
+from pathlib import Path
 
 try:
     from python.helpers.api import ApiHandler
@@ -29,6 +35,33 @@ from python.helpers.eden.emr_adapter import get_adapter, DrChronoAdapter
 
 # EMR credentials storage (in production, use secure storage)
 _emr_credentials: dict = {}
+
+# File path for persistent credential storage
+CREDENTIALS_FILE = Path(__file__).parent.parent.parent.parent / ".eden_credentials.json"
+
+
+def _load_saved_credentials() -> dict:
+    """Load credentials from file if they exist."""
+    if CREDENTIALS_FILE.exists():
+        try:
+            with open(CREDENTIALS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_credentials_to_file(creds: dict) -> bool:
+    """Save credentials to file."""
+    try:
+        with open(CREDENTIALS_FILE, "w") as f:
+            json.dump(creds, f)
+        # Set restrictive permissions (owner read/write only)
+        os.chmod(CREDENTIALS_FILE, 0o600)
+        return True
+    except Exception as e:
+        print(f"Failed to save credentials: {e}")
+        return False
 
 
 class EMRConnectHandler(ApiHandler):
@@ -57,23 +90,28 @@ class EMRConnectHandler(ApiHandler):
             return await self._get_status()
         elif action == "disconnect":
             return await self._disconnect()
+        elif action == "save_credentials":
+            return await self._save_credentials(input)
+        elif action == "get_credentials":
+            return await self._get_credentials()
 
         return {"error": "Unknown action"}, 400
 
     async def _initiate_oauth(self, input: dict) -> dict:
         """Generate OAuth authorization URL."""
-        # Get OAuth config from environment
-        client_id = os.environ.get("DRCHRONO_CLIENT_ID", "")
+        # Try saved credentials first, then environment variables
+        saved_creds = _load_saved_credentials()
+        client_id = saved_creds.get("client_id") or os.environ.get("DRCHRONO_CLIENT_ID", "")
         redirect_uri = os.environ.get(
             "DRCHRONO_REDIRECT_URI",
-            "http://localhost:50001/eden/emr/callback"
+            "http://localhost:50001/eden"  # OAuth callback handled by frontend
         )
 
         if not client_id:
             return {
-                "error": "Dr. Chrono client ID not configured",
+                "error": "Dr. Chrono client ID not configured. Please enter your API credentials in Settings.",
                 "setup_required": True,
-            }, 400
+            }
 
         auth_url = get_authorization_url(
             client_id=client_id,
@@ -95,17 +133,18 @@ class EMRConnectHandler(ApiHandler):
             return {
                 "error": f"OAuth error: {error}",
                 "description": input.get("error_description", ""),
-            }, 400
+            }
 
         if not code:
-            return {"error": "Authorization code required"}, 400
+            return {"error": "Authorization code required"}
 
-        # Get OAuth config
-        client_id = os.environ.get("DRCHRONO_CLIENT_ID", "")
-        client_secret = os.environ.get("DRCHRONO_CLIENT_SECRET", "")
+        # Get OAuth config - try saved credentials first
+        saved_creds = _load_saved_credentials()
+        client_id = saved_creds.get("client_id") or os.environ.get("DRCHRONO_CLIENT_ID", "")
+        client_secret = saved_creds.get("client_secret") or os.environ.get("DRCHRONO_CLIENT_SECRET", "")
         redirect_uri = os.environ.get(
             "DRCHRONO_REDIRECT_URI",
-            "http://localhost:50001/eden/emr/callback"
+            "http://localhost:50001/eden"
         )
 
         try:
@@ -220,6 +259,51 @@ class EMRConnectHandler(ApiHandler):
             "message": "Disconnected from EMR",
         }
 
+    async def _save_credentials(self, input: dict) -> dict:
+        """Save API credentials to file."""
+        client_id = input.get("client_id", "").strip()
+        client_secret = input.get("client_secret", "").strip()
 
-# Handler for /eden/emr/* endpoints
+        if not client_id or not client_secret:
+            return {"error": "Both client_id and client_secret are required"}
+
+        # Don't save if it's the masked placeholder
+        if client_secret.startswith("•"):
+            # Keep existing secret, just update client_id
+            existing = _load_saved_credentials()
+            if existing.get("client_secret"):
+                client_secret = existing["client_secret"]
+            else:
+                return {"error": "Please enter your actual client secret"}
+
+        creds = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+
+        if _save_credentials_to_file(creds):
+            return {
+                "success": True,
+                "message": "Credentials saved successfully",
+            }
+        else:
+            return {"error": "Failed to save credentials"}
+
+    async def _get_credentials(self) -> dict:
+        """Get saved credentials (with secret masked)."""
+        saved = _load_saved_credentials()
+
+        if not saved:
+            return {
+                "client_id": "",
+                "has_secret": False,
+            }
+
+        return {
+            "client_id": saved.get("client_id", ""),
+            "has_secret": bool(saved.get("client_secret")),
+        }
+
+
+# Handler for /eden/emr_connect endpoint
 EMRConnect = EMRConnectHandler

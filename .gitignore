@@ -5,6 +5,9 @@
 *.py[cod]
 **/.conda/
 
+# Eden credentials (sensitive)
+.eden_credentials.json
+
 #Ignore IDE files
 .cursor/
 .windsurf/
