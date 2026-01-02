@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 Type = Literal[
+    "a2ui",
     "agent",
     "browser",
     "code_exe",
@@ -73,7 +74,7 @@ def _truncate_value(val: T) -> T:
             val[i] = _truncate_value(val[i])
         return val
     if isinstance(val, tuple):
-        return tuple(_truncate_value(x) for x in val) # type: ignore
+        return tuple(_truncate_value(x) for x in val)  # type: ignore
 
     # Convert non-str values to json for consistent length measurement
     if isinstance(val, str):
@@ -95,7 +96,6 @@ def _truncate_value(val: T) -> T:
 
 
 def _truncate_content(text: str | None, type: Type) -> str:
-
     max_len = CONTENT_MAX_LEN if type != "response" else RESPONSE_CONTENT_MAX_LEN
 
     if text is None:
@@ -114,9 +114,6 @@ def _truncate_content(text: str | None, type: Type) -> str:
             break
         removed = new_removed
     return truncated
-
-
-
 
 
 @dataclass
@@ -185,9 +182,8 @@ class LogItem:
 
 
 class Log:
-
     def __init__(self):
-        self.context: "AgentContext|None" = None # set from outside
+        self.context: "AgentContext|None" = None  # set from outside
         self.guid: str = str(uuid.uuid4())
         self.updates: list[int] = []
         self.logs: list[LogItem] = []
@@ -204,7 +200,6 @@ class Log:
         id: Optional[str] = None,
         **kwargs,
     ) -> LogItem:
-
         # add a minimal item to the log
         item = LogItem(
             log=self,
@@ -226,6 +221,27 @@ class Log:
             **kwargs,
         )
         return item
+
+    def log_a2ui(
+        self,
+        surface_id: str,
+        messages: list,
+        fallback_text: str = "",
+        heading: str | None = None,
+        update_progress: ProgressUpdate = "temporary",
+    ) -> LogItem:
+        return self.log(
+            type="a2ui",
+            id=surface_id,
+            heading=heading,
+            content=fallback_text,
+            kvps={
+                "messages": messages,
+                "surface_id": surface_id,
+                "fallback": fallback_text,
+            },
+            update_progress=update_progress,
+        )
 
     def _update_item(
         self,
@@ -252,7 +268,6 @@ class Log:
 
         if update_progress is not None:
             item.update_progress = update_progress
-
 
         # adjust all content before processing
         if heading is not None:
@@ -323,6 +338,7 @@ class Log:
         """Recursively mask secrets in nested objects."""
         try:
             from agent import AgentContext
+
             secrets_mgr = get_secrets_manager(self.context or AgentContext.current())
 
             # debug helper to identify context mismatch

@@ -19,7 +19,7 @@ from python.helpers import (
     tokens,
     context as context_helper,
     dirty_json,
-    subagents
+    subagents,
 )
 from python.helpers.print_style import PrintStyle
 
@@ -44,7 +44,6 @@ class AgentContextType(Enum):
 
 
 class AgentContext:
-
     _contexts: dict[str, "AgentContext"] = {}
     _counter: int = 0
     _notification_manager = None
@@ -267,7 +266,8 @@ class AgentContext:
                 agent.hist_add_user_message(msg)  # type: ignore
                 if user
                 else agent.hist_add_tool_result(
-                    tool_name="call_subordinate", tool_result=msg  # type: ignore
+                    tool_name="call_subordinate",
+                    tool_result=msg,  # type: ignore
                 )
             )
             response = await agent.monologue()  # type: ignore
@@ -298,6 +298,8 @@ class AgentConfig:
     code_exec_ssh_user: str = "root"
     code_exec_ssh_pass: str = ""
     additional: Dict[str, Any] = field(default_factory=dict)
+    a2ui_enabled: bool = True
+    a2ui_default_mode: str = "auto"
 
 
 @dataclass
@@ -338,7 +340,6 @@ class HandledException(Exception):
 
 
 class Agent:
-
     DATA_NAME_SUPERIOR = "_superior"
     DATA_NAME_SUBORDINATE = "_subordinate"
     DATA_NAME_CTX_WINDOW = "ctx_window"
@@ -346,7 +347,6 @@ class Agent:
     def __init__(
         self, number: int, config: AgentConfig, context: AgentContext | None = None
     ):
-
         # agent config
         self.config = config
 
@@ -377,7 +377,6 @@ class Agent:
 
                 # let the agent run message loop until he stops it with a response tool
                 while True:
-
                     self.context.streaming_agent = self  # mark self as current streamer
                     self.loop_data.iteration += 1
                     self.loop_data.params_temporary = {}  # clear temporary params
@@ -498,9 +497,7 @@ class Agent:
                 pass  # just start over
             except Exception as e:
                 # Retry critical exceptions before failing
-                error_retries = await self.retry_critical_exception(
-                    e, error_retries
-                )
+                error_retries = await self.retry_critical_exception(e, error_retries)
             finally:
                 self.context.streaming_agent = None  # unset current streamer
                 # call monologue_end extensions
@@ -564,7 +561,7 @@ class Agent:
             self.handle_critical_exception(e)
 
         error_message = errors.format_error(e)
-        
+
         self.context.log.log(
             type="warning", content="Critical error occurred, retrying..."
         )
@@ -576,9 +573,7 @@ class Agent:
             "fw.msg_critical_error.md", error_message=error_message
         )
         self.hist_add_warning(message=agent_facing_error)
-        PrintStyle(font_color="orange", padding=True).print(
-            agent_facing_error
-        )
+        PrintStyle(font_color="orange", padding=True).print(agent_facing_error)
         return error_retries + 1
 
     def handle_critical_exception(self, exception: Exception):

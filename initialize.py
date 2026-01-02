@@ -82,6 +82,8 @@ def initialize_agent(override_settings: dict | None = None):
         knowledge_subdirs=[current_settings["agent_knowledge_subdir"], "default"],
         mcp_servers=current_settings["mcp_servers"],
         browser_http_headers=current_settings["browser_http_headers"],
+        a2ui_enabled=current_settings["a2ui_enabled"],
+        a2ui_default_mode=current_settings["a2ui_default_mode"],
         # code_exec params get initialized in _set_runtime_config
         # additional = {},
     )
@@ -119,25 +121,36 @@ def initialize_agent(override_settings: dict | None = None):
     # return config object
     return config
 
+
 def initialize_chats():
     from python.helpers import persist_chat
+
     async def initialize_chats_async():
         persist_chat.load_tmp_chats()
+
     return defer.DeferredTask().start_task(initialize_chats_async)
+
 
 def initialize_mcp():
     set = settings.get_settings()
+
     async def initialize_mcp_async():
         from python.helpers.mcp_handler import initialize_mcp as _initialize_mcp
+
         return _initialize_mcp(set["mcp_servers"])
+
     return defer.DeferredTask().start_task(initialize_mcp_async)
+
 
 def initialize_job_loop():
     from python.helpers.job_loop import run_loop
+
     return defer.DeferredTask("JobLoop").start_task(run_loop)
+
 
 def initialize_preload():
     import preload
+
     return defer.DeferredTask().start_task(preload.preload)
 
 

@@ -4,6 +4,7 @@ import { marked } from "../vendor/marked/marked.esm.js";
 import { store as _messageResizeStore } from "/components/messages/resize/message-resize-store.js"; // keep here, required in html
 import { store as attachmentsStore } from "/components/chat/attachments/attachmentsStore.js";
 import { addActionButtonsToElement } from "/components/messages/action-buttons/simple-action-buttons.js";
+import { renderA2UIComponent, processA2UIMessages } from "/components/a2ui/a2ui-renderer.js";
 
 const chatHistory = document.getElementById("chat-history");
 
@@ -103,6 +104,8 @@ export function getHandler(type) {
       return drawMessageUtil;
     case "hint":
       return drawMessageInfo;
+    case "a2ui":
+      return drawMessageA2UI;
     default:
       return drawMessageDefault;
   }
@@ -686,6 +689,98 @@ export function drawMessageError(
     temp,
     kvps
   );
+}
+
+export function drawMessageA2UI(
+  messageContainer,
+  id,
+  type,
+  heading,
+  content,
+  temp,
+  kvps = null
+) {
+  let messageDiv = messageContainer.querySelector(".message");
+  if (!messageDiv) {
+    messageDiv = document.createElement("div");
+    messageDiv.classList.add("message", "message-a2ui", "message-ai");
+    messageContainer.appendChild(messageDiv);
+  } else {
+    messageDiv.className = "message message-a2ui message-ai";
+  }
+
+  if (heading) {
+    let headingElement = messageDiv.querySelector(".msg-heading");
+    if (!headingElement) {
+      headingElement = document.createElement("div");
+      headingElement.classList.add("msg-heading");
+      messageDiv.insertBefore(headingElement, messageDiv.firstChild);
+    }
+    let headingH4 = headingElement.querySelector("h4");
+    if (!headingH4) {
+      headingH4 = document.createElement("h4");
+      headingElement.appendChild(headingH4);
+    }
+    headingH4.innerHTML = convertIcons(escapeHTML(heading));
+  }
+
+  let bodyDiv = messageDiv.querySelector(".message-body");
+  if (!bodyDiv) {
+    bodyDiv = document.createElement("div");
+    bodyDiv.classList.add("message-body", "a2ui-container");
+    messageDiv.appendChild(bodyDiv);
+  }
+
+  let a2uiContainer = bodyDiv.querySelector(".a2ui-message");
+  if (!a2uiContainer) {
+    a2uiContainer = document.createElement("div");
+    a2uiContainer.classList.add("a2ui-message");
+    bodyDiv.appendChild(a2uiContainer);
+  }
+
+  // Handle new A2UI message format (surfaceUpdate, dataModelUpdate, beginRendering)
+  if (kvps && kvps.messages && Array.isArray(kvps.messages)) {
+    try {
+      const surfaceId = kvps.surface_id || id;
+      processA2UIMessages(kvps.messages, a2uiContainer, { 
+        surfaceId,
+        id 
+      });
+    } catch (e) {
+      console.error("A2UI render error:", e);
+      a2uiContainer.innerHTML = "";
+      const fallbackDiv = document.createElement("div");
+      fallbackDiv.classList.add("a2ui-fallback");
+      fallbackDiv.textContent = kvps.fallback || content || "Component render failed";
+      a2uiContainer.appendChild(fallbackDiv);
+    }
+  } 
+  // Legacy support: handle old component format
+  else if (kvps && kvps.component) {
+    try {
+      const componentDef = typeof kvps.component === "string" 
+        ? JSON.parse(kvps.component) 
+        : kvps.component;
+      renderA2UIComponent(componentDef, a2uiContainer, { id });
+    } catch (e) {
+      console.error("A2UI render error:", e);
+      a2uiContainer.innerHTML = "";
+      const fallbackDiv = document.createElement("div");
+      fallbackDiv.classList.add("a2ui-fallback");
+      fallbackDiv.textContent = kvps.fallback || content || "Component render failed";
+      a2uiContainer.appendChild(fallbackDiv);
+    }
+  } else if (content) {
+    let contentDiv = bodyDiv.querySelector(".msg-content");
+    if (!contentDiv) {
+      contentDiv = document.createElement("pre");
+      contentDiv.classList.add("msg-content");
+      bodyDiv.appendChild(contentDiv);
+    }
+    contentDiv.textContent = content;
+  }
+
+  return messageDiv;
 }
 
 function drawKvps(container, kvps, latex) {

@@ -15,7 +15,8 @@ from python.helpers.secrets import get_default_secrets_manager
 from python.helpers import dirty_json
 
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 def get_default_value(name: str, value: T) -> T:
     """
@@ -28,7 +29,9 @@ def get_default_value(name: str, value: T) -> T:
     Returns:
         Environment variable value (type-normalized) or default value
     """
-    env_value = dotenv.get_dotenv_value(f"A0_SET_{name}", dotenv.get_dotenv_value(f"A0_SET_{name.upper()}", None))
+    env_value = dotenv.get_dotenv_value(
+        f"A0_SET_{name}", dotenv.get_dotenv_value(f"A0_SET_{name.upper()}", None)
+    )
 
     if env_value is None:
         return value
@@ -36,7 +39,7 @@ def get_default_value(name: str, value: T) -> T:
     # Normalize type to match value param type
     try:
         if isinstance(value, bool):
-            return env_value.strip().lower() in ('true', '1', 'yes', 'on')  # type: ignore
+            return env_value.strip().lower() in ("true", "1", "yes", "on")  # type: ignore
         elif isinstance(value, dict):
             return json.loads(env_value.strip())  # type: ignore
         elif isinstance(value, str):
@@ -122,7 +125,7 @@ class Settings(TypedDict):
     rfc_port_http: int
     rfc_port_ssh: int
 
-    shell_interface: Literal['local','ssh']
+    shell_interface: Literal["local", "ssh"]
 
     stt_model_size: str
     stt_language: str
@@ -140,6 +143,9 @@ class Settings(TypedDict):
 
     a2a_server_enabled: bool
 
+    a2ui_enabled: bool
+    a2ui_default_mode: str
+
     variables: str
     secrets: str
 
@@ -147,6 +153,7 @@ class Settings(TypedDict):
     litellm_global_kwargs: dict[str, Any]
 
     update_check_enabled: bool
+
 
 class PartialSettings(Settings, total=False):
     pass
@@ -889,7 +896,10 @@ def convert_out(settings: Settings) -> SettingsOutput:
             "description": "Terminal interface used for Code Execution Tool. Local Python TTY works locally in both dockerized and development environments. SSH always connects to dockerized environment (automatically at localhost or RFC host address).",
             "type": "select",
             "value": settings["shell_interface"],
-            "options": [{"value": "local", "label": "Local Python TTY"}, {"value": "ssh", "label": "SSH"}],
+            "options": [
+                {"value": "local", "label": "Local Python TTY"},
+                {"value": "ssh", "label": "SSH"},
+            ],
         }
     )
 
@@ -1144,7 +1154,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "mcp",
     }
 
-   # Secrets section
+    # Secrets section
     secrets_fields: list[SettingsField] = []
 
     secrets_manager = get_default_secrets_manager()
@@ -1153,23 +1163,27 @@ def convert_out(settings: Settings) -> SettingsOutput:
     except Exception:
         secrets = ""
 
-    secrets_fields.append({
-        "id": "variables",
-        "title": "Variables Store",
-        "description": "Store non-sensitive variables in .env format e.g. EMAIL_IMAP_SERVER=\"imap.gmail.com\", one item per line. You can use comments starting with # to add descriptions for the agent. See <a href=\"javascript:openModal('settings/secrets/example-vars.html')\">example</a>.<br>These variables are visible to LLMs and in chat history, they are not being masked.",
-        "type": "textarea",
-        "value": settings["variables"].strip(),
-        "style": "height: 20em",
-    })
+    secrets_fields.append(
+        {
+            "id": "variables",
+            "title": "Variables Store",
+            "description": 'Store non-sensitive variables in .env format e.g. EMAIL_IMAP_SERVER="imap.gmail.com", one item per line. You can use comments starting with # to add descriptions for the agent. See <a href="javascript:openModal(\'settings/secrets/example-vars.html\')">example</a>.<br>These variables are visible to LLMs and in chat history, they are not being masked.',
+            "type": "textarea",
+            "value": settings["variables"].strip(),
+            "style": "height: 20em",
+        }
+    )
 
-    secrets_fields.append({
-        "id": "secrets",
-        "title": "Secrets Store",
-        "description": "Store secrets and credentials in .env format e.g. EMAIL_PASSWORD=\"s3cret-p4$$w0rd\", one item per line. You can use comments starting with # to add descriptions for the agent. See <a href=\"javascript:openModal('settings/secrets/example-secrets.html')\">example</a>.<br>These variables are not visile to LLMs and in chat history, they are being masked. ⚠️ only values with length >= 4 are being masked to prevent false positives. ",
-        "type": "textarea",
-        "value": secrets,
-        "style": "height: 20em",
-    })
+    secrets_fields.append(
+        {
+            "id": "secrets",
+            "title": "Secrets Store",
+            "description": 'Store secrets and credentials in .env format e.g. EMAIL_PASSWORD="s3cret-p4$$w0rd", one item per line. You can use comments starting with # to add descriptions for the agent. See <a href="javascript:openModal(\'settings/secrets/example-secrets.html\')">example</a>.<br>These variables are not visile to LLMs and in chat history, they are being masked. ⚠️ only values with length >= 4 are being masked to prevent false positives. ',
+            "type": "textarea",
+            "value": secrets,
+            "style": "height: 20em",
+        }
+    )
 
     secrets_section: SettingsSection = {
         "id": "secrets",
@@ -1231,7 +1245,6 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "mcp",
     }
 
-
     # External API section
     external_api_fields: list[SettingsField] = []
 
@@ -1249,7 +1262,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "id": "external_api",
         "title": "External API",
         "description": "Agent Zero provides external API endpoints for integration with other applications. "
-                       "These endpoints use API key authentication and support text messages and file attachments.",
+        "These endpoints use API key authentication and support text messages and file attachments.",
         "fields": external_api_fields,
         "tab": "external",
     }
@@ -1354,19 +1367,22 @@ def convert_in(settings: dict) -> Settings:
             for field in section["fields"]:
                 # Skip saving if value is a placeholder
                 should_skip = (
-                    field["value"] == PASSWORD_PLACEHOLDER or
-                    field["value"] == API_KEY_PLACEHOLDER
+                    field["value"] == PASSWORD_PLACEHOLDER
+                    or field["value"] == API_KEY_PLACEHOLDER
                 )
 
                 if not should_skip:
                     # Special handling for browser_http_headers
-                    if field["id"] == "browser_http_headers" or field["id"].endswith("_kwargs"):
+                    if field["id"] == "browser_http_headers" or field["id"].endswith(
+                        "_kwargs"
+                    ):
                         current[field["id"]] = _env_to_dict(field["value"])
                     elif field["id"].startswith("api_key_"):
                         current["api_keys"][field["id"]] = field["value"]
                     else:
                         current[field["id"]] = field["value"]
     return current
+
 
 def get_settings() -> Settings:
     global _settings
@@ -1487,7 +1503,6 @@ def _write_sensitive_settings(settings: Settings):
     secrets_manager.save_secrets_with_merge(submitted_content)
 
 
-
 def get_default_settings() -> Settings:
     return Settings(
         version=_get_version(),
@@ -1511,34 +1526,54 @@ def get_default_settings() -> Settings:
         util_model_rl_input=get_default_value("util_model_rl_input", 0),
         util_model_rl_output=get_default_value("util_model_rl_output", 0),
         embed_model_provider=get_default_value("embed_model_provider", "huggingface"),
-        embed_model_name=get_default_value("embed_model_name", "sentence-transformers/all-MiniLM-L6-v2"),
+        embed_model_name=get_default_value(
+            "embed_model_name", "sentence-transformers/all-MiniLM-L6-v2"
+        ),
         embed_model_api_base=get_default_value("embed_model_api_base", ""),
         embed_model_kwargs=get_default_value("embed_model_kwargs", {}),
         embed_model_rl_requests=get_default_value("embed_model_rl_requests", 0),
         embed_model_rl_input=get_default_value("embed_model_rl_input", 0),
-        browser_model_provider=get_default_value("browser_model_provider", "openrouter"),
+        browser_model_provider=get_default_value(
+            "browser_model_provider", "openrouter"
+        ),
         browser_model_name=get_default_value("browser_model_name", "openai/gpt-4.1"),
         browser_model_api_base=get_default_value("browser_model_api_base", ""),
         browser_model_vision=get_default_value("browser_model_vision", True),
         browser_model_rl_requests=get_default_value("browser_model_rl_requests", 0),
         browser_model_rl_input=get_default_value("browser_model_rl_input", 0),
         browser_model_rl_output=get_default_value("browser_model_rl_output", 0),
-        browser_model_kwargs=get_default_value("browser_model_kwargs", {"temperature": "0"}),
+        browser_model_kwargs=get_default_value(
+            "browser_model_kwargs", {"temperature": "0"}
+        ),
         browser_http_headers=get_default_value("browser_http_headers", {}),
         memory_recall_enabled=get_default_value("memory_recall_enabled", True),
         memory_recall_delayed=get_default_value("memory_recall_delayed", False),
         memory_recall_interval=get_default_value("memory_recall_interval", 3),
         memory_recall_history_len=get_default_value("memory_recall_history_len", 10000),
-        memory_recall_memories_max_search=get_default_value("memory_recall_memories_max_search", 12),
-        memory_recall_solutions_max_search=get_default_value("memory_recall_solutions_max_search", 8),
-        memory_recall_memories_max_result=get_default_value("memory_recall_memories_max_result", 5),
-        memory_recall_solutions_max_result=get_default_value("memory_recall_solutions_max_result", 3),
-        memory_recall_similarity_threshold=get_default_value("memory_recall_similarity_threshold", 0.7),
+        memory_recall_memories_max_search=get_default_value(
+            "memory_recall_memories_max_search", 12
+        ),
+        memory_recall_solutions_max_search=get_default_value(
+            "memory_recall_solutions_max_search", 8
+        ),
+        memory_recall_memories_max_result=get_default_value(
+            "memory_recall_memories_max_result", 5
+        ),
+        memory_recall_solutions_max_result=get_default_value(
+            "memory_recall_solutions_max_result", 3
+        ),
+        memory_recall_similarity_threshold=get_default_value(
+            "memory_recall_similarity_threshold", 0.7
+        ),
         memory_recall_query_prep=get_default_value("memory_recall_query_prep", True),
         memory_recall_post_filter=get_default_value("memory_recall_post_filter", True),
         memory_memorize_enabled=get_default_value("memory_memorize_enabled", True),
-        memory_memorize_consolidation=get_default_value("memory_memorize_consolidation", True),
-        memory_memorize_replace_threshold=get_default_value("memory_memorize_replace_threshold", 0.9),
+        memory_memorize_consolidation=get_default_value(
+            "memory_memorize_consolidation", True
+        ),
+        memory_memorize_replace_threshold=get_default_value(
+            "memory_memorize_replace_threshold", 0.9
+        ),
         api_keys={},
         auth_login="",
         auth_password="",
@@ -1551,7 +1586,9 @@ def get_default_settings() -> Settings:
         rfc_password="",
         rfc_port_http=get_default_value("rfc_port_http", 55080),
         rfc_port_ssh=get_default_value("rfc_port_ssh", 55022),
-        shell_interface=get_default_value("shell_interface", "local" if runtime.is_dockerized() else "ssh"),
+        shell_interface=get_default_value(
+            "shell_interface", "local" if runtime.is_dockerized() else "ssh"
+        ),
         stt_model_size=get_default_value("stt_model_size", "base"),
         stt_language=get_default_value("stt_language", "en"),
         stt_silence_threshold=get_default_value("stt_silence_threshold", 0.3),
@@ -1564,6 +1601,8 @@ def get_default_settings() -> Settings:
         mcp_server_enabled=get_default_value("mcp_server_enabled", False),
         mcp_server_token=create_auth_token(),
         a2a_server_enabled=get_default_value("a2a_server_enabled", False),
+        a2ui_enabled=get_default_value("a2ui_enabled", True),
+        a2ui_default_mode=get_default_value("a2ui_default_mode", "auto"),
         variables="",
         secrets="",
         litellm_global_kwargs=get_default_value("litellm_global_kwargs", {}),
@@ -1651,9 +1690,7 @@ def _apply_settings(previous: Settings | None):
             )  # TODO overkill, replace with background task
 
         # update token in mcp server
-        current_token = (
-            create_auth_token()
-        )  # TODO - ugly, token in settings is generated from dotenv and does not always correspond
+        current_token = create_auth_token()  # TODO - ugly, token in settings is generated from dotenv and does not always correspond
         if not previous or current_token != previous["mcp_server_token"]:
 
             async def update_mcp_token(token: str):
@@ -1682,16 +1719,16 @@ def _env_to_dict(data: str):
     result = {}
     for line in data.splitlines():
         line = line.strip()
-        if not line or line.startswith('#'):
+        if not line or line.startswith("#"):
             continue
-        
-        if '=' not in line:
+
+        if "=" not in line:
             continue
-            
-        key, value = line.split('=', 1)
+
+        key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip()
-        
+
         # If quoted, treat as string
         if value.startswith('"') and value.endswith('"'):
             result[key] = value[1:-1].replace('\\"', '"')  # Unescape quotes
@@ -1703,7 +1740,7 @@ def _env_to_dict(data: str):
                 result[key] = json.loads(value)
             except (json.JSONDecodeError, ValueError):
                 result[key] = value
-    
+
     return result
 
 
@@ -1716,11 +1753,11 @@ def _dict_to_env(data_dict):
             lines.append(f'{key}="{escaped_value}"')
         elif isinstance(value, (dict, list, bool)) or value is None:
             # Serialize as unquoted JSON
-            lines.append(f'{key}={json.dumps(value, separators=(",", ":"))}')
+            lines.append(f"{key}={json.dumps(value, separators=(',', ':'))}")
         else:
             # Numbers and other types as unquoted strings
-            lines.append(f'{key}={value}')
-    
+            lines.append(f"{key}={value}")
+
     return "\n".join(lines)
 
 
