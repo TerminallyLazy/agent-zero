@@ -16,6 +16,7 @@
 [Development](./docs/development.md) •
 [Extensibility](./docs/extensibility.md) •
 [Connectivity](./docs/connectivity.md) •
+[ACP Integration](./docs/acp_integration.md) •
 [How to update](./docs/installation.md#how-to-update-agent-zero) •
 [Documentation](./docs/README.md) •
 [Usage](./docs/usage.md)
@@ -160,6 +161,7 @@ docker run -p 50001:80 agent0ai/agent-zero
 | [Development](./docs/development.md) | Development and customization |
 | [Extensibility](./docs/extensibility.md) | Extending Agent Zero |
 | [Connectivity](./docs/connectivity.md) | External API endpoints, MCP server connections, A2A protocol |
+| [ACP Integration](./docs/acp_integration.md) | Standardized Agent Client Protocol integration for Zed IDE |
 | [Architecture](./docs/architecture.md) | System design and components |
 | [Contributing](./docs/contribution.md) | How to contribute |
 | [Troubleshooting](./docs/troubleshooting.md) | Common issues and their solutions |

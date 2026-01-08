@@ -1,6 +1,6 @@
 # Agent Zero Connectivity Guide
 
-This guide covers the different ways to connect to Agent Zero from external applications, including using the External API, connecting as an MCP client, and enabling agent-to-agent communication.
+This guide covers the different ways to connect to Agent Zero from external applications, including using the External API, connecting as an MCP client, and enabling agent-to-agent communication. For IDE integration (like Zed), see the [ACP Integration Guide](acp_integration.md).
 
 **Note:** You can find your specific URLs and API tokens in your Agent Zero instance under `Settings > External Services`.
 

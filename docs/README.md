@@ -7,6 +7,7 @@ To begin with Agent Zero, follow the links below for detailed guides on various 
 - **[Development](development.md):** Set up a development environment for Agent Zero.
 - **[Extensibility](extensibility.md):** Learn how to create custom extensions for Agent Zero.
 - **[Connectivity](connectivity.md):** Learn how to connect to Agent Zero from other applications.
+- **[ACP Integration](acp_integration.md):** Use Agent Zero as an ACP agent (e.g., in Zed IDE).
 - **[Architecture Overview](architecture.md):** Understand the internal workings of the framework.
 - **[Contributing](contribution.md):** Learn how to contribute to the Agent Zero project.
 - **[Troubleshooting and FAQ](troubleshooting.md):** Find answers to common issues and questions.
