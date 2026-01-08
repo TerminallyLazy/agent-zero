@@ -48,3 +48,4 @@ beautifulsoup4>=4.12.3
 boto3>=1.35.0
 exchangelib>=5.4.3
 pywinpty==3.0.2; sys_platform == "win32"
+agent-client-protocol>=0.1.0
