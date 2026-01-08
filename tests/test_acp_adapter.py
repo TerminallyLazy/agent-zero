@@ -143,3 +143,79 @@ def test_convert_content_blocks_multiple_text(acp_adapter, mock_agent_modules):
     user_message = acp_adapter._convert_content_blocks(blocks)
 
     assert user_message.message == "First part.\nSecond part."
+
+
+@pytest.mark.asyncio
+async def test_prompt_processes_message_and_returns_response(
+    acp_adapter, mock_agent_modules
+):
+    """Test that prompt() processes content blocks and returns PromptResponse."""
+    from python.helpers.acp_adapter import ACP_AVAILABLE
+    from dataclasses import dataclass, field
+
+    if not ACP_AVAILABLE:
+        pytest.skip("ACP SDK not installed")
+
+    @dataclass
+    class FakeUserMessage:
+        message: str
+        attachments: list[str] = field(default_factory=list)
+
+    mock_agent_modules["agent"].UserMessage = FakeUserMessage
+
+    # Setup mock context
+    mock_context = MagicMock()
+    mock_context.id = "ctx-789"
+    mock_context.data = {}
+    mock_context.agent0 = MagicMock()
+    mock_context.agent0.data = {}
+    mock_context.log = MagicMock()
+    mock_agent_modules["agent"].AgentContext.return_value = mock_context
+    mock_agent_modules["agent"].AgentContext.get.return_value = mock_context
+
+    # Mock the communicate method to return a result
+    mock_task = MagicMock()
+
+    async def mock_result():
+        return "Hello! How can I help?"
+
+    mock_task.result = mock_result
+    mock_context.communicate.return_value = mock_task
+
+    # Create session
+    session_response = await acp_adapter.new_session()
+    session_id = session_response.session_id
+
+    # Create ACP content blocks
+    prompt_blocks = [{"type": "text", "text": "Hello"}]
+
+    # Process prompt
+    response = await acp_adapter.prompt(prompt_blocks, session_id)
+
+    assert response is not None
+    assert response.stop_reason == "end_turn"
+
+
+@pytest.mark.asyncio
+async def test_cancel_prompt_kills_process(acp_adapter, mock_agent_modules):
+    """Test that cancel_prompt() calls kill_process on the context."""
+    from python.helpers.acp_adapter import ACP_AVAILABLE
+
+    if not ACP_AVAILABLE:
+        pytest.skip("ACP SDK not installed")
+
+    # Setup mock context
+    mock_context = MagicMock()
+    mock_context.id = "ctx-cancel-test"
+    mock_context.data = {}
+    mock_agent_modules["agent"].AgentContext.return_value = mock_context
+    mock_agent_modules["agent"].AgentContext.get.return_value = mock_context
+
+    # Create session
+    session_response = await acp_adapter.new_session()
+    session_id = session_response.session_id
+
+    # Cancel prompt
+    await acp_adapter.cancel_prompt(session_id)
+
+    mock_context.kill_process.assert_called_once()

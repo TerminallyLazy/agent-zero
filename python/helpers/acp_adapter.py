@@ -132,6 +132,64 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
 
         return UserMessage(message=message_text, attachments=attachments)
 
+    async def prompt(self, prompt: list, session_id: str, **kwargs) -> "PromptResponse":
+        """Process an ACP prompt and return the agent's response."""
+        if not ACP_AVAILABLE:
+            raise RuntimeError("ACP SDK not available")
+
+        from agent import AgentContext
+
+        context_id = self._sessions.get(session_id)
+        if not context_id:
+            raise ValueError(f"Unknown session: {session_id}")
+
+        context = AgentContext.get(context_id)
+        if not context:
+            raise ValueError(f"Context not found for session: {session_id}")
+
+        user_message = self._convert_content_blocks(prompt)
+
+        _PRINTER.print(f"[ACP] Processing prompt in session {session_id}")
+
+        context.agent0.data["_acp_session_id"] = session_id
+        context.agent0.data["_acp_connection"] = self.connection
+
+        try:
+            context.log.log(
+                type="user",
+                heading="ACP user message",
+                content=user_message.message,
+                kvps={"from": "ACP"},
+                temp=False,
+            )
+
+            task = context.communicate(user_message)
+            result_text = await task.result()
+
+            if self.connection:
+                await self.connection.session_update(
+                    session_id, update_agent_message_text(str(result_text))
+                )
+
+            _PRINTER.print(f"[ACP] Completed prompt in session {session_id}")
+
+            return PromptResponse(stop_reason="end_turn")
+
+        finally:
+            context.agent0.data.pop("_acp_session_id", None)
+            context.agent0.data.pop("_acp_connection", None)
+
+    async def cancel_prompt(self, session_id: str, **kwargs) -> None:
+        """Cancel an ongoing prompt execution."""
+        from agent import AgentContext
+
+        context_id = self._sessions.get(session_id)
+        if context_id:
+            context = AgentContext.get(context_id)
+            if context:
+                context.kill_process()
+                _PRINTER.print(f"[ACP] Cancelled prompt in session {session_id}")
+
     async def end_session(self, session_id: str) -> None:
         """End an ACP session and clean up the Agent Zero context."""
         context_id = self._sessions.pop(session_id, None)
