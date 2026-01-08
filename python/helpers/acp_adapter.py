@@ -30,6 +30,16 @@ except ImportError:
     NewSessionResponse = Any  # type: ignore
     PromptResponse = Any  # type: ignore
 
+    def text_block(text: str) -> dict:
+        raise RuntimeError("ACP SDK not available")
+
+    def update_agent_message_text(text: str) -> dict:
+        raise RuntimeError("ACP SDK not available")
+
+    def update_agent_thought_text(text: str) -> dict:
+        raise RuntimeError("ACP SDK not available")
+
+
 _PRINTER = PrintStyle(italic=True, font_color="cyan", padding=False)
 
 
