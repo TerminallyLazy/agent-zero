@@ -7,6 +7,7 @@ Agent Zero's existing architecture and patterns.
 """
 
 import asyncio
+import uuid
 from typing import Any, AsyncIterator
 
 from python.helpers.print_style import PrintStyle
@@ -57,6 +58,50 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
 
         _PRINTER.print(f"[ACP] Initializing with protocol version {protocol_version}")
         return InitializeResponse(protocol_version=protocol_version)
+
+    async def new_session(
+        self, cwd: str = "", mcp_servers: list | None = None, **kwargs
+    ) -> "NewSessionResponse":
+        """Create a new ACP session mapped to an Agent Zero context."""
+        if not ACP_AVAILABLE:
+            raise RuntimeError("ACP SDK not available")
+
+        from agent import AgentContext, AgentContextType
+        from initialize import initialize_agent
+
+        acp_session_id = str(uuid.uuid4())
+        config = initialize_agent()
+        context = AgentContext(config, type=AgentContextType.BACKGROUND)
+
+        if cwd:
+            context.data["acp_cwd"] = cwd
+        if mcp_servers:
+            context.data["acp_mcp_servers"] = mcp_servers
+
+        self._sessions[acp_session_id] = context.id
+        _PRINTER.print(
+            f"[ACP] Created session {acp_session_id} -> context {context.id}"
+        )
+
+        return NewSessionResponse(session_id=acp_session_id)
+
+    async def end_session(self, session_id: str) -> None:
+        """End an ACP session and clean up the Agent Zero context."""
+        from agent import AgentContext
+        from python.helpers.persist_chat import remove_chat
+
+        context_id = self._sessions.pop(session_id, None)
+        if context_id:
+            context = AgentContext.get(context_id)
+            if context:
+                context.reset()
+                AgentContext.remove(context_id)
+                remove_chat(context_id)
+                _PRINTER.print(
+                    f"[ACP] Ended session {session_id}, cleaned up context {context_id}"
+                )
+        else:
+            _PRINTER.print(f"[ACP] Session {session_id} not found for cleanup")
 
 
 def is_available() -> bool:
