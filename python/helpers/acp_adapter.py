@@ -91,7 +91,7 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
             _PRINTER.print(f"[ACP] Failed to create session: {e}")
             raise
 
-    def _convert_content_blocks(self, blocks: list) -> "UserMessage":
+    def _convert_content_blocks(self, blocks: list[Any]) -> "UserMessage":
         from agent import UserMessage
 
         text_parts: list[str] = []
@@ -106,7 +106,7 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
 
             if block_type == "text":
                 text = (
-                    block.get("text")
+                    block.get("text", "")
                     if isinstance(block, dict)
                     else getattr(block, "text", "")
                 )
