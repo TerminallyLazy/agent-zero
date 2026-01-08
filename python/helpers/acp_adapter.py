@@ -151,14 +151,22 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
 
         _PRINTER.print(f"[ACP] Processing prompt in session {session_id}")
 
-        if self.connection:
+        # Get session_update callback from kwargs (passed by ACP runtime)
+        # or fall back to self.connection if available
+        session_update = kwargs.get("session_update")
+        if session_update is None and self.connection:
+            session_update = self.connection.session_update
+
+        stream_handler = None
+        if session_update:
             from python.helpers.acp_stream_handler import ACPStreamHandler
 
             stream_handler = ACPStreamHandler(
                 session_id=session_id,
-                session_update=self.connection.session_update,
+                session_update=session_update,
             )
             context.agent0.data["_acp_stream_handler"] = stream_handler
+            _PRINTER.print(f"[ACP] Stream handler created for session {session_id}")
 
         try:
             context.log.log(
@@ -172,8 +180,8 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
             task = context.communicate(user_message)
             result_text = await task.result()
 
-            if self.connection:
-                await self.connection.session_update(
+            if session_update:
+                await session_update(
                     session_id, update_agent_message_text(str(result_text))
                 )
 
