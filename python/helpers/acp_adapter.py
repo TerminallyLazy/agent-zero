@@ -151,8 +151,14 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
 
         _PRINTER.print(f"[ACP] Processing prompt in session {session_id}")
 
-        context.agent0.data["_acp_session_id"] = session_id
-        context.agent0.data["_acp_connection"] = self.connection
+        if self.connection:
+            from python.helpers.acp_stream_handler import ACPStreamHandler
+
+            stream_handler = ACPStreamHandler(
+                session_id=session_id,
+                session_update=self.connection.session_update,
+            )
+            context.agent0.data["_acp_stream_handler"] = stream_handler
 
         try:
             context.log.log(
@@ -176,8 +182,7 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
             return PromptResponse(stop_reason="end_turn")
 
         finally:
-            context.agent0.data.pop("_acp_session_id", None)
-            context.agent0.data.pop("_acp_connection", None)
+            context.agent0.data.pop("_acp_stream_handler", None)
 
     async def cancel_prompt(self, session_id: str, **kwargs) -> None:
         """Cancel an ongoing prompt execution."""
