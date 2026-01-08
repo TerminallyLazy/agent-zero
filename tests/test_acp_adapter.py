@@ -103,3 +103,43 @@ async def test_end_session_cleans_up_context(acp_adapter, mock_agent_modules):
         "test-context-456"
     )
     assert session_id not in acp_adapter._sessions
+
+
+def test_convert_content_blocks_text_only(acp_adapter, mock_agent_modules):
+    """Test converting ACP content blocks with text to UserMessage."""
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class FakeUserMessage:
+        message: str
+        attachments: list[str] = field(default_factory=list)
+
+    mock_agent_modules["agent"].UserMessage = FakeUserMessage
+
+    blocks = [{"type": "text", "text": "Hello, Agent Zero!"}]
+
+    user_message = acp_adapter._convert_content_blocks(blocks)
+
+    assert user_message.message == "Hello, Agent Zero!"
+    assert user_message.attachments == []
+
+
+def test_convert_content_blocks_multiple_text(acp_adapter, mock_agent_modules):
+    """Test converting ACP content blocks with multiple text blocks."""
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class FakeUserMessage:
+        message: str
+        attachments: list[str] = field(default_factory=list)
+
+    mock_agent_modules["agent"].UserMessage = FakeUserMessage
+
+    blocks = [
+        {"type": "text", "text": "First part."},
+        {"type": "text", "text": "Second part."},
+    ]
+
+    user_message = acp_adapter._convert_content_blocks(blocks)
+
+    assert user_message.message == "First part.\nSecond part."

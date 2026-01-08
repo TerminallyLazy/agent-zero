@@ -91,6 +91,47 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
             _PRINTER.print(f"[ACP] Failed to create session: {e}")
             raise
 
+    def _convert_content_blocks(self, blocks: list) -> "UserMessage":
+        from agent import UserMessage
+
+        text_parts: list[str] = []
+        attachments: list[str] = []
+
+        for block in blocks:
+            block_type = (
+                block.get("type")
+                if isinstance(block, dict)
+                else getattr(block, "type", None)
+            )
+
+            if block_type == "text":
+                text = (
+                    block.get("text")
+                    if isinstance(block, dict)
+                    else getattr(block, "text", "")
+                )
+                text_parts.append(text)
+            elif block_type == "image":
+                url = (
+                    block.get("url")
+                    if isinstance(block, dict)
+                    else getattr(block, "url", None)
+                )
+                if url:
+                    attachments.append(url)
+            elif block_type in ("resource", "resource_link"):
+                uri = (
+                    block.get("uri")
+                    if isinstance(block, dict)
+                    else getattr(block, "uri", None)
+                )
+                if uri:
+                    attachments.append(uri)
+
+        message_text = "\n".join(text_parts)
+
+        return UserMessage(message=message_text, attachments=attachments)
+
     async def end_session(self, session_id: str) -> None:
         """End an ACP session and clean up the Agent Zero context."""
         context_id = self._sessions.pop(session_id, None)
