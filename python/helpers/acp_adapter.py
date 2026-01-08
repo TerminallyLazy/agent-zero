@@ -66,37 +66,45 @@ class AgentZeroACP(ACPAgent if ACP_AVAILABLE else object):  # type: ignore[misc]
         if not ACP_AVAILABLE:
             raise RuntimeError("ACP SDK not available")
 
-        from agent import AgentContext, AgentContextType
-        from initialize import initialize_agent
-
         acp_session_id = str(uuid.uuid4())
-        config = initialize_agent()
-        context = AgentContext(config, type=AgentContextType.BACKGROUND)
 
-        if cwd:
-            context.data["acp_cwd"] = cwd
-        if mcp_servers:
-            context.data["acp_mcp_servers"] = mcp_servers
+        try:
+            from agent import AgentContext, AgentContextType
+            from initialize import initialize_agent
 
-        self._sessions[acp_session_id] = context.id
-        _PRINTER.print(
-            f"[ACP] Created session {acp_session_id} -> context {context.id}"
-        )
+            config = initialize_agent()
+            context = AgentContext(config, type=AgentContextType.BACKGROUND)
 
-        return NewSessionResponse(session_id=acp_session_id)
+            if cwd:
+                context.data["acp_cwd"] = cwd
+            if mcp_servers:
+                context.data["acp_mcp_servers"] = mcp_servers
+
+            self._sessions[acp_session_id] = context.id
+            _PRINTER.print(
+                f"[ACP] Created session {acp_session_id} -> context {context.id}"
+            )
+
+            return NewSessionResponse(session_id=acp_session_id)
+
+        except Exception as e:
+            _PRINTER.print(f"[ACP] Failed to create session: {e}")
+            raise
 
     async def end_session(self, session_id: str) -> None:
         """End an ACP session and clean up the Agent Zero context."""
-        from agent import AgentContext
-        from python.helpers.persist_chat import remove_chat
-
         context_id = self._sessions.pop(session_id, None)
         if context_id:
+            from agent import AgentContext
+            from python.helpers.persist_chat import remove_chat
+
             context = AgentContext.get(context_id)
             if context:
-                context.reset()
-                AgentContext.remove(context_id)
-                remove_chat(context_id)
+                try:
+                    context.reset()
+                finally:
+                    AgentContext.remove(context_id)
+                    remove_chat(context_id)
                 _PRINTER.print(
                     f"[ACP] Ended session {session_id}, cleaned up context {context_id}"
                 )
