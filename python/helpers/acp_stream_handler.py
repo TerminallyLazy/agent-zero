@@ -43,30 +43,31 @@ class ACPStreamHandler:
         self._reasoning_buffer = ""
         self._current_tool_id: str | None = None
 
-    def _schedule_update(self, update: Any) -> None:
+    async def _send_update(self, update: Any) -> None:
         try:
-            asyncio.create_task(self._session_update(self.session_id, update))
+            task = asyncio.create_task(self._session_update(self.session_id, update))
+            await asyncio.sleep(0)  # Yield control to let the task run
         except Exception as e:
-            print(f"[ACP] schedule error: {e}", file=sys.stderr)
+            print(f"[ACP] send error: {e}", file=sys.stderr)
             sys.stderr.flush()
 
     async def on_response_chunk(self, chunk: str, full: str) -> None:
         if not ACP_AVAILABLE:
             return
         self._buffer = full
-        self._schedule_update(update_agent_message_text(chunk))
+        await self._send_update(update_agent_message_text(chunk))
 
     async def on_reasoning_chunk(self, chunk: str, full: str) -> None:
         if not ACP_AVAILABLE:
             return
         self._reasoning_buffer = full
-        self._schedule_update(update_agent_thought_text(chunk))
+        await self._send_update(update_agent_thought_text(chunk))
 
     async def on_tool_start(self, tool_name: str, tool_args: dict) -> None:
         if not ACP_AVAILABLE:
             return
         self._current_tool_id = str(uuid.uuid4())
-        self._schedule_update(
+        await self._send_update(
             start_tool_call(
                 tool_call_id=self._current_tool_id,
                 title=tool_name,
@@ -81,7 +82,7 @@ class ACPStreamHandler:
         self._current_tool_id = None
         if tool_id is None:
             return
-        self._schedule_update(
+        await self._send_update(
             update_tool_call(
                 tool_call_id=tool_id,
                 title=tool_name,
