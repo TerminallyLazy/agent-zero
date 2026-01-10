@@ -1,5 +1,5 @@
 import { createStore } from "/js/AlpineStore.js";
-import { sendJsonData } from "/js/api.js";
+import { callJsonApi } from "/js/api.js";
 
 const model = {
   // State
@@ -24,7 +24,7 @@ const model = {
 
     try {
       // Start canvas workspace
-      const result = await sendJsonData("/canvas", {
+      const result = await callJsonApi("/canvas", {
         action: "start",
         ctxid: this.ctxid,
         headless: true,
@@ -71,7 +71,7 @@ const model = {
     this.stopRefresh();
 
     try {
-      await sendJsonData("/canvas", {
+      await callJsonApi("/canvas", {
         action: "stop",
         ctxid: this.ctxid,
       });
@@ -92,7 +92,7 @@ const model = {
    */
   async getStatus() {
     try {
-      const result = await sendJsonData("/canvas", {
+      const result = await callJsonApi("/canvas", {
         action: "status",
         ctxid: this.ctxid,
       });
@@ -117,7 +117,7 @@ const model = {
    */
   async loadFiles() {
     try {
-      const result = await sendJsonData("/canvas", {
+      const result = await callJsonApi("/canvas", {
         action: "files",
         ctxid: this.ctxid,
       });
@@ -135,7 +135,7 @@ const model = {
    */
   async screenshot(selector = null) {
     try {
-      const result = await sendJsonData("/canvas", {
+      const result = await callJsonApi("/canvas", {
         action: "screenshot",
         ctxid: this.ctxid,
         selector: selector,
@@ -157,7 +157,7 @@ const model = {
    */
   async navigate(path) {
     try {
-      const result = await sendJsonData("/canvas", {
+      const result = await callJsonApi("/canvas", {
         action: "navigate",
         ctxid: this.ctxid,
         path: path,
