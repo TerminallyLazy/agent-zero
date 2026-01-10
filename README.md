@@ -35,7 +35,7 @@ Agent Zero now supports **Projects** – isolated workspaces with their own prom
 
 
 
-[![Showcase](/docs/res/showcase-thumb.png)](https://youtu.be/MdzLhWWoxEs)
+[![Showcase](/docs/res/showcase-thumb.png)](https://youtu.be/lazLNcEYsiQ)
 
 
 

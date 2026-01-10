@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Coroutine, Dict, Literal
 from enum import Enum
-import uuid
 import models
 
 from python.helpers import (
@@ -623,7 +622,8 @@ class Agent:
     def read_prompt(self, file: str, **kwargs) -> str:
         dirs = subagents.get_paths(self, "prompts")
         prompt = files.read_prompt_file(file, _directories=dirs, _agent=self, **kwargs)
-        prompt = files.remove_code_fences(prompt)
+        if files.is_full_json_template(prompt):
+            prompt = files.remove_code_fences(prompt)
         return prompt
 
     def get_data(self, field: str):

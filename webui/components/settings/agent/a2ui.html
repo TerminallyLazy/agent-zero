@@ -1,0 +1,49 @@
+<html>
+  <head>
+    <title>A2UI</title>
+  </head>
+
+  <body>
+    <div x-data>
+      <template x-if="$store.settingsStore.settings">
+        <div>
+          <div class="section-title">A2UI (Agent-to-User Interface)</div>
+          <div class="section-description">
+            Configuration for the rich UI rendering system. A2UI allows agents to display interactive components like cards, tables, buttons, and forms.
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">A2UI Enabled</div>
+              <div class="field-description">
+                Enable the A2UI rendering system. When enabled, agents can send structured UI components that render as interactive elements instead of plain text.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settingsStore.settings.a2ui_enabled" />
+                <span class="toggler"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Default Rendering Mode</div>
+              <div class="field-description">
+                Controls how A2UI components are rendered by default. 'Auto' detects component type and renders appropriately. 'Minimal' shows compact versions. 'Full' always renders complete components.
+              </div>
+            </div>
+            <div class="field-control">
+              <select x-model="$store.settingsStore.settings.a2ui_default_mode">
+                <option value="auto">Auto (Recommended)</option>
+                <option value="minimal">Minimal</option>
+                <option value="full">Full</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </body>
+</html>

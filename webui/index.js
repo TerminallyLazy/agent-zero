@@ -10,6 +10,7 @@ import { store as inputStore } from "/components/chat/input/input-store.js";
 import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 import { store as tasksStore } from "/components/sidebar/tasks/tasks-store.js";
 import { store as chatTopStore } from "/components/chat/top-section/chat-top-store.js";
+import { store as _tooltipsStore } from "/components/tooltips/tooltip-store.js";
 
 globalThis.fetchApi = api.fetchApi; // TODO - backward compatibility for non-modular scripts, remove once refactored to alpine
 
@@ -184,8 +185,8 @@ async function updateUserTime() {
 updateUserTime();
 setInterval(updateUserTime, 1000);
 
-function setMessage(id, type, heading, content, temp, kvps = null) {
-  const result = msgs.setMessage(id, type, heading, content, temp, kvps);
+function setMessage(id, type, heading, content, temp, kvps = null, timestamp = null, durationMs = null, /* tokensIn = 0, tokensOut = 0, */ agentNumber = 0) {
+  const result = msgs.setMessage(id, type, heading, content, temp, kvps, timestamp, durationMs, /* tokensIn, tokensOut, */ agentNumber);
   const chatHistoryEl = document.getElementById("chat-history");
   if (preferencesStore.autoScroll && chatHistoryEl) {
     chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
@@ -292,6 +293,7 @@ export async function poll() {
     if (lastLogGuid != response.log_guid) {
       const chatHistoryEl = document.getElementById("chat-history");
       if (chatHistoryEl) chatHistoryEl.innerHTML = "";
+      msgs.resetProcessGroups(); // Reset process groups on chat reset
       lastLogVersion = 0;
       lastLogGuid = response.log_guid;
       await poll();
@@ -308,7 +310,12 @@ export async function poll() {
           log.heading,
           log.content,
           log.temp,
-          log.kvps
+          log.kvps,
+          log.timestamp,
+          log.duration_ms,
+          // log.tokens_in,
+          // log.tokens_out,
+          log.agent_number || 0  // Agent number for identifying main/subordinate agents
         );
       }
       afterMessagesUpdate(response.logs);
@@ -482,6 +489,9 @@ export const setContext = function (id) {
   // Stop speech when switching chats
   speechStore.stopAudio();
 
+  // Reset process groups for new context
+  msgs.resetProcessGroups();
+
   // Clear the chat history immediately to avoid showing stale content
   const chatHistoryEl = document.getElementById("chat-history");
   if (chatHistoryEl) chatHistoryEl.innerHTML = "";
@@ -631,61 +641,3 @@ document.addEventListener("DOMContentLoaded", function () {
  * - Both lists are sorted by creation time (newest first)
  * - Tasks use the same context system as chats for communication with the backend
  */
-
-// Open the scheduler detail view for a specific task
-function openTaskDetail(taskId) {
-  // Wait for Alpine.js to be fully loaded
-  if (globalThis.Alpine) {
-    // Get the settings modal button and click it to ensure all init logic happens
-    const settingsButton = document.getElementById("settings");
-    if (settingsButton) {
-      // Programmatically click the settings button
-      settingsButton.click();
-
-      // Now get a reference to the modal element
-      const modalEl = document.getElementById("settingsModal");
-      if (!modalEl) {
-        console.error("Settings modal element not found after clicking button");
-        return;
-      }
-
-      // Get the Alpine.js data for the modal
-      const modalData = globalThis.Alpine ? Alpine.$data(modalEl) : null;
-
-      // Use a timeout to ensure the modal is fully rendered
-      setTimeout(() => {
-        // Switch to the scheduler tab first
-        modalData.switchTab("scheduler");
-
-        // Use another timeout to ensure the scheduler component is initialized
-        setTimeout(() => {
-          // Get the scheduler component
-          const schedulerComponent = document.querySelector(
-            '[x-data="schedulerSettings"]'
-          );
-          if (!schedulerComponent) {
-            console.error("Scheduler component not found");
-            return;
-          }
-
-          // Get the Alpine.js data for the scheduler component
-          const schedulerData = globalThis.Alpine
-            ? Alpine.$data(schedulerComponent)
-            : null;
-
-          // Show the task detail view for the specific task
-          schedulerData.showTaskDetail(taskId);
-
-          console.log("Task detail view opened for task:", taskId);
-        }, 50); // Give time for the scheduler tab to initialize
-      }, 25); // Give time for the modal to render
-    } else {
-      console.error("Settings button not found");
-    }
-  } else {
-    console.error("Alpine.js not loaded");
-  }
-}
-
-// Make the function available globally
-globalThis.openTaskDetail = openTaskDetail;

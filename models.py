@@ -22,7 +22,7 @@ from litellm.types.utils import ModelResponse
 from python.helpers import dotenv
 from python.helpers import settings, dirty_json
 from python.helpers.dotenv import load_dotenv
-from python.helpers.providers import get_provider_config
+from python.helpers.providers import ModelType as ProviderModelType, get_provider_config
 from python.helpers.rate_limiter import RateLimiter
 from python.helpers.tokens import approximate_tokens
 from python.helpers import dirty_json, browser_use_monkeypatch
@@ -844,7 +844,7 @@ def _adjust_call_args(provider_name: str, model_name: str, kwargs: dict):
 
 
 def _merge_provider_defaults(
-    provider_type: str, original_provider: str, kwargs: dict
+    provider_type: ProviderModelType, original_provider: str, kwargs: dict
 ) -> tuple[str, dict]:
     # Normalize .env-style numeric strings (e.g., "timeout=30") into ints/floats for LiteLLM
     def _normalize_values(values: dict) -> dict:

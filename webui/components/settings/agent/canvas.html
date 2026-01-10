@@ -1,0 +1,65 @@
+<html>
+  <head>
+    <title>Canvas</title>
+  </head>
+
+  <body>
+    <div x-data>
+      <template x-if="$store.settingsStore.settings">
+        <div>
+          <div class="section-title">Canvas (Visual Workspace)</div>
+          <div class="section-description">
+            Canvas provides a visual workspace where agents can write HTML/CSS/JS files,
+            view them in a real browser, query the DOM, and capture screenshots.
+            This enables agents to create and validate web content in real-time.
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Canvas Enabled</div>
+              <div class="field-description">
+                Enable the Canvas visual workspace tool. When enabled, agents can use the canvas tool to create and preview web content.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settingsStore.settings.canvas_enabled" />
+                <span class="toggler"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Headless Mode</div>
+              <div class="field-description">
+                Run the browser in headless mode (no visible window). Disable this to see the browser window during canvas operations.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settingsStore.settings.canvas_headless" />
+                <span class="toggler"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Auto-Reload on File Changes</div>
+              <div class="field-description">
+                Automatically reload the browser page when files in the workspace directory are modified.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settingsStore.settings.canvas_auto_reload" />
+                <span class="toggler"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </body>
+</html>
