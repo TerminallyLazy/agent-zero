@@ -11,6 +11,7 @@ import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 import { store as tasksStore } from "/components/sidebar/tasks/tasks-store.js";
 import { store as chatTopStore } from "/components/chat/top-section/chat-top-store.js";
 import { store as _tooltipsStore } from "/components/tooltips/tooltip-store.js";
+import { store as canvasStore } from "/components/canvas/canvas-store.js";
 
 globalThis.fetchApi = api.fetchApi; // TODO - backward compatibility for non-modular scripts, remove once refactored to alpine
 
@@ -294,6 +295,7 @@ export async function poll() {
       const chatHistoryEl = document.getElementById("chat-history");
       if (chatHistoryEl) chatHistoryEl.innerHTML = "";
       msgs.resetProcessGroups(); // Reset process groups on chat reset
+      canvasStore.clearSurfaces(); // Clear canvas A2UI surfaces on chat reset
       lastLogVersion = 0;
       lastLogGuid = response.log_guid;
       await poll();
@@ -317,6 +319,15 @@ export async function poll() {
           // log.tokens_out,
           log.agent_number || 0  // Agent number for identifying main/subordinate agents
         );
+
+        // Route A2UI messages to Canvas panel for visual workspace rendering
+        if (log.type === "a2ui" && log.kvps?.messages) {
+          canvasStore.receiveA2UIMessage(
+            log.kvps.surface_id || messageId,
+            log.kvps.messages,
+            { heading: log.heading, content: log.content }
+          );
+        }
       }
       afterMessagesUpdate(response.logs);
     }

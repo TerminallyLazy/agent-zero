@@ -112,7 +112,12 @@
                 <x-component path="chat/input/chat-bar.html"></x-component>
             </div>
         </div>
-                        </div>
+
+        <!-- Canvas Panel (Visual Workspace - side panel) -->
+        <div id="canvas-panel-container" x-data x-show="$store.canvasStore && $store.canvasStore.isOpen" x-cloak>
+          <x-component path="canvas/canvas-panel.html"></x-component>
+        </div>
+    </div>
 
     <!-- Drag and Drop Overlay Component -->
     <x-component path="chat/attachments/dragDropOverlay.html"></x-component>

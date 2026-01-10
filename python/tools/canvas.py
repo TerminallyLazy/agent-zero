@@ -110,7 +110,9 @@ class Canvas(Tool):
                 case "eval":
                     if not content:
                         return Response(message="Error: 'content' (JavaScript code) is required for eval action.", break_loop=False)
-                    result = await canvas.eval(content)
+                    # Preprocess §§include() directives - replace with file contents
+                    processed_content = self._preprocess_includes(content, canvas)
+                    result = await canvas.eval(processed_content)
                     return Response(
                         message=f"JavaScript result:\n{result}",
                         break_loop=False
@@ -220,6 +222,44 @@ class Canvas(Tool):
             headless=getattr(settings, 'canvas_headless', True),
             auto_reload=getattr(settings, 'canvas_auto_reload', True),
         )
+
+    def _preprocess_includes(self, content: str, canvas: 'CanvasManager') -> str:
+        """
+        Preprocess §§include() directives in JavaScript content.
+
+        Replaces §§include(/path/to/file) with the JSON-escaped file contents.
+        This allows agents to inject file data into JavaScript code.
+        """
+        import re
+        import json
+
+        pattern = r'§§include\(([^)]+)\)'
+
+        def replace_include(match):
+            file_path = match.group(1).strip()
+            try:
+                # Try reading from workspace first (relative path)
+                if not os.path.isabs(file_path):
+                    try:
+                        file_content = canvas.read_file(file_path)
+                    except Exception:
+                        # Fall back to absolute path
+                        file_content = files.read_file(file_path)
+                else:
+                    file_content = files.read_file(file_path)
+
+                # Try to parse as JSON first for proper escaping
+                try:
+                    parsed = json.loads(file_content)
+                    return json.dumps(parsed)  # Re-serialize for JS-safe output
+                except json.JSONDecodeError:
+                    # Not JSON, escape as string
+                    return json.dumps(file_content)
+            except Exception as e:
+                # Return error message in JS-safe format
+                return json.dumps(f"[Include Error: {e}]")
+
+        return re.sub(pattern, replace_include, content)
 
     def get_log_object(self):
         action = self.args.get('action', 'status') if self.args else 'status'

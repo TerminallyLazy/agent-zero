@@ -267,12 +267,9 @@ class CanvasManager:
             )
             self.state.server_thread.start()
 
-            # Start browser if Playwright is available
-            if PLAYWRIGHT_AVAILABLE:
-                try:
-                    await self._start_browser()
-                except Exception as e:
-                    PrintStyle().warning(f"Canvas: Browser initialization failed: {e}")
+            # Browser startup is now lazy - only starts when browser actions are used
+            # This speeds up Canvas start significantly
+            PrintStyle().print("Canvas: Browser will start on-demand when needed")
 
             # Start file watcher if auto_reload is enabled
             if self.config.auto_reload:
@@ -316,6 +313,21 @@ class CanvasManager:
 
         # Navigate to workspace
         await self.state.page.goto(self.state.server_url)
+
+    async def _ensure_browser(self):
+        """Ensure browser is started (lazy initialization)."""
+        if self.state.page:
+            return  # Already started
+
+        if not PLAYWRIGHT_AVAILABLE:
+            raise RuntimeError("Playwright not available. Install with: pip install playwright && playwright install chromium")
+
+        if not self.state.is_running:
+            raise RuntimeError("Canvas not started. Use action='start' first.")
+
+        PrintStyle().print("Canvas: Starting browser (first browser action)...")
+        await self._start_browser()
+        PrintStyle().print("Canvas: Browser ready")
 
     async def _watch_files(self):
         """Watch workspace directory for changes and auto-reload."""
@@ -405,8 +417,7 @@ class CanvasManager:
         Returns:
             Tuple of (final_url, page_title)
         """
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
+        await self._ensure_browser()
 
         # Normalize path
         if not path.startswith('/'):
@@ -438,9 +449,7 @@ class CanvasManager:
         Returns:
             The result of the JavaScript evaluation.
         """
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
-
+        await self._ensure_browser()
         return await self.state.page.evaluate(js_code)
 
     async def query(self, selector: str, mode: str = 'text') -> str:
@@ -454,8 +463,7 @@ class CanvasManager:
         Returns:
             The queried content.
         """
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
+        await self._ensure_browser()
 
         if mode == 'outer_html':
             return await self.state.page.evaluate(
@@ -477,8 +485,7 @@ class CanvasManager:
         Returns:
             List of queried content for each match.
         """
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
+        await self._ensure_browser()
 
         if mode == 'outer_html':
             return await self.state.page.evaluate(
@@ -500,8 +507,7 @@ class CanvasManager:
         Returns:
             Path to the saved screenshot.
         """
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
+        await self._ensure_browser()
 
         if not path:
             screenshots_dir = files.get_abs_path("tmp/canvas/screenshots")
@@ -521,16 +527,12 @@ class CanvasManager:
 
     async def click(self, selector: str):
         """Click an element."""
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
-
+        await self._ensure_browser()
         await self.state.page.click(selector)
 
     async def type_text(self, selector: str, text: str, clear: bool = False):
         """Type text into an element."""
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
-
+        await self._ensure_browser()
         if clear:
             await self.state.page.fill(selector, '')
         await self.state.page.type(selector, text)
@@ -544,9 +546,7 @@ class CanvasManager:
             state: 'visible', 'hidden', 'attached', 'detached'
             timeout: Timeout in milliseconds
         """
-        if not self.state.page:
-            raise RuntimeError("Canvas browser not initialized")
-
+        await self._ensure_browser()
         await self.state.page.wait_for_selector(selector, state=state, timeout=timeout)
 
     def write_file(self, relative_path: str, content: str):

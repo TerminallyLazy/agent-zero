@@ -1,0 +1,350 @@
+<html>
+<head>
+  <title>Canvas Panel - A2UI Workspace</title>
+  <script type="module">
+    import { store } from "/components/canvas/canvas-store.js";
+  </script>
+</head>
+
+<body>
+  <div x-data="{ isResizing: false }"
+       @mousemove.window="if (isResizing) {
+         const container = document.getElementById('canvas-panel-container');
+         const newWidth = window.innerWidth - $event.clientX;
+         $store.canvasStore.setWidth(newWidth);
+       }"
+       @mouseup.window="isResizing = false"
+       @mouseleave.window="isResizing = false">
+    <template x-if="$store.canvasStore && $store.canvasStore.isOpen">
+      <div id="canvas-panel" class="canvas-panel">
+        <!-- Resize Handle -->
+        <div class="resize-handle"
+             @mousedown.prevent="isResizing = true"
+             title="Drag to resize">
+        </div>
+
+        <!-- Header -->
+        <div class="canvas-panel-header">
+          <div class="canvas-header-left">
+            <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 -960 960 960" width="18" fill="currentColor">
+              <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-480H200v480Zm40-40h200v-200H240v200Zm240 0h200v-80H480v80Zm0-120h200v-80H480v80Zm-240-120h440v-120H240v120Z"/>
+            </svg>
+            <span class="canvas-title">Canvas</span>
+            <!-- Surface tabs when multiple surfaces exist -->
+            <template x-if="Object.keys($store.canvasStore.surfaces).length > 1">
+              <div class="surface-tabs">
+                <template x-for="surface in $store.canvasStore.getSurfaceList()" :key="surface.id">
+                  <button class="surface-tab"
+                          :class="{ 'active': surface.id === $store.canvasStore.activeSurfaceId }"
+                          @click="$store.canvasStore.switchSurface(surface.id)"
+                          x-text="surface.heading">
+                  </button>
+                </template>
+              </div>
+            </template>
+            <template x-if="$store.canvasStore.activeSurfaceId && $store.canvasStore.surfaces[$store.canvasStore.activeSurfaceId]?.rendered">
+              <span class="status-dot"></span>
+            </template>
+          </div>
+
+          <div class="canvas-header-right">
+            <!-- Clear surfaces button -->
+            <button class="panel-btn" @click="$store.canvasStore.clearSurfaces()" title="Clear Canvas">
+              <svg xmlns="http://www.w3.org/2000/svg" height="16" viewBox="0 -960 960 960" width="16" fill="currentColor">
+                <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/>
+              </svg>
+            </button>
+            <!-- Expand/Collapse Button -->
+            <button class="panel-btn" @click="$store.canvasStore.toggleExpand()"
+                    :title="$store.canvasStore.isExpanded ? 'Collapse' : 'Expand'">
+              <template x-if="!$store.canvasStore.isExpanded">
+                <svg xmlns="http://www.w3.org/2000/svg" height="16" viewBox="0 -960 960 960" width="16" fill="currentColor">
+                  <path d="M120-120v-320h80v184l504-504H520v-80h320v320h-80v-184L256-200h184v80H120Z"/>
+                </svg>
+              </template>
+              <template x-if="$store.canvasStore.isExpanded">
+                <svg xmlns="http://www.w3.org/2000/svg" height="16" viewBox="0 -960 960 960" width="16" fill="currentColor">
+                  <path d="M440-440v320h-80v-184L176-120l-56-56 184-184H120v-80h320Zm160-360v184l184-184 56 56-184 184h184v80H520v-320h80Z"/>
+                </svg>
+              </template>
+            </button>
+            <button class="panel-btn close-btn" @click="$store.canvasStore.close()" title="Close Canvas">
+              <svg xmlns="http://www.w3.org/2000/svg" height="16" viewBox="0 -960 960 960" width="16" fill="currentColor">
+                <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- A2UI Content Area -->
+        <div class="canvas-panel-content">
+          <div id="canvas-a2ui-container" class="canvas-a2ui-container">
+            <!-- A2UI components render here -->
+            <div class="canvas-empty-state">
+              <svg xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48" fill="currentColor" opacity="0.3">
+                <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-480H200v480Zm40-40h200v-200H240v200Zm240 0h200v-80H480v80Zm0-120h200v-80H480v80Zm-240-120h440v-120H240v120Z"/>
+              </svg>
+              <p>Waiting for agent to create UI components...</p>
+              <p class="canvas-hint">The agent can use the a2ui_component tool to create interactive interfaces here.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="canvas-panel-footer">
+          <div class="surface-info">
+            <svg xmlns="http://www.w3.org/2000/svg" height="14" viewBox="0 -960 960 960" width="14" fill="currentColor">
+              <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Z"/>
+            </svg>
+            <span x-text="Object.keys($store.canvasStore.surfaces).length + ' surface(s)'"></span>
+          </div>
+          <div class="canvas-mode">
+            <span>A2UI Workspace</span>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <style>
+    .canvas-panel {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+      background: var(--color-background);
+      position: relative;
+      z-index: 100;
+    }
+
+    /* Resize Handle */
+    .resize-handle {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      cursor: col-resize;
+      background: transparent;
+      z-index: 200;
+      transition: background 0.2s;
+    }
+
+    .resize-handle:hover,
+    .resize-handle:active {
+      background: var(--color-primary);
+    }
+
+    .canvas-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--color-panel);
+      border-bottom: 1px solid var(--color-border);
+      border-left: 1px solid var(--color-border);
+      flex-shrink: 0;
+      height: 44px;
+      box-sizing: border-box;
+      z-index: 101;
+    }
+
+    .canvas-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-text);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .canvas-header-left svg {
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    .canvas-title {
+      font-weight: 600;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .surface-tabs {
+      display: flex;
+      gap: 4px;
+      margin-left: 12px;
+      overflow-x: auto;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .surface-tab {
+      padding: 4px 8px;
+      font-size: 11px;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .surface-tab:hover {
+      background: var(--color-background-hover);
+      color: var(--color-text);
+    }
+
+    .surface-tab.active {
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+      color: white;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00c853;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .canvas-header-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .panel-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text);
+      cursor: pointer;
+      transition: all 0.15s;
+      opacity: 0.7;
+    }
+
+    .panel-btn:hover {
+      background: var(--color-background-hover);
+      opacity: 1;
+    }
+
+    .panel-btn.close-btn:hover {
+      background: rgba(255, 82, 82, 0.15);
+      color: #ff5252;
+    }
+
+    .canvas-panel-content {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      border-left: 1px solid var(--color-border);
+    }
+
+    .canvas-a2ui-container {
+      width: 100%;
+      min-height: 100%;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    .canvas-empty-state,
+    .canvas-loading-state,
+    .canvas-error-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      color: var(--color-text-muted);
+      text-align: center;
+      padding: 24px;
+    }
+
+    .canvas-empty-state svg {
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .canvas-empty-state p {
+      margin: 4px 0;
+      font-size: 14px;
+    }
+
+    .canvas-hint {
+      font-size: 12px !important;
+      opacity: 0.6;
+      max-width: 280px;
+    }
+
+    .canvas-loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--color-border);
+      border-top: 3px solid var(--color-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .canvas-error-state {
+      color: #ff5252;
+    }
+
+    .canvas-fallback {
+      margin-top: 16px;
+      padding: 12px;
+      background: var(--color-panel);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--color-text);
+    }
+
+    .canvas-panel-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: var(--color-panel);
+      border-top: 1px solid var(--color-border);
+      border-left: 1px solid var(--color-border);
+      font-size: 11px;
+      color: var(--color-text-muted);
+      flex-shrink: 0;
+    }
+
+    .surface-info {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .canvas-mode {
+      opacity: 0.6;
+    }
+
+    /* Light mode */
+    .light-mode .canvas-panel-content {
+      background: #fafafa;
+    }
+  </style>
+</body>
+</html>
