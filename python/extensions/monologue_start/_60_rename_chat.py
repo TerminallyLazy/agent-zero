@@ -35,7 +35,6 @@ class RenameChat(Extension):
                     new_name = new_name[:40] + "..."
                 # apply to context and save
                 self.agent.context.name = new_name
-                persist_chat.save_tmp_chat(self.agent.context)
 
                 # Rename folder to match new title (if using new slug-based format)
                 try:
@@ -48,6 +47,9 @@ class RenameChat(Extension):
                         if old_folder != new_folder and os.path.exists(old_folder) and not os.path.exists(new_folder):
                             os.rename(old_folder, new_folder)
                             persist_chat._update_folder_cache(self.agent.context.id, new_folder_name)
+
+                        # Save AFTER rename succeeds
+                        persist_chat.save_tmp_chat(self.agent.context)
                 except Exception as e:
                     print(f"Warning: Failed to rename chat folder: {e}")  # FIX: Add logging
         except Exception as e:
