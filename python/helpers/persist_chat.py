@@ -68,6 +68,7 @@ def load_tmp_chats():
     """Load all contexts from the chats folder"""
     _convert_v080_chats()
     _migrate_to_slug_folders()
+    _initialize_folder_cache()
     folders = files.list_files(CHATS_FOLDER, "*")
     json_files = []
     for folder_name in folders:
@@ -582,5 +583,3 @@ def _safe_json_serialize(obj, **kwargs):
     return json.dumps(obj, default=serializer, **kwargs)
 
 
-# Initialize the folder cache at module load time
-_initialize_folder_cache()
