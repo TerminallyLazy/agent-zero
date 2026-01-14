@@ -329,6 +329,67 @@ def _migrate_to_slug_folders() -> int:
         return migrated_count
 
 
+def _get_folder_name_for_context(context: AgentContext) -> str:
+    """
+    Get the folder name for a chat context.
+
+    Uses cache for O(1) lookup if context already exists.
+    For new contexts, generates slug-based folder name.
+
+    This function is the key integration point that decides whether to use
+    a cached (existing) folder name or generate a new slug-based folder name.
+    All folder name resolution should go through this function to ensure
+    consistency and proper cache utilization.
+
+    Args:
+        context: AgentContext object with attributes:
+                 - context.id: The unique context ID
+                 - context.name: The chat title (used for slug generation)
+                 - context.created_at: Timestamp when context was created
+
+    Returns:
+        str: The folder name (either from cache or newly generated).
+             Format for new contexts: YYYYMMDD_HHMMSS_slug_shortid
+             Format for cached contexts: depends on when it was created
+                                        (legacy format or new slug format)
+
+    Thread Safety:
+        Uses _cache_lock to ensure thread-safe access to _context_folder_cache.
+
+    Examples:
+        >>> # Existing context (in cache) - O(1) lookup
+        >>> context = AgentContext(id="eeFXa0TR", ...)
+        >>> _get_folder_name_for_context(context)
+        'eeFXa0TR'  # Legacy format from cache
+
+        >>> # New context (not in cache) - generates new folder name
+        >>> context = AgentContext(id="kL9mPqR2", name="API Integration", ...)
+        >>> _get_folder_name_for_context(context)
+        '20240115_150122_api-integration_PqR2'  # New slug format
+    """
+    with _cache_lock:
+        # Check cache first for O(1) lookup
+        cached_folder_name = _context_folder_cache.get(context.id)
+
+        if cached_folder_name is not None:
+            # Found in cache - return existing folder name
+            return cached_folder_name
+
+        # Not in cache - this is a new context
+        # Generate new slug-based folder name
+        created_at = context.created_at.timestamp() if context.created_at else None
+        new_folder_name = chat_folder_utils.create_folder_name(
+            context_id=context.id,
+            title=context.name,
+            created_at=created_at
+        )
+
+        # Update cache with the new mapping
+        _update_folder_cache(context.id, new_folder_name)
+
+        return new_folder_name
+
+
 def _serialize_context(context: AgentContext):
     # serialize agents
     agents = []
