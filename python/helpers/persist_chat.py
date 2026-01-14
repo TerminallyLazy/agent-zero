@@ -19,6 +19,7 @@ CHAT_FILE_NAME = "chat.json"
 # Cache for context_id -> folder_name mapping (in-memory)
 _context_folder_cache: Dict[str, str] = {}
 _cache_lock = threading.RLock()
+_migration_lock = threading.Lock()
 
 
 def get_chat_folder_path(ctxid: str):
@@ -218,108 +219,113 @@ def _migrate_to_slug_folders() -> int:
         Migration complete: 2 folders migrated
         2
     """
-    migrated_count = 0
+    with _migration_lock:
+        migrated_count = 0
 
-    try:
-        # Get all folders in the chats directory
         try:
-            folders = files.list_files(CHATS_FOLDER, "*")
-        except Exception:
-            # Directory might not exist yet
-            return 0
-
-        # Track if we found any legacy folders to migrate
-        found_legacy = False
-
-        for folder_name in folders:
-            # Skip hidden files/folders
-            if folder_name.startswith("."):
-                continue
-
-            # Check if this is a legacy folder
-            if not chat_folder_utils.is_legacy_folder(folder_name):
-                continue
-
-            found_legacy = True
-
-            # Get the old folder path
-            old_path = files.get_abs_path(CHATS_FOLDER, folder_name)
-
-            # Skip if not actually a directory
-            if not os.path.isdir(old_path):
-                continue
-
+            # Get all folders in the chats directory
             try:
-                # Read chat.json to get context information
-                chat_file_path = files.get_abs_path(old_path, CHAT_FILE_NAME)
+                folders = files.list_files(CHATS_FOLDER, "*")
+            except Exception:
+                # Directory might not exist yet
+                return 0
 
-                if not os.path.exists(chat_file_path):
-                    # Skip folders without chat.json (might be incomplete/corrupted)
+            # Track if we found any legacy folders to migrate
+            found_legacy = False
+
+            for folder_name in folders:
+                # Skip hidden files/folders
+                if folder_name.startswith("."):
                     continue
 
-                js = files.read_file(chat_file_path)
-                data = json.loads(js)
+                # Check if this is a legacy folder
+                if not chat_folder_utils.is_legacy_folder(folder_name):
+                    continue
 
-                # Extract context information
-                context_id = data.get("id", folder_name)
-                title = data.get("name", "chat")  # context.name is the chat title
-                created_at_str = data.get("created_at")
+                found_legacy = True
 
-                # Parse created_at timestamp
-                # The serialized format is ISO format string, need to convert to float
-                if created_at_str:
-                    try:
-                        created_at_dt = datetime.fromisoformat(created_at_str)
-                        created_at = created_at_dt.timestamp()
-                    except Exception:
-                        # If parsing fails, use None (will default to current time)
+                # Get the old folder path
+                old_path = files.get_abs_path(CHATS_FOLDER, folder_name)
+
+                # Skip if not actually a directory
+                if not os.path.isdir(old_path):
+                    continue
+
+                try:
+                    # Read chat.json to get context information
+                    chat_file_path = files.get_abs_path(old_path, CHAT_FILE_NAME)
+
+                    if not os.path.exists(chat_file_path):
+                        # Skip folders without chat.json (might be incomplete/corrupted)
+                        continue
+
+                    js = files.read_file(chat_file_path)
+                    data = json.loads(js)
+
+                    # Extract context information
+                    context_id = data.get("id", folder_name)
+                    # Validate context_id length before passing to create_folder_name
+                    if len(context_id) < 4:
+                        print(f"Warning: Invalid context_id length in {folder_name}, skipping")
+                        continue
+                    title = data.get("name", "chat")  # context.name is the chat title
+                    created_at_str = data.get("created_at")
+
+                    # Parse created_at timestamp
+                    # The serialized format is ISO format string, need to convert to float
+                    if created_at_str:
+                        try:
+                            created_at_dt = datetime.fromisoformat(created_at_str)
+                            created_at = created_at_dt.timestamp()
+                        except Exception:
+                            # If parsing fails, use None (will default to current time)
+                            created_at = None
+                    else:
                         created_at = None
-                else:
-                    created_at = None
 
-                # Generate new folder name using the utility function
-                new_folder_name = chat_folder_utils.create_folder_name(
-                    context_id=context_id,
-                    title=title,
-                    created_at=created_at
-                )
+                    # Generate new folder name using the utility function
+                    new_folder_name = chat_folder_utils.create_folder_name(
+                        context_id=context_id,
+                        title=title,
+                        created_at=created_at
+                    )
 
-                # Get the new folder path
-                new_path = files.get_abs_path(CHATS_FOLDER, new_folder_name)
+                    # Get the new folder path
+                    new_path = files.get_abs_path(CHATS_FOLDER, new_folder_name)
 
-                # Check if target already exists (shouldn't happen, but be safe)
-                if os.path.exists(new_path):
-                    print(f"Warning: Target folder already exists, skipping: {new_folder_name}")
+                    # Check if target already exists (shouldn't happen, but be safe)
+                    if os.path.exists(new_path):
+                        print(f"Warning: Target folder already exists, skipping: {new_folder_name}")
+                        continue
+
+                    # Rename the folder
+                    os.rename(old_path, new_path)
+
+                    # Update the cache with the new folder name
+                    _update_folder_cache(context_id, new_folder_name)
+
+                    # Increment success counter
+                    migrated_count += 1
+
+                    # Log the migration (optional, for visibility)
+                    print(f"Migrated: {folder_name} -> {new_folder_name}")
+
+                except Exception as e:
+                    # Log error but continue with other folders
+                    print(f"Error migrating folder {folder_name}: {e}")
                     continue
 
-                # Rename the folder
-                os.rename(old_path, new_path)
+            # Print summary if any legacy folders were found
+            if found_legacy and migrated_count > 0:
+                print(f"Migration complete: {migrated_count} folder(s) migrated")
+            elif found_legacy and migrated_count == 0:
+                print("Migration complete: No folders were successfully migrated")
 
-                # Update the cache with the new folder name
-                _update_folder_cache(context_id, new_folder_name)
+        except Exception as e:
+            # Catch any unexpected errors at the top level
+            print(f"Error during migration: {e}")
 
-                # Increment success counter
-                migrated_count += 1
-
-                # Log the migration (optional, for visibility)
-                print(f"Migrated: {folder_name} -> {new_folder_name}")
-
-            except Exception as e:
-                # Log error but continue with other folders
-                print(f"Error migrating folder {folder_name}: {e}")
-                continue
-
-        # Print summary if any legacy folders were found
-        if found_legacy and migrated_count > 0:
-            print(f"Migration complete: {migrated_count} folder(s) migrated")
-        elif found_legacy and migrated_count == 0:
-            print("Migration complete: No folders were successfully migrated")
-
-    except Exception as e:
-        # Catch any unexpected errors at the top level
-        print(f"Error during migration: {e}")
-
-    return migrated_count
+        return migrated_count
 
 
 def _serialize_context(context: AgentContext):
