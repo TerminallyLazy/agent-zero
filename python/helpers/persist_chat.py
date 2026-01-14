@@ -143,7 +143,9 @@ def _initialize_folder_cache():
         is_new_format, legacy_context_id = chat_folder_utils.parse_folder_name(folder_name)
 
         if is_new_format:
-            # New format: read context_id from chat.json
+            # For new format folders, we need to read chat.json to get the full context_id
+            # because the folder name only contains the last 4 chars (short_id).
+            # Example: folder "20240115_142530_database-setup_eeFX" → context_id "eeFXa0TR"
             chat_file_path = files.get_abs_path(CHATS_FOLDER, folder_name, CHAT_FILE_NAME)
             try:
                 js = files.read_file(chat_file_path)
