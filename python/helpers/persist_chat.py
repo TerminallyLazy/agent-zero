@@ -43,7 +43,8 @@ def save_tmp_chat(context: AgentContext):
     if context.type == AgentContextType.BACKGROUND:
         return
 
-    path = _get_chat_file_path(context.id)
+    folder_name = _get_folder_name_for_context(context)
+    path = _get_chat_file_path(folder_name)
     files.make_dirs(path)
     data = _serialize_context(context)
     js = _safe_json_serialize(data, ensure_ascii=False)
