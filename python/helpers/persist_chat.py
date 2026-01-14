@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict
 import uuid
 from agent import Agent, AgentConfig, AgentContext, AgentContextType
 from python.helpers import files, history
@@ -8,10 +8,14 @@ import json
 from initialize import initialize_agent
 
 from python.helpers.log import Log, LogItem
+from python.helpers import chat_folder_utils
 
 CHATS_FOLDER = "tmp/chats"
 LOG_SIZE = 1000
 CHAT_FILE_NAME = "chat.json"
+
+# Cache for context_id -> folder_name mapping (in-memory)
+_context_folder_cache: Dict[str, str] = {}
 
 
 def get_chat_folder_path(ctxid: str):
@@ -113,6 +117,67 @@ def remove_msg_files(ctxid):
     """Remove all message files for a chat or task context"""
     path = get_chat_msg_files_folder(ctxid)
     files.delete_dir(path)
+
+
+def _initialize_folder_cache():
+    """Initialize the folder cache by scanning the tmp/chats directory.
+
+    Scans all existing chat folders and populates the cache with context_id -> folder_name mappings.
+    Handles both legacy format (folder name = context_id) and new format (slug-based) folders.
+
+    For new format folders, the context_id must be read from the chat.json file inside the folder.
+    For legacy format folders, the folder name itself is the context_id.
+    """
+    global _context_folder_cache
+    _context_folder_cache.clear()
+
+    # Get all folders in the chats directory
+    try:
+        folders = files.list_files(CHATS_FOLDER, "*")
+    except Exception:
+        # Directory might not exist yet
+        return
+
+    for folder_name in folders:
+        # Parse folder name to determine format
+        is_new_format, legacy_context_id = chat_folder_utils.parse_folder_name(folder_name)
+
+        if is_new_format:
+            # New format: read context_id from chat.json
+            chat_file_path = files.get_abs_path(CHATS_FOLDER, folder_name, CHAT_FILE_NAME)
+            try:
+                js = files.read_file(chat_file_path)
+                data = json.loads(js)
+                context_id = data.get("id")
+                if context_id:
+                    _context_folder_cache[context_id] = folder_name
+            except Exception:
+                # Skip folders without valid chat.json
+                continue
+        else:
+            # Legacy format: folder name IS the context_id
+            _context_folder_cache[legacy_context_id] = folder_name
+
+
+def _update_folder_cache(context_id: str, folder_name: str):
+    """Update the folder cache with a new or changed folder mapping.
+
+    Args:
+        context_id: The context ID to update
+        folder_name: The folder name associated with this context ID
+    """
+    global _context_folder_cache
+    _context_folder_cache[context_id] = folder_name
+
+
+def _remove_from_folder_cache(context_id: str):
+    """Remove a context_id from the folder cache.
+
+    Args:
+        context_id: The context ID to remove from the cache
+    """
+    global _context_folder_cache
+    _context_folder_cache.pop(context_id, None)
 
 
 def _serialize_context(context: AgentContext):
@@ -300,3 +365,7 @@ def _safe_json_serialize(obj, **kwargs):
             return False
 
     return json.dumps(obj, default=serializer, **kwargs)
+
+
+# Initialize the folder cache at module load time
+_initialize_folder_cache()
