@@ -20,6 +20,7 @@ CHAT_FILE_NAME = "chat.json"
 _context_folder_cache: Dict[str, str] = {}
 _cache_lock = threading.RLock()
 _migration_lock = threading.Lock()
+MIGRATION_MARKER = ".migration_slug_complete"
 
 
 def get_chat_folder_path(ctxid: str):
@@ -227,6 +228,11 @@ def _migrate_to_slug_folders() -> int:
         2
     """
     with _migration_lock:
+        # Check for migration marker
+        marker_path = files.get_abs_path(CHATS_FOLDER, MIGRATION_MARKER)
+        if os.path.exists(marker_path):
+            return 0  # Already migrated
+
         migrated_count = 0
 
         try:
@@ -331,6 +337,14 @@ def _migrate_to_slug_folders() -> int:
         except Exception as e:
             # Catch any unexpected errors at the top level
             print(f"Error during migration: {e}")
+
+        # Create marker file after successful migration
+        try:
+            timestamp = datetime.now().isoformat()
+            marker_content = f"Migration completed at {timestamp}\nMigrated {migrated_count} folders\n"
+            files.write_file(marker_path, marker_content)
+        except Exception as e:
+            print(f"Warning: Failed to create migration marker: {e}")
 
         return migrated_count
 
