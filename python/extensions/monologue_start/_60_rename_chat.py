@@ -1,7 +1,8 @@
-from python.helpers import persist_chat, tokens
+from python.helpers import persist_chat, tokens, files
 from python.helpers.extension import Extension
 from agent import LoopData
 import asyncio
+import os
 
 
 class RenameChat(Extension):
@@ -35,5 +36,17 @@ class RenameChat(Extension):
                 # apply to context and save
                 self.agent.context.name = new_name
                 persist_chat.save_tmp_chat(self.agent.context)
+
+                # Rename folder to match new title (if using new slug-based format)
+                try:
+                    old_folder = persist_chat.get_chat_folder_path(self.agent.context.id)
+                    new_folder_name = persist_chat._get_folder_name_for_context(self.agent.context)
+                    new_folder = files.get_abs_path(persist_chat.CHATS_FOLDER, new_folder_name)
+
+                    if old_folder != new_folder and os.path.exists(old_folder):
+                        os.rename(old_folder, new_folder)
+                        persist_chat._update_folder_cache(self.agent.context.id, new_folder_name)
+                except Exception as e:
+                    pass  # Non-critical - folder rename failure doesn't break chat
         except Exception as e:
             pass  # non-critical
