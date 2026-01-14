@@ -62,6 +62,7 @@ def save_tmp_chats():
 def load_tmp_chats():
     """Load all contexts from the chats folder"""
     _convert_v080_chats()
+    _migrate_to_slug_folders()
     folders = files.list_files(CHATS_FOLDER, "*")
     json_files = []
     for folder_name in folders:
