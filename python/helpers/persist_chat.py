@@ -24,7 +24,9 @@ _migration_lock = threading.Lock()
 
 def get_chat_folder_path(ctxid: str):
     """
-    Get the folder path for any context (chat or task).
+    Get the folder path for a chat context by ID.
+
+    Uses cache to resolve folder name, supporting both legacy and new formats.
 
     Args:
         ctxid: The context ID
@@ -32,7 +34,9 @@ def get_chat_folder_path(ctxid: str):
     Returns:
         The absolute path to the context folder
     """
-    return files.get_abs_path(CHATS_FOLDER, ctxid)
+    with _cache_lock:
+        folder_name = _context_folder_cache.get(ctxid, ctxid)  # Fallback to ctxid for backward compat
+    return files.get_abs_path(CHATS_FOLDER, folder_name)
 
 def get_chat_msg_files_folder(ctxid: str):
     return files.get_abs_path(get_chat_folder_path(ctxid), "messages")
