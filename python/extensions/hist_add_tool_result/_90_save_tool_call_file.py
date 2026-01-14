@@ -5,46 +5,64 @@ import os, re
 import datetime
 
 LEN_MIN = 500
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 class SaveToolCallFile(Extension):
     async def execute(self, data: dict[str, Any] | None = None, **kwargs):
-        if not data:
-            return
+        try:  # FIX 1: Wrap entire method in try-except
+            if not data:
+                return
 
-        # get tool call result
-        result = data.get("tool_result") if isinstance(data, dict) else None
-        if result is None:
-            return
+            # get tool call result
+            result = data.get("tool_result") if isinstance(data, dict) else None
+            if result is None:
+                return
 
-        # skip short results
-        if len(str(result)) < LEN_MIN:
-            return
+            result_str = str(result)
 
-        # message files directory
-        msgs_folder = persist_chat.get_chat_msg_files_folder(self.agent.context.id)
-        os.makedirs(msgs_folder, exist_ok=True)
+            # skip short results
+            if len(result_str) < LEN_MIN:
+                return
 
-        # get tool name
-        tool_name = data.get("tool_name", "unknown")
+            # FIX 2: Skip massive results (10MB limit)
+            if len(result_str) > MAX_FILE_SIZE:
+                print(f"Warning: Tool result too large ({len(result_str)} bytes), skipping file save")
+                return
 
-        # extract context from tool result
-        context = self._extract_context(tool_name, result)
+            # message files directory
+            msgs_folder = persist_chat.get_chat_msg_files_folder(self.agent.context.id)
+            os.makedirs(msgs_folder, exist_ok=True)
 
-        # generate timestamp
-        timestamp = self._generate_timestamp()
+            # FIX 3: Verify directory exists
+            if not os.path.exists(msgs_folder):
+                print(f"Error: Failed to create messages folder: {msgs_folder}")
+                return
 
-        # get next sequence number
-        seq = self._get_next_sequence(msgs_folder)
+            # get tool name
+            tool_name = data.get("tool_name", "unknown")
 
-        # create descriptive filename
-        filename = self._create_filename(timestamp, seq, tool_name, context)
-        new_file = files.get_abs_path(msgs_folder, filename)
+            # extract context from tool result
+            context = self._extract_context(tool_name, result)
 
-        # write the file
-        files.write_file(new_file, result)
+            # generate timestamp
+            timestamp = self._generate_timestamp()
 
-        # add the path to the history
-        data["file"] = new_file
+            # get next sequence number
+            seq = self._get_next_sequence(msgs_folder)
+
+            # create descriptive filename
+            filename = self._create_filename(timestamp, seq, tool_name, context)
+            new_file = files.get_abs_path(msgs_folder, filename)
+
+            # write the file
+            files.write_file(new_file, result)
+
+            # add the path to the history
+            data["file"] = new_file
+
+        except Exception as e:
+            # FIX 1: Log but don't crash - this is auxiliary functionality
+            print(f"Error saving tool call file: {e}")
 
     def _generate_timestamp(self) -> str:
         """Generate timestamp in YYYYMMDD_HHMMSS format (UTC).
