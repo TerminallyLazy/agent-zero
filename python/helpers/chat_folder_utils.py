@@ -106,7 +106,7 @@ def create_folder_name(context_id: str, title: str = None, created_at: float = N
     slug = generate_slug(title)
 
     # Extract last 4 characters of context_id for short_id
-    short_id = context_id[-4:] if len(context_id) >= 4 else context_id
+    short_id = context_id[-4:]
 
     # Return formatted folder name
     return f"{timestamp}_{slug}_{short_id}"
