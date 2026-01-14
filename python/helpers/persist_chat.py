@@ -2,6 +2,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict
 import uuid
+import threading
 from agent import Agent, AgentConfig, AgentContext, AgentContextType
 from python.helpers import files, history
 import json
@@ -16,6 +17,7 @@ CHAT_FILE_NAME = "chat.json"
 
 # Cache for context_id -> folder_name mapping (in-memory)
 _context_folder_cache: Dict[str, str] = {}
+_cache_lock = threading.RLock()
 
 
 def get_chat_folder_path(ctxid: str):
@@ -120,7 +122,7 @@ def remove_msg_files(ctxid):
 
 
 def _initialize_folder_cache():
-    """Initialize the folder cache by scanning the tmp/chats directory.
+    """Initialize the folder cache by scanning the tmp/chats directory. Thread-safe.
 
     Scans all existing chat folders and populates the cache with context_id -> folder_name mappings.
     Handles both legacy format (folder name = context_id) and new format (slug-based) folders.
@@ -128,58 +130,59 @@ def _initialize_folder_cache():
     For new format folders, the context_id must be read from the chat.json file inside the folder.
     For legacy format folders, the folder name itself is the context_id.
     """
-    global _context_folder_cache
-    _context_folder_cache.clear()
+    with _cache_lock:
+        global _context_folder_cache
+        _context_folder_cache.clear()
 
-    # Get all folders in the chats directory
-    try:
-        folders = files.list_files(CHATS_FOLDER, "*")
-    except Exception:
-        # Directory might not exist yet
-        return
+        # Get all folders in the chats directory
+        try:
+            folders = files.list_files(CHATS_FOLDER, "*")
+        except Exception:
+            # Directory might not exist yet
+            return
 
-    for folder_name in folders:
-        # Parse folder name to determine format
-        is_new_format, legacy_context_id = chat_folder_utils.parse_folder_name(folder_name)
+        for folder_name in folders:
+            # Parse folder name to determine format
+            is_new_format, legacy_context_id = chat_folder_utils.parse_folder_name(folder_name)
 
-        if is_new_format:
-            # For new format folders, we need to read chat.json to get the full context_id
-            # because the folder name only contains the last 4 chars (short_id).
-            # Example: folder "20240115_142530_database-setup_eeFX" → context_id "eeFXa0TR"
-            chat_file_path = files.get_abs_path(CHATS_FOLDER, folder_name, CHAT_FILE_NAME)
-            try:
-                js = files.read_file(chat_file_path)
-                data = json.loads(js)
-                context_id = data.get("id")
-                if context_id:
-                    _context_folder_cache[context_id] = folder_name
-            except Exception:
-                # Skip folders without valid chat.json
-                continue
-        else:
-            # Legacy format: folder name IS the context_id
-            _context_folder_cache[legacy_context_id] = folder_name
+            if is_new_format:
+                # For new format folders, we need to read chat.json to get the full context_id
+                # because the folder name only contains the last 4 chars (short_id).
+                # Example: folder "20240115_142530_database-setup_eeFX" → context_id "eeFXa0TR"
+                chat_file_path = files.get_abs_path(CHATS_FOLDER, folder_name, CHAT_FILE_NAME)
+                try:
+                    js = files.read_file(chat_file_path)
+                    data = json.loads(js)
+                    context_id = data.get("id")
+                    if context_id:
+                        _context_folder_cache[context_id] = folder_name
+                except Exception:
+                    # Skip folders without valid chat.json
+                    continue
+            else:
+                # Legacy format: folder name IS the context_id
+                _context_folder_cache[legacy_context_id] = folder_name
 
 
 def _update_folder_cache(context_id: str, folder_name: str):
-    """Update the folder cache with a new or changed folder mapping.
+    """Update the folder cache with a new or changed folder mapping. Thread-safe.
 
     Args:
         context_id: The context ID to update
         folder_name: The folder name associated with this context ID
     """
-    global _context_folder_cache
-    _context_folder_cache[context_id] = folder_name
+    with _cache_lock:
+        _context_folder_cache[context_id] = folder_name
 
 
 def _remove_from_folder_cache(context_id: str):
-    """Remove a context_id from the folder cache.
+    """Remove a context_id from the folder cache. Thread-safe.
 
     Args:
         context_id: The context ID to remove from the cache
     """
-    global _context_folder_cache
-    _context_folder_cache.pop(context_id, None)
+    with _cache_lock:
+        _context_folder_cache.pop(context_id, None)
 
 
 def _serialize_context(context: AgentContext):
