@@ -91,15 +91,18 @@ def create_folder_name(context_id: str, title: str = None, created_at: float = N
         >>> create_folder_name("abc123XY", None, 1705334730.0)
         '20240115_142530_chat_23XY'
     """
+    # Validate context_id has at least 4 characters
+    assert len(context_id) >= 4, f"context_id must be at least 4 characters, got: {context_id}"
+
     # Handle None values
     if created_at is None:
-        created_at = datetime.datetime.now().timestamp()
+        created_at = datetime.datetime.now(datetime.timezone.utc).timestamp()
 
     if title is None:
         title = "chat"
 
-    # Generate timestamp in YYYYMMDD_HHMMSS format
-    dt = datetime.datetime.fromtimestamp(created_at)
+    # Generate timestamp in YYYYMMDD_HHMMSS format (UTC)
+    dt = datetime.datetime.fromtimestamp(created_at, tz=datetime.timezone.utc)
     timestamp = dt.strftime("%Y%m%d_%H%M%S")
 
     # Generate slug from title
