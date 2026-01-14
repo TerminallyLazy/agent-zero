@@ -39,14 +39,16 @@ class RenameChat(Extension):
 
                 # Rename folder to match new title (if using new slug-based format)
                 try:
-                    old_folder = persist_chat.get_chat_folder_path(self.agent.context.id)
-                    new_folder_name = persist_chat._get_folder_name_for_context(self.agent.context)
-                    new_folder = files.get_abs_path(persist_chat.CHATS_FOLDER, new_folder_name)
+                    with persist_chat._migration_lock:  # FIX: Add locking
+                        old_folder = persist_chat.get_chat_folder_path(self.agent.context.id)
+                        new_folder_name = persist_chat._get_folder_name_for_context(self.agent.context)
+                        new_folder = files.get_abs_path(persist_chat.CHATS_FOLDER, new_folder_name)
 
-                    if old_folder != new_folder and os.path.exists(old_folder):
-                        os.rename(old_folder, new_folder)
-                        persist_chat._update_folder_cache(self.agent.context.id, new_folder_name)
+                        # FIX: Check destination doesn't exist (prevent data loss)
+                        if old_folder != new_folder and os.path.exists(old_folder) and not os.path.exists(new_folder):
+                            os.rename(old_folder, new_folder)
+                            persist_chat._update_folder_cache(self.agent.context.id, new_folder_name)
                 except Exception as e:
-                    pass  # Non-critical - folder rename failure doesn't break chat
+                    print(f"Warning: Failed to rename chat folder: {e}")  # FIX: Add logging
         except Exception as e:
             pass  # non-critical
