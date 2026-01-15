@@ -155,6 +155,8 @@ class Settings(TypedDict):
     visual_doc_pdf_dpi: int
     visual_doc_max_pages: int
     visual_doc_max_file_size_mb: int
+    visual_doc_execution_mode: Literal["in_process", "subprocess", "docker_sidecar"]
+    visual_doc_keep_model_loaded: bool  # Keep subprocess alive between requests
 
 class PartialSettings(Settings, total=False):
     pass
@@ -543,6 +545,8 @@ def get_default_settings() -> Settings:
         visual_doc_pdf_dpi=get_default_value("visual_doc_pdf_dpi", 144),
         visual_doc_max_pages=get_default_value("visual_doc_max_pages", 50),
         visual_doc_max_file_size_mb=get_default_value("visual_doc_max_file_size_mb", 50),
+        visual_doc_execution_mode=get_default_value("visual_doc_execution_mode", "in_process"),
+        visual_doc_keep_model_loaded=get_default_value("visual_doc_keep_model_loaded", True),
     )
 
 

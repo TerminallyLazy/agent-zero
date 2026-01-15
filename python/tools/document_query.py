@@ -15,9 +15,6 @@ class DocumentQueryTool(Tool):
         elif isinstance(document_uri, str):
             document_uris = [document_uri]
 
-        if not document_uris:
-            return Response(message="Error: no document provided", break_loop=False)
-
         queries = (
             kwargs["queries"]
             if "queries" in kwargs
@@ -30,6 +27,68 @@ class DocumentQueryTool(Tool):
         mode = kwargs.get("mode", "text")
         if mode not in ("text", "visual", "auto"):
             mode = "text"
+
+        # Get method parameter for management operations
+        method = kwargs.get("method", "query")
+        if method not in ("query", "list", "delete", "reindex"):
+            method = "query"
+
+        # For query operations, document is required
+        if not document_uris and method == "query":
+            return Response(message="Error: no document provided", break_loop=False)
+
+        # Handle management operations (visual mode only)
+        if method != "query":
+            if mode == "text":
+                return Response(
+                    message="Error: Management methods (list/delete/reindex) only work with mode='visual'",
+                    break_loop=False
+                )
+
+            # delete and reindex require documents
+            if method in ("delete", "reindex") and not document_uris:
+                return Response(message=f"Error: document required for {method}", break_loop=False)
+
+            try:
+                from python.helpers.visual_document_query import VisualDocumentQueryHelper
+
+                progress = []
+                def progress_callback(msg):
+                    progress.append(msg)
+                    self.log.update(progress="\n".join(progress))
+
+                visual_helper = VisualDocumentQueryHelper(self.agent, progress_callback)
+
+                if method == "list":
+                    scope = kwargs.get("scope")  # Optional: "project", "global", or None
+                    result = visual_helper.list_indexed_documents(scope)
+                    return Response(message=result, break_loop=False)
+
+                elif method == "delete":
+                    results = []
+                    for uri in document_uris:
+                        result = await visual_helper.delete_indexed_document(uri)
+                        results.append(result)
+                    return Response(message="\n".join(results), break_loop=False)
+
+                elif method == "reindex":
+                    scope = kwargs.get("scope")
+                    results = []
+                    for uri in document_uris:
+                        result = await visual_helper.reindex_indexed_document(uri, scope)
+                        results.append(result)
+                    return Response(message="\n".join(results), break_loop=False)
+
+            except ImportError:
+                return Response(
+                    message="Error: Visual mode requires litepali. Install with: pip install litepali",
+                    break_loop=False
+                )
+            except RuntimeError as e:
+                return Response(
+                    message=f"Error: {e}",
+                    break_loop=False
+                )
 
         try:
             progress = []

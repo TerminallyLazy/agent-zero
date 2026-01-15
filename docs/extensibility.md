@@ -294,6 +294,58 @@ Projects are the recommended way to create specialized workflows in Agent Zero w
 - Keep passwords and other secrets scoped to a single workspace
 - Run multiple independent flows side by side under the same Agent Zero installation
 
+## Visual Document Query
+
+Agent Zero includes visual document query capabilities for layout-aware document retrieval using the LitePali vision-language model.
+
+### Overview
+
+Visual document query enables searching documents by visual understanding rather than just text extraction. This is particularly useful for:
+- Documents with complex layouts (tables, charts, figures)
+- Scanned documents where OCR may be imperfect
+- Forms and invoices with structured visual information
+- Scientific papers with figures and equations
+
+### Execution Modes
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `in_process` | LitePali runs in main process | Simple setups, development |
+| `subprocess` | Isolated Python subprocess | Memory isolation, stability |
+| `docker_sidecar` | Dedicated Docker container | Containerized deployments |
+
+Configure via `visual_doc_execution_mode` setting. Fallback chain: docker_sidecar → subprocess → in_process.
+
+### Storage
+
+Visual document indexes are stored in two scopes:
+- **Project scope**: `.a0proj/visual_docs/` - Document indexes specific to current project
+- **Global scope**: `usr/visual_docs/` - Shared indexes across projects
+
+### Configuration
+
+Key settings (in Settings UI under Agent → Visual Document Query):
+- `visual_doc_enabled`: Enable/disable the feature
+- `visual_doc_model_name`: LitePali model to use
+- `visual_doc_execution_mode`: How to run the model
+- `visual_doc_batch_size`: Images per batch (affects memory)
+- `visual_doc_pdf_dpi`: PDF conversion resolution
+- `visual_doc_max_pages`: Page limit per document
+- `visual_doc_max_file_size_mb`: File size limit
+
+### Usage
+
+Use the `document_query` tool with `mode` parameter:
+- `mode: "text"` - Traditional text extraction (default)
+- `mode: "visual"` - Visual understanding with LitePali
+- `mode: "auto"` - Both text and visual results
+
+### Resource Requirements
+
+- **Memory**: ~2-3GB for model loading (in_process mode)
+- **Storage**: ~10-50MB per indexed document (images + embeddings)
+- **GPU**: Optional but recommended (CUDA, MPS supported)
+
 ## Best Practices
 - Keep extensions focused on a single responsibility
 - Use the appropriate extension point for your functionality

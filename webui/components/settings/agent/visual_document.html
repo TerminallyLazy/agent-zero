@@ -1,0 +1,130 @@
+<html>
+  <head>
+    <title>Visual Document Query</title>
+  </head>
+
+  <body>
+    <div x-data>
+      <template x-if="$store.settingsStore.settings">
+        <div>
+          <div class="section-title">Visual Document Query</div>
+          <div class="section-description">
+            Configuration for visual document search using ColPali/ColQwen vision-language models. Enables semantic search across PDFs and images.
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Enable Visual Document Query</div>
+              <div class="field-description">
+                Enable visual document search capabilities using vision-language models.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settingsStore.settings.visual_doc_enabled" />
+                <span class="toggler"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Execution Mode</div>
+              <div class="field-description">
+                Choose how the visual document model runs. In-process is simplest but uses main process memory. Subprocess isolates memory. Docker sidecar provides full isolation.
+              </div>
+            </div>
+            <div class="field-control">
+              <select x-model="$store.settingsStore.settings.visual_doc_execution_mode">
+                <option value="in_process">In Process</option>
+                <option value="subprocess">Subprocess</option>
+                <option value="docker_sidecar">Docker Sidecar</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Model Name</div>
+              <div class="field-description">
+                Select the vision-language model to use for document embedding.
+              </div>
+            </div>
+            <div class="field-control">
+              <select x-model="$store.settingsStore.settings.visual_doc_model_name">
+                <option value="vidore/colqwen2-v1.0">ColQwen2 v1.0 (Recommended)</option>
+                <option value="vidore/colpali-v1.2">ColPali v1.2</option>
+                <option value="vidore/colpali-v1.3">ColPali v1.3</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Batch Size</div>
+              <div class="field-description">
+                Number of images to process in a single batch. Higher values use more memory but are faster.
+              </div>
+            </div>
+            <div class="field-control">
+              <input type="range" min="1" max="64" step="1" x-model.number="$store.settingsStore.settings.visual_doc_batch_size" />
+              <span class="range-value" x-text="$store.settingsStore.settings.visual_doc_batch_size"></span>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">PDF DPI</div>
+              <div class="field-description">
+                Resolution for rendering PDF pages to images. Higher values produce better quality but larger files.
+              </div>
+            </div>
+            <div class="field-control">
+              <input type="range" min="72" max="300" step="1" x-model.number="$store.settingsStore.settings.visual_doc_pdf_dpi" />
+              <span class="range-value" x-text="$store.settingsStore.settings.visual_doc_pdf_dpi"></span>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Max Pages per Document</div>
+              <div class="field-description">
+                Maximum number of pages to process from a single document.
+              </div>
+            </div>
+            <div class="field-control">
+              <input type="number" min="1" max="500" x-model.number="$store.settingsStore.settings.visual_doc_max_pages" />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Max File Size (MB)</div>
+              <div class="field-description">
+                Maximum file size allowed for processing in megabytes.
+              </div>
+            </div>
+            <div class="field-control">
+              <input type="number" min="1" max="200" x-model.number="$store.settingsStore.settings.visual_doc_max_file_size_mb" />
+            </div>
+          </div>
+
+          <div class="field" x-show="$store.settingsStore.settings.visual_doc_execution_mode === 'in_process'">
+            <div class="field-label">
+              <div class="field-title">Keep Model Loaded</div>
+              <div class="field-description">
+                Keep the model loaded in memory between queries. Faster responses but uses more memory.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settingsStore.settings.visual_doc_keep_model_loaded" />
+                <span class="toggler"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </body>
+</html>
