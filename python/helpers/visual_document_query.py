@@ -111,3 +111,44 @@ class VisualDocumentStore:
             normalized = normalized.replace("http://", "https://")
 
         return normalized
+
+    def convert_pdf_to_images(
+        self,
+        pdf_path: str,
+        output_dir: Path,
+        dpi: int = 144
+    ) -> List[Path]:
+        """
+        Convert PDF to images.
+
+        Args:
+            pdf_path: Path to PDF file
+            output_dir: Directory to save images
+            dpi: Resolution for conversion
+
+        Returns:
+            List of paths to generated images
+        """
+        import pdf2image
+
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Get max pages from settings
+        settings = self.agent.config if hasattr(self.agent, 'config') else {}
+        max_pages = getattr(settings, 'visual_doc_max_pages', None) or 50
+
+        # Convert PDF to images
+        images = pdf2image.convert_from_path(
+            pdf_path,
+            dpi=dpi,
+            first_page=1,
+            last_page=max_pages
+        )
+
+        image_paths = []
+        for i, image in enumerate(images):
+            image_path = output_dir / f"page_{i+1:03d}.png"
+            image.save(image_path, "PNG")
+            image_paths.append(image_path)
+
+        return image_paths
