@@ -57,19 +57,32 @@ class VisualDocumentService:
             return True  # Already running
 
         try:
-            # Find the worker script
-            worker_module = "python.helpers.visual_document_worker"
+            # Find the worker script using absolute path
+            worker_script = Path(__file__).parent / "visual_document_worker.py"
+
+            if not worker_script.exists():
+                PrintStyle.error(f"Worker script not found: {worker_script}")
+                return False
 
             PrintStyle.standard(f"Starting visual document worker subprocess...")
 
+            # Get project root for proper imports
+            project_root = Path(__file__).parent.parent.parent
+
+            # Set up environment with proper PYTHONPATH
+            env = os.environ.copy()
+            pythonpath = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{project_root}:{pythonpath}" if pythonpath else str(project_root)
+
             self.process = subprocess.Popen(
-                [sys.executable, "-m", worker_module],
+                [sys.executable, str(worker_script)],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,  # Line buffered
-                cwd=os.getcwd()
+                cwd=str(project_root),
+                env=env
             )
 
             self._started = True
