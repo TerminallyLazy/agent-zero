@@ -627,36 +627,39 @@ class VisualDocumentStore:
                 images_dir = index_dir / "images"
 
                 dpi = settings.get('visual_doc_pdf_dpi', 144)
+                PrintStyle.standard(f"Converting PDF to images (DPI={dpi})...")
 
                 image_paths = await self.convert_pdf_to_images(pdf_path, images_dir, dpi)
+                PrintStyle.standard(f"Converted {len(image_paths)} pages")
 
-                # Update progress during image save (already done in convert_pdf_to_images)
-                for i in range(len(image_paths)):
-                    tracker.update(f"Page {i+1}/{len(image_paths)}", int((i+1)/len(image_paths)*100))
-
-                # Stage 4: Add images to LitePali
+                # Stage 4: Add images to LitePali with timeout
                 tracker.start_stage("Processing through vision model", 4, 5)
-                for i, img_path in enumerate(image_paths):
-                    self.litepali.add(ImageFile(
-                        path=str(img_path),
-                        document_id=doc_hash,
-                        page_id=str(i + 1),
-                        metadata={"uri": uri_normalized, "page": i + 1}
-                    ))
-                    tracker.update(f"Page {i+1}/{len(image_paths)}", int((i+1)/len(image_paths)*100))
-
-                # Process embeddings with timeout protection
                 batch_size = settings.get('visual_doc_batch_size', 4)
-                # Default 10 minutes for model processing (can be slow on CPU)
+                # Timeout for the entire add+process operation
                 processing_timeout = settings.get('visual_doc_processing_timeout', 600)
 
-                def run_model_processing():
+                def run_image_processing():
+                    """Run all image processing in executor with logging."""
+                    # Add images to LitePali
+                    for i, img_path in enumerate(image_paths):
+                        PrintStyle.standard(f"Adding page {i+1}/{len(image_paths)} to model...")
+                        self.litepali.add(ImageFile(
+                            path=str(img_path),
+                            document_id=doc_hash,
+                            page_id=str(i + 1),
+                            metadata={"uri": uri_normalized, "page": i + 1}
+                        ))
+
+                    # Process embeddings
+                    PrintStyle.standard(f"Computing embeddings (batch_size={batch_size})... This may take several minutes on CPU.")
                     self.litepali.process(batch_size=batch_size)
+                    PrintStyle.standard("Embedding computation complete")
 
                 loop = asyncio.get_event_loop()
                 try:
+                    PrintStyle.standard(f"Starting model processing (timeout={processing_timeout}s)...")
                     await asyncio.wait_for(
-                        loop.run_in_executor(None, run_model_processing),
+                        loop.run_in_executor(None, run_image_processing),
                         timeout=processing_timeout
                     )
                 except asyncio.TimeoutError:

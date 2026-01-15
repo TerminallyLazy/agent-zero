@@ -545,7 +545,7 @@ def get_default_settings() -> Settings:
         visual_doc_model_name=get_default_value("visual_doc_model_name", "vidore/colpali-v1.2"),
         visual_doc_batch_size=get_default_value("visual_doc_batch_size", 4),
         visual_doc_pdf_dpi=get_default_value("visual_doc_pdf_dpi", 144),
-        visual_doc_max_pages=get_default_value("visual_doc_max_pages", 50),
+        visual_doc_max_pages=get_default_value("visual_doc_max_pages", 10),
         visual_doc_max_file_size_mb=get_default_value("visual_doc_max_file_size_mb", 50),
         visual_doc_conversion_timeout=get_default_value("visual_doc_conversion_timeout", 300),
         visual_doc_processing_timeout=get_default_value("visual_doc_processing_timeout", 600),
