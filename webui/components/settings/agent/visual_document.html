@@ -111,6 +111,18 @@
 
           <div class="field">
             <div class="field-label">
+              <div class="field-title">Processing Timeout (seconds)</div>
+              <div class="field-description">
+                Maximum time allowed for model processing. CPU processing is slow - increase for large documents or use GPU.
+              </div>
+            </div>
+            <div class="field-control">
+              <input type="number" min="60" max="3600" x-model.number="$store.settingsStore.settings.visual_doc_processing_timeout" />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
               <div class="field-title">Max File Size (MB)</div>
               <div class="field-description">
                 Maximum file size allowed for processing in megabytes.

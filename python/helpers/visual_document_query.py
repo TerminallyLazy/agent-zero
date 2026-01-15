@@ -645,9 +645,26 @@ class VisualDocumentStore:
                     ))
                     tracker.update(f"Page {i+1}/{len(image_paths)}", int((i+1)/len(image_paths)*100))
 
-                # Process embeddings
+                # Process embeddings with timeout protection
                 batch_size = settings.get('visual_doc_batch_size', 4)
-                self.litepali.process(batch_size=batch_size)
+                # Default 10 minutes for model processing (can be slow on CPU)
+                processing_timeout = settings.get('visual_doc_processing_timeout', 600)
+
+                def run_model_processing():
+                    self.litepali.process(batch_size=batch_size)
+
+                loop = asyncio.get_event_loop()
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(None, run_model_processing),
+                        timeout=processing_timeout
+                    )
+                except asyncio.TimeoutError:
+                    raise DocumentProcessingError(
+                        f"Model processing timed out after {processing_timeout} seconds. "
+                        "Try reducing visual_doc_max_pages, increasing visual_doc_processing_timeout, "
+                        "or using a GPU for faster processing."
+                    )
 
                 # Stage 5: Save metadata and register
                 tracker.start_stage("Saving index", 5, 5)
