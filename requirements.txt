@@ -48,3 +48,6 @@ beautifulsoup4>=4.12.3
 boto3>=1.35.0
 exchangelib>=5.4.3
 pywinpty==3.0.2; sys_platform == "win32"
+litepali>=0.0.5
+colpali-engine>=0.3.0,<0.4.0
+safetensors>=0.4.0
