@@ -298,3 +298,95 @@ class VisualDocumentStore:
                 break
 
         return matches
+
+
+class VisualDocumentQueryHelper:
+    """
+    Main interface for visual document query tool.
+    Handles document processing and visual Q&A.
+    """
+
+    def __init__(
+        self,
+        agent,
+        progress_callback: Optional[Callable[[str], None]] = None
+    ):
+        self.agent = agent
+        self.store = VisualDocumentStore(agent, scope="project")
+        self.progress_callback = progress_callback or (lambda x: None)
+
+    async def visual_document_qa(
+        self,
+        document_uris: List[str],
+        queries: List[str]
+    ) -> tuple[bool, str]:
+        """
+        Perform visual Q&A on documents.
+
+        Args:
+            document_uris: List of document URIs to query
+            queries: List of questions to answer
+
+        Returns:
+            Tuple of (success, result_text)
+        """
+        self.progress_callback(f"Starting visual analysis for {len(document_uris)} documents")
+
+        # Handle intervention if agent supports it
+        if hasattr(self.agent, 'handle_intervention'):
+            await self.agent.handle_intervention()
+
+        # Index all documents
+        for uri in document_uris:
+            await self.store.index_document(uri, self.progress_callback)
+            if hasattr(self.agent, 'handle_intervention'):
+                await self.agent.handle_intervention()
+
+        # Search for each query
+        all_results = []
+        for query in queries:
+            self.progress_callback(f"Searching: {query}")
+            matches = await self.store.search(query, document_uris, limit=5)
+
+            if matches:
+                result_lines = [f"\n### Query: {query}\n"]
+                for match in matches:
+                    result_lines.append(
+                        f"**Page {match.page_number}** (score: {match.score:.2f}) - {match.document_uri}"
+                    )
+                all_results.append("\n".join(result_lines))
+
+            if hasattr(self.agent, 'handle_intervention'):
+                await self.agent.handle_intervention()
+
+        if not all_results:
+            return False, "No visual matches found in the documents."
+
+        self.progress_callback("Visual analysis complete")
+        return True, "\n".join(all_results)
+
+    async def get_visual_summary(self, document_uri: str) -> str:
+        """
+        Get visual summary of a document (page count, indexed status).
+
+        Args:
+            document_uri: Document URI
+
+        Returns:
+            Summary text
+        """
+        await self.store.index_document(document_uri, self.progress_callback)
+
+        uri_normalized = self.store.normalize_uri(document_uri)
+        doc_hash = self.store.get_document_hash(uri_normalized)
+        index_dir = self.store.storage_path / "indexes" / doc_hash
+
+        import json
+        metadata_path = index_dir / "metadata.json"
+
+        if metadata_path.exists():
+            with open(metadata_path) as f:
+                metadata = json.load(f)
+            return f"Document indexed: {metadata['page_count']} pages, indexed at {metadata['indexed_at']}"
+
+        return "Document not indexed"
