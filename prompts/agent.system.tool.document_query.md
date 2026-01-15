@@ -60,3 +60,38 @@ usage:
     }
 }
 ~~~
+
+4 visual document analysis
+use mode "visual" for documents with complex layouts charts tables
+~~~json
+{
+    "thoughts": [
+        "This PDF has charts and tables, visual mode will help..."
+    ],
+    "headline": "Analyzing document visually",
+    "tool_name": "document_query",
+    "tool_args": {
+        "document": "file:///path/to/report.pdf",
+        "queries": ["What does the revenue chart show?"],
+        "mode": "visual"
+    }
+}
+~~~
+
+5 auto mode (both text and visual analysis)
+use mode "auto" when unsure which approach works best
+returns both text and visual results in separate sections
+~~~json
+{
+    "thoughts": [
+        "Not sure if text or visual will work better for this document..."
+    ],
+    "headline": "Analyzing document with text and visual",
+    "tool_name": "document_query",
+    "tool_args": {
+        "document": "https://example.com/paper.pdf",
+        "queries": ["Summarize the methodology section"],
+        "mode": "auto"
+    }
+}
+~~~
