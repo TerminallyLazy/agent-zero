@@ -9,6 +9,9 @@
 .cursor/
 .windsurf/
 
+# Git worktrees
+.worktrees/
+
 # ignore test files in root dir
 /*.test.py
 
