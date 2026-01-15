@@ -148,6 +148,14 @@ class Settings(TypedDict):
 
     update_check_enabled: bool
 
+    # Visual document query settings
+    visual_doc_enabled: bool
+    visual_doc_model_name: str
+    visual_doc_batch_size: int
+    visual_doc_pdf_dpi: int
+    visual_doc_max_pages: int
+    visual_doc_max_file_size_mb: int
+
 class PartialSettings(Settings, total=False):
     pass
 
@@ -529,6 +537,12 @@ def get_default_settings() -> Settings:
         secrets="",
         litellm_global_kwargs=get_default_value("litellm_global_kwargs", {}),
         update_check_enabled=get_default_value("update_check_enabled", True),
+        visual_doc_enabled=get_default_value("visual_doc_enabled", True),
+        visual_doc_model_name=get_default_value("visual_doc_model_name", "vidore/colpali-v1.2"),
+        visual_doc_batch_size=get_default_value("visual_doc_batch_size", 4),
+        visual_doc_pdf_dpi=get_default_value("visual_doc_pdf_dpi", 144),
+        visual_doc_max_pages=get_default_value("visual_doc_max_pages", 50),
+        visual_doc_max_file_size_mb=get_default_value("visual_doc_max_file_size_mb", 50),
     )
 
 
