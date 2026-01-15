@@ -152,3 +152,101 @@ class VisualDocumentStore:
             image_paths.append(image_path)
 
         return image_paths
+
+    async def index_document(
+        self,
+        document_uri: str,
+        progress_callback: Optional[Callable[[str], None]] = None
+    ) -> bool:
+        """
+        Index a document for visual search.
+
+        Args:
+            document_uri: URI of document (file:// or https://)
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            True if successful
+        """
+        from litepali import ImageFile
+
+        callback = progress_callback or (lambda x: None)
+        uri_normalized = self.normalize_uri(document_uri)
+        doc_hash = self.get_document_hash(uri_normalized)
+
+        # Check if already indexed
+        index_dir = self.storage_path / "indexes" / doc_hash
+        if (index_dir / "metadata.json").exists():
+            callback(f"Document already indexed: {document_uri}")
+            return True
+
+        callback(f"Indexing document: {document_uri}")
+
+        # Download/copy document to temp location
+        parsed = urlparse(uri_normalized)
+        scheme = parsed.scheme or "file"
+
+        import tempfile
+        temp_pdf = None
+
+        try:
+            if scheme == "file":
+                pdf_path = parsed.path
+            elif scheme in ["http", "https"]:
+                import requests
+                callback("Downloading document...")
+                response = requests.get(document_uri, timeout=30)
+                response.raise_for_status()
+                temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                temp_pdf.write(response.content)
+                temp_pdf.close()
+                pdf_path = temp_pdf.name
+            else:
+                raise ValueError(f"Unsupported URI scheme: {scheme}")
+
+            # Convert PDF to images
+            callback("Converting PDF to images...")
+            images_dir = index_dir / "images"
+
+            settings = self.agent.config if hasattr(self.agent, 'config') else {}
+            dpi = getattr(settings, 'visual_doc_pdf_dpi', None) or 144
+
+            image_paths = self.convert_pdf_to_images(pdf_path, images_dir, dpi)
+            callback(f"Converted {len(image_paths)} pages")
+
+            # Add images to LitePali
+            callback("Processing images through vision model...")
+            for i, img_path in enumerate(image_paths):
+                self.litepali.add(ImageFile(
+                    path=str(img_path),
+                    document_id=doc_hash,
+                    page_id=str(i + 1),
+                    metadata={"uri": uri_normalized, "page": i + 1}
+                ))
+
+            # Process embeddings
+            batch_size = getattr(settings, 'visual_doc_batch_size', None) or 4
+            self.litepali.process(batch_size=batch_size)
+
+            # Save metadata
+            import json
+            from datetime import datetime
+
+            metadata = {
+                "uri": uri_normalized,
+                "hash": doc_hash,
+                "page_count": len(image_paths),
+                "indexed_at": datetime.now().isoformat(),
+                "scope": self.scope
+            }
+
+            os.makedirs(index_dir, exist_ok=True)
+            with open(index_dir / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
+
+            callback(f"Indexed {len(image_paths)} pages successfully")
+            return True
+
+        finally:
+            if temp_pdf and os.path.exists(temp_pdf.name):
+                os.unlink(temp_pdf.name)
