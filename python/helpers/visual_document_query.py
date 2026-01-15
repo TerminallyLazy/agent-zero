@@ -61,6 +61,35 @@ class VisualDocumentStore:
         os.makedirs(base, exist_ok=True)
         return Path(base)
 
+    @property
+    def litepali(self):
+        """Lazy-load LitePali model."""
+        if self._litepali is None:
+            self._initialize_litepali()
+        return self._litepali
+
+    def _initialize_litepali(self):
+        """Initialize LitePali with settings from agent config."""
+        try:
+            from litepali import LitePali
+        except ImportError as e:
+            raise ImportError(
+                "LitePali not installed. Run: pip install litepali colpali-engine"
+            ) from e
+
+        # Get settings
+        settings = self.agent.config if hasattr(self.agent, 'config') else {}
+        model_name = getattr(settings, 'visual_doc_model_name', None) or "vidore/colpali-v1.2"
+
+        PrintStyle.standard(f"Loading LitePali model: {model_name}")
+
+        # Detect device
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+
+        self._litepali = LitePali(model_name=model_name, device=device)
+        PrintStyle.standard(f"LitePali loaded on {device}")
+
     @staticmethod
     def get_document_hash(uri: str) -> str:
         """Generate consistent hash for document URI."""
