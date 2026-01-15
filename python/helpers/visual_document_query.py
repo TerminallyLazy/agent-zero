@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from python.helpers.print_style import PrintStyle
 from python.helpers import files
+from python.helpers.settings import get_settings
 
 
 @dataclass
@@ -77,9 +78,9 @@ class VisualDocumentStore:
                 "LitePali not installed. Run: pip install litepali colpali-engine"
             ) from e
 
-        # Get settings
-        settings = self.agent.config if hasattr(self.agent, 'config') else {}
-        model_name = getattr(settings, 'visual_doc_model_name', None) or "vidore/colpali-v1.2"
+        # Get settings from centralized settings system
+        settings = get_settings()
+        model_name = settings.get('visual_doc_model_name', "vidore/colpali-v1.2")
 
         PrintStyle.standard(f"Loading LitePali model: {model_name}")
 
@@ -134,8 +135,8 @@ class VisualDocumentStore:
         os.makedirs(output_dir, exist_ok=True)
 
         # Get max pages from settings
-        settings = self.agent.config if hasattr(self.agent, 'config') else {}
-        max_pages = getattr(settings, 'visual_doc_max_pages', None) or 50
+        settings = get_settings()
+        max_pages = settings.get('visual_doc_max_pages', 50)
 
         # Convert PDF to images
         images = pdf2image.convert_from_path(
@@ -204,12 +205,21 @@ class VisualDocumentStore:
             else:
                 raise ValueError(f"Unsupported URI scheme: {scheme}")
 
+            # Validate file size
+            settings = get_settings()
+            max_size_mb = settings.get('visual_doc_max_file_size_mb', 50)
+            file_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
+            if file_size_mb > max_size_mb:
+                raise ValueError(
+                    f"File size ({file_size_mb:.1f}MB) exceeds maximum allowed "
+                    f"({max_size_mb}MB). Adjust visual_doc_max_file_size_mb in settings."
+                )
+
             # Convert PDF to images
             callback("Converting PDF to images...")
             images_dir = index_dir / "images"
 
-            settings = self.agent.config if hasattr(self.agent, 'config') else {}
-            dpi = getattr(settings, 'visual_doc_pdf_dpi', None) or 144
+            dpi = settings.get('visual_doc_pdf_dpi', 144)
 
             image_paths = self.convert_pdf_to_images(pdf_path, images_dir, dpi)
             callback(f"Converted {len(image_paths)} pages")
@@ -225,7 +235,7 @@ class VisualDocumentStore:
                 ))
 
             # Process embeddings
-            batch_size = getattr(settings, 'visual_doc_batch_size', None) or 4
+            batch_size = settings.get('visual_doc_batch_size', 4)
             self.litepali.process(batch_size=batch_size)
 
             # Save metadata
@@ -306,11 +316,22 @@ class VisualDocumentQueryHelper:
     Handles document processing and visual Q&A.
     """
 
+    @staticmethod
+    def is_enabled() -> bool:
+        """Check if visual document query is enabled in settings."""
+        settings = get_settings()
+        return settings.get('visual_doc_enabled', True)
+
     def __init__(
         self,
         agent,
         progress_callback: Optional[Callable[[str], None]] = None
     ):
+        if not self.is_enabled():
+            raise RuntimeError(
+                "Visual document query is disabled. "
+                "Set visual_doc_enabled=true in settings to enable."
+            )
         self.agent = agent
         self.store = VisualDocumentStore(agent, scope="project")
         self.progress_callback = progress_callback or (lambda x: None)
@@ -332,15 +353,13 @@ class VisualDocumentQueryHelper:
         """
         self.progress_callback(f"Starting visual analysis for {len(document_uris)} documents")
 
-        # Handle intervention if agent supports it
-        if hasattr(self.agent, 'handle_intervention'):
-            await self.agent.handle_intervention()
+        # Handle intervention (pause/resume)
+        await self.agent.handle_intervention()
 
         # Index all documents
         for uri in document_uris:
             await self.store.index_document(uri, self.progress_callback)
-            if hasattr(self.agent, 'handle_intervention'):
-                await self.agent.handle_intervention()
+            await self.agent.handle_intervention()
 
         # Search for each query
         all_results = []
@@ -356,8 +375,7 @@ class VisualDocumentQueryHelper:
                     )
                 all_results.append("\n".join(result_lines))
 
-            if hasattr(self.agent, 'handle_intervention'):
-                await self.agent.handle_intervention()
+            await self.agent.handle_intervention()
 
         if not all_results:
             return False, "No visual matches found in the documents."
