@@ -250,3 +250,51 @@ class VisualDocumentStore:
         finally:
             if temp_pdf and os.path.exists(temp_pdf.name):
                 os.unlink(temp_pdf.name)
+
+    async def search(
+        self,
+        query: str,
+        document_uris: Optional[List[str]] = None,
+        limit: int = 5
+    ) -> List[VisualMatch]:
+        """
+        Search indexed documents visually.
+
+        Args:
+            query: Search query
+            document_uris: Optional list of URIs to search within
+            limit: Maximum results to return
+
+        Returns:
+            List of VisualMatch results
+        """
+        # Filter by document URIs if specified
+        doc_hashes = None
+        if document_uris:
+            doc_hashes = [
+                self.get_document_hash(self.normalize_uri(uri))
+                for uri in document_uris
+            ]
+
+        # Search using LitePali
+        results = self.litepali.search(query, k=limit * 2)  # Get extra for filtering
+
+        matches = []
+        for result in results:
+            # Filter by document if specified
+            if doc_hashes and result.document_id not in doc_hashes:
+                continue
+
+            match = VisualMatch(
+                document_uri=result.metadata.get("uri", ""),
+                page_number=int(result.metadata.get("page", 0)),
+                score=result.score,
+                image_path=Path(result.path),
+                snippet=""  # Could add OCR here later
+            )
+            matches.append(match)
+
+            if len(matches) >= limit:
+                break
+
+        return matches
