@@ -12,6 +12,7 @@ Endpoints:
     POST /shutdown - Gracefully shutdown the server
 """
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -42,6 +43,7 @@ class IndexSettings(BaseModel):
     pdf_dpi: int = Field(default=144, ge=72, le=300, description="DPI for PDF rendering")
     max_pages: int = Field(default=50, ge=1, le=500, description="Maximum pages to index")
     batch_size: int = Field(default=4, ge=1, le=32, description="Batch size for processing")
+    conversion_timeout: int = Field(default=300, ge=30, le=1800, description="PDF conversion timeout in seconds")
 
 
 class IndexRequest(BaseModel):
@@ -235,23 +237,38 @@ async def index_document(request: IndexRequest):
         if not os.path.exists(pdf_path):
             raise HTTPException(status_code=400, detail=f"PDF not found: {pdf_path}")
 
-        # Convert PDF to images
+        # Convert PDF to images with timeout protection
         logger.info(f"Converting PDF to images: {pdf_path}")
         images_dir = output_dir / "images"
         os.makedirs(images_dir, exist_ok=True)
 
-        images = pdf2image.convert_from_path(
-            pdf_path,
-            dpi=settings.pdf_dpi,
-            first_page=1,
-            last_page=settings.max_pages
-        )
+        def convert_pdf_sync():
+            """Synchronous PDF conversion (runs in executor)."""
+            imgs = pdf2image.convert_from_path(
+                pdf_path,
+                dpi=settings.pdf_dpi,
+                first_page=1,
+                last_page=settings.max_pages
+            )
+            paths = []
+            for i, img in enumerate(imgs):
+                img_path = images_dir / f"page_{i+1:03d}.png"
+                img.save(img_path, "PNG")
+                paths.append(str(img_path))
+            return paths
 
-        image_paths = []
-        for i, image in enumerate(images):
-            image_path = images_dir / f"page_{i+1:03d}.png"
-            image.save(image_path, "PNG")
-            image_paths.append(str(image_path))
+        loop = asyncio.get_event_loop()
+        try:
+            image_paths = await asyncio.wait_for(
+                loop.run_in_executor(None, convert_pdf_sync),
+                timeout=settings.conversion_timeout
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail=f"PDF conversion timed out after {settings.conversion_timeout} seconds. "
+                       "Try reducing max_pages or increasing conversion_timeout."
+            )
 
         logger.info(f"Converted {len(image_paths)} pages")
 

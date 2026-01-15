@@ -414,19 +414,21 @@ class VisualDocumentStore:
 
         return normalized
 
-    def convert_pdf_to_images(
+    def _convert_pdf_to_images_sync(
         self,
         pdf_path: str,
         output_dir: Path,
-        dpi: int = 144
+        dpi: int,
+        max_pages: int
     ) -> List[Path]:
         """
-        Convert PDF to images.
+        Synchronous PDF to images conversion (runs in executor).
 
         Args:
             pdf_path: Path to PDF file
             output_dir: Directory to save images
             dpi: Resolution for conversion
+            max_pages: Maximum pages to convert
 
         Returns:
             List of paths to generated images
@@ -435,23 +437,13 @@ class VisualDocumentStore:
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # Get max pages from settings
-        settings = get_settings()
-        max_pages = settings.get('visual_doc_max_pages', 50)
-
         # Convert PDF to images
-        try:
-            images = pdf2image.convert_from_path(
-                pdf_path,
-                dpi=dpi,
-                first_page=1,
-                last_page=max_pages
-            )
-        except Exception as e:
-            raise DocumentProcessingError(
-                f"Failed to convert PDF to images: {e}. "
-                "Ensure poppler-utils is installed (apt-get install poppler-utils)."
-            ) from e
+        images = pdf2image.convert_from_path(
+            pdf_path,
+            dpi=dpi,
+            first_page=1,
+            last_page=max_pages
+        )
 
         image_paths = []
         for i, image in enumerate(images):
@@ -460,6 +452,60 @@ class VisualDocumentStore:
             image_paths.append(image_path)
 
         return image_paths
+
+    async def convert_pdf_to_images(
+        self,
+        pdf_path: str,
+        output_dir: Path,
+        dpi: int = 144
+    ) -> List[Path]:
+        """
+        Convert PDF to images with timeout protection.
+
+        Args:
+            pdf_path: Path to PDF file
+            output_dir: Directory to save images
+            dpi: Resolution for conversion
+
+        Returns:
+            List of paths to generated images
+
+        Raises:
+            DocumentProcessingError: If conversion fails or times out
+        """
+        import concurrent.futures
+
+        settings = get_settings()
+        max_pages = settings.get('visual_doc_max_pages', 50)
+        # Default 5 minutes timeout for PDF conversion
+        timeout = settings.get('visual_doc_conversion_timeout', 300)
+
+        loop = asyncio.get_event_loop()
+
+        try:
+            # Run blocking PDF conversion in thread executor with timeout
+            image_paths = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    self._convert_pdf_to_images_sync,
+                    pdf_path,
+                    output_dir,
+                    dpi,
+                    max_pages
+                ),
+                timeout=timeout
+            )
+            return image_paths
+        except asyncio.TimeoutError:
+            raise DocumentProcessingError(
+                f"PDF conversion timed out after {timeout} seconds. "
+                "Try reducing visual_doc_max_pages or increasing visual_doc_conversion_timeout."
+            )
+        except Exception as e:
+            raise DocumentProcessingError(
+                f"Failed to convert PDF to images: {e}. "
+                "Ensure poppler-utils is installed (apt-get install poppler-utils)."
+            ) from e
 
     async def index_document(
         self,
@@ -582,7 +628,7 @@ class VisualDocumentStore:
 
                 dpi = settings.get('visual_doc_pdf_dpi', 144)
 
-                image_paths = self.convert_pdf_to_images(pdf_path, images_dir, dpi)
+                image_paths = await self.convert_pdf_to_images(pdf_path, images_dir, dpi)
 
                 # Update progress during image save (already done in convert_pdf_to_images)
                 for i in range(len(image_paths)):

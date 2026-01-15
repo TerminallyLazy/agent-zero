@@ -99,6 +99,18 @@
 
           <div class="field">
             <div class="field-label">
+              <div class="field-title">Conversion Timeout (seconds)</div>
+              <div class="field-description">
+                Maximum time allowed for PDF to image conversion. Increase for large documents.
+              </div>
+            </div>
+            <div class="field-control">
+              <input type="number" min="30" max="1800" x-model.number="$store.settingsStore.settings.visual_doc_conversion_timeout" />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
               <div class="field-title">Max File Size (MB)</div>
               <div class="field-description">
                 Maximum file size allowed for processing in megabytes.

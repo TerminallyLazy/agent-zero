@@ -19,6 +19,8 @@ import json
 import os
 import sys
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -44,6 +46,17 @@ class VisualDocumentWorker:
             response["error"] = error
         print(json.dumps(response), flush=True)
 
+    def _run_with_timeout(self, func, args=(), kwargs=None, timeout=300):
+        """Run a function with a timeout using ThreadPoolExecutor."""
+        if kwargs is None:
+            kwargs = {}
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(func, *args, **kwargs)
+            try:
+                return future.result(timeout=timeout)
+            except FuturesTimeoutError:
+                raise TimeoutError(f"Operation timed out after {timeout} seconds")
+
     def _ensure_litepali(self, model_name: str = "vidore/colpali-v1.2") -> None:
         """Initialize LitePali if not already loaded or model changed."""
         if self._litepali is not None and self._model_name == model_name:
@@ -65,26 +78,16 @@ class VisualDocumentWorker:
         self._model_name = model_name
         self._log(f"LitePali loaded on {device}")
 
-    def handle_index(self, request: dict) -> dict:
-        """Handle index request."""
-        uri = request["uri"]
-        pdf_path = request["pdf_path"]
-        output_dir = Path(request["output_dir"])
-        settings = request.get("settings", {})
-
-        model_name = settings.get("model_name", "vidore/colpali-v1.2")
-        dpi = settings.get("pdf_dpi", 144)
-        max_pages = settings.get("max_pages", 50)
-        batch_size = settings.get("batch_size", 4)
-
-        self._ensure_litepali(model_name)
-
-        from litepali import ImageFile
+    def _convert_pdf_to_images(
+        self,
+        pdf_path: str,
+        images_dir: Path,
+        dpi: int,
+        max_pages: int
+    ) -> List[str]:
+        """Convert PDF to images (synchronous, runs in timeout wrapper)."""
         import pdf2image
 
-        # Convert PDF to images
-        self._log(f"Converting PDF to images: {pdf_path}")
-        images_dir = output_dir / "images"
         os.makedirs(images_dir, exist_ok=True)
 
         images = pdf2image.convert_from_path(
@@ -99,6 +102,42 @@ class VisualDocumentWorker:
             image_path = images_dir / f"page_{i+1:03d}.png"
             image.save(image_path, "PNG")
             image_paths.append(str(image_path))
+
+        return image_paths
+
+    def handle_index(self, request: dict) -> dict:
+        """Handle index request."""
+        uri = request["uri"]
+        pdf_path = request["pdf_path"]
+        output_dir = Path(request["output_dir"])
+        settings = request.get("settings", {})
+
+        model_name = settings.get("model_name", "vidore/colpali-v1.2")
+        dpi = settings.get("pdf_dpi", 144)
+        max_pages = settings.get("max_pages", 50)
+        batch_size = settings.get("batch_size", 4)
+        # Default 5 minutes timeout for PDF conversion
+        conversion_timeout = settings.get("conversion_timeout", 300)
+
+        self._ensure_litepali(model_name)
+
+        from litepali import ImageFile
+
+        # Convert PDF to images with timeout protection
+        self._log(f"Converting PDF to images: {pdf_path}")
+        images_dir = output_dir / "images"
+
+        try:
+            image_paths = self._run_with_timeout(
+                self._convert_pdf_to_images,
+                args=(pdf_path, images_dir, dpi, max_pages),
+                timeout=conversion_timeout
+            )
+        except TimeoutError:
+            raise RuntimeError(
+                f"PDF conversion timed out after {conversion_timeout} seconds. "
+                "Try reducing max_pages or increasing conversion_timeout in settings."
+            )
 
         self._log(f"Converted {len(image_paths)} pages")
 
