@@ -25,7 +25,8 @@ class VisualDocumentDockerService:
     _instance: Optional["VisualDocumentDockerService"] = None
 
     # Docker configuration
-    IMAGE_NAME = "agent0ai/visual-document-service:latest"
+    # Local image - must be built with: docker/visual_document_service/build.sh
+    IMAGE_NAME = "a0-visual-document-service:local"
     CONTAINER_NAME = "a0-visual-document-service"
     SERVICE_PORT = 9010
     HEALTH_CHECK_TIMEOUT = 60  # seconds
@@ -67,6 +68,21 @@ class VisualDocumentDockerService:
 
             try:
                 PrintStyle.standard("Starting visual document Docker sidecar...")
+
+                # Check if Docker image exists
+                try:
+                    import docker
+                    client = docker.from_env()
+                    client.images.get(self.IMAGE_NAME)
+                except docker.errors.ImageNotFound:
+                    PrintStyle.error(
+                        f"Docker image '{self.IMAGE_NAME}' not found. "
+                        "Build it first with: ./docker/visual_document_service/build.sh"
+                    )
+                    return False
+                except Exception as docker_err:
+                    PrintStyle.error(f"Docker not available: {docker_err}")
+                    return False
 
                 # Initialize Docker manager
                 self._docker_manager = DockerContainerManager(
