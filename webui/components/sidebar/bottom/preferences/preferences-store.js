@@ -32,24 +32,6 @@ const model = {
   },
   _speech: false,
 
-  get showThoughts() {
-    return this._showThoughts;
-  },
-  set showThoughts(value) {
-    this._showThoughts = value;
-    this._applyShowThoughts(value);
-  },
-  _showThoughts: true,
-
-  get showJson() {
-    return this._showJson;
-  },
-  set showJson(value) {
-    this._showJson = value;
-    this._applyShowJson(value);
-  },
-  _showJson: false,
-
   get showUtils() {
     return this._showUtils;
   },
@@ -58,6 +40,16 @@ const model = {
     this._applyShowUtils(value);
   },
   _showUtils: false,
+
+  // Process group collapse preference
+  get collapseProcessGroups() {
+    return this._collapseProcessGroups;
+  },
+  set collapseProcessGroups(value) {
+    this._collapseProcessGroups = value;
+    this._applyCollapseProcessGroups(value);
+  },
+  _collapseProcessGroups: true, // Default to collapsed
 
   // Initialize preferences and apply current state
   init() {
@@ -77,13 +69,20 @@ const model = {
         this._speech = false; // Default to speech off if localStorage is unavailable
       }
 
+      // Load collapse process groups preference
+      try {
+        const storedCollapse = localStorage.getItem("collapseProcessGroups");
+        this._collapseProcessGroups = storedCollapse !== "false"; // Default true
+      } catch {
+        this._collapseProcessGroups = true;
+      }
+
       // Apply all preferences
       this._applyDarkMode(this._darkMode);
       this._applyAutoScroll(this._autoScroll);
       this._applySpeech(this._speech);
-      this._applyShowThoughts(this._showThoughts);
-      this._applyShowJson(this._showJson);
       this._applyShowUtils(this._showUtils);
+      this._applyCollapseProcessGroups(this._collapseProcessGroups);
     } catch (e) {
       console.error("Failed to initialize preferences store", e);
     }
@@ -109,24 +108,31 @@ const model = {
     if (!value) speechStore.stopAudio();
   },
 
-  _applyShowThoughts(value) {
-    css.toggleCssProperty(
-      ".msg-thoughts",
-      "display",
-      value ? undefined : "none"
-    );
-  },
-
-  _applyShowJson(value) {
-    css.toggleCssProperty(".msg-json", "display", value ? "block" : "none");
-  },
 
   _applyShowUtils(value) {
+    // For original messages
     css.toggleCssProperty(
       ".message-util",
       "display",
       value ? undefined : "none"
     );
+    // For process steps - toggle class on all existing elements
+    document.querySelectorAll(".process-step.message-util").forEach((el) => {
+      el.classList.toggle("show-util", value);
+    });
+  },
+
+  _applyCollapseProcessGroups(value) {
+    localStorage.setItem("collapseProcessGroups", value);
+    // Update process group store default
+    try {
+      const processGroupStore = window.Alpine?.store("processGroup");
+      if (processGroupStore) {
+        processGroupStore.defaultCollapsed = value;
+      }
+    } catch (e) {
+      // Store may not be initialized yet
+    }
   },
 };
 

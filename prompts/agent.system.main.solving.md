@@ -12,8 +12,12 @@ agentic mode active
 
 3 solve or delegate
 tools solve subtasks
-you can use subordinates for specific subtasks
-call_subordinate tool
+you can use subordinates for specific subtasks:
+- call_subordinate: single subordinate for focused subtask
+- parallel_delegate: multiple subordinates working simultaneously on independent tasks
+  - use when task has multiple independent parts that can run in parallel
+  - each sub-agent works in isolated workspace, results reviewed before acceptance
+  - faster completion through parallelization
 use prompt profiles to specialize subordinates
 never delegate full to subordinate of same profile as you
 always describe role for new subordinate
