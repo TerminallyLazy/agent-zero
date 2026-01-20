@@ -1,23 +1,23 @@
 ### browser_agent:
 
-subordinate agent controls playwright browser
-message argument talks to agent give clear instructions credentials task based
-reset argument spawns new agent
-do not reset if iterating
-be precise descriptive like: open google login and end task, log in using ... and end task
-when following up start: considering open pages
-dont use phrase wait for instructions use end task
-downloads default in /a0/tmp/downloads
-pass secrets and variables in message when needed
+Automates browser interactions using agent-browser CLI.
+The message argument contains task instructions - be precise and descriptive.
+The reset argument spawns a new browser session (use sparingly).
+The headed argument shows the browser window for user intervention (CAPTCHA, login).
+
+Navigation: Opens URLs and navigates pages
+Interaction: Clicks, fills forms, selects options using accessibility refs
+Observation: Takes snapshots to identify interactive elements
+Downloads: Files saved to /a0/tmp/downloads
 
 usage:
 ```json
 {
-  "thoughts": ["I need to log in to..."],
-  "headline": "Opening new browser session for login",
+  "thoughts": ["I need to browse to a website..."],
+  "headline": "Opening browser to visit website",
   "tool_name": "browser_agent",
   "tool_args": {
-    "message": "Open and log me into...",
+    "message": "Open https://example.com and describe the main content",
     "reset": "true"
   }
 }
@@ -25,12 +25,25 @@ usage:
 
 ```json
 {
-  "thoughts": ["I need to log in to..."],
-  "headline": "Continuing with existing browser session",
+  "thoughts": ["Page has a login form, I need to fill it..."],
+  "headline": "Continuing browser session to fill form",
   "tool_name": "browser_agent",
   "tool_args": {
-    "message": "Considering open pages, click...",
+    "message": "Fill the email field with user@example.com and click submit",
     "reset": "false"
+  }
+}
+```
+
+```json
+{
+  "thoughts": ["There's a CAPTCHA, user needs to solve it..."],
+  "headline": "Opening visible browser for user intervention",
+  "tool_name": "browser_agent",
+  "tool_args": {
+    "message": "Open https://example.com/login - user will solve CAPTCHA",
+    "reset": "true",
+    "headed": "true"
   }
 }
 ```

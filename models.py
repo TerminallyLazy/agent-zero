@@ -25,7 +25,7 @@ from python.helpers.dotenv import load_dotenv
 from python.helpers.providers import get_provider_config
 from python.helpers.rate_limiter import RateLimiter
 from python.helpers.tokens import approximate_tokens
-from python.helpers import dirty_json, browser_use_monkeypatch
+from python.helpers import dirty_json
 
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.outputs.chat_generation import ChatGenerationChunk
@@ -57,7 +57,6 @@ def turn_off_logging():
 # init
 load_dotenv()
 turn_off_logging()
-browser_use_monkeypatch.apply()
 
 litellm.modify_params = True # helps fix anthropic tool calls by browser-use
 
@@ -579,10 +578,7 @@ class AsyncAIChatReplacement:
         self._wrapper = wrapper
         self.chat = AsyncAIChatReplacement._Chat(wrapper)
 
-
-from browser_use.llm import ChatOllama, ChatOpenRouter, ChatGoogle, ChatAnthropic, ChatGroq, ChatOpenAI
-
-class BrowserCompatibleChatWrapper(ChatOpenRouter):
+class BrowserCompatibleChatWrapper():
     """
     A wrapper for browser agent that can filter/sanitize messages
     before sending them to the LLM.
@@ -637,7 +633,7 @@ class BrowserCompatibleChatWrapper(ChatOpenRouter):
             try:
                 msg = resp.choices[0].message # type: ignore
                 if self.provider == "gemini" and isinstance(getattr(msg, "content", None), str):
-                    cleaned = browser_use_monkeypatch.gemini_clean_and_conform(msg.content) # type: ignore
+                    cleaned = gemini_clean_and_conform(msg.content) # type: ignore
                     if cleaned:
                         msg.content = cleaned
             except Exception:

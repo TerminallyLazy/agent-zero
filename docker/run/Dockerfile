@@ -26,8 +26,8 @@ RUN echo "cache buster $CACHE_DATE" && bash /ins/install_A02.sh $BRANCH
 # post installation steps
 RUN bash /ins/post_install.sh $BRANCH
 
-# Expose ports
-EXPOSE 22 80 9000-9009
+# Expose ports (22=SSH, 80=Web, 9000-9009=API, 9223=Browser Stream)
+EXPOSE 22 80 9000-9009 9223
 
 RUN chmod +x /exe/initialize.sh /exe/run_A0.sh /exe/run_searxng.sh /exe/run_tunnel_api.sh
 

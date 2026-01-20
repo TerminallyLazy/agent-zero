@@ -1,0 +1,330 @@
+<html>
+<head>
+    <title>Live Browser</title>
+    <script type="module">
+        import { store } from "/components/modals/browser-stream/browser-stream-store.js";
+    </script>
+</head>
+
+<body>
+    <div x-data>
+        <template x-if="$store.browserStream">
+            <div class="browser-stream-container"
+                 x-create="$store.browserStream.connect(9223)"
+                 x-destroy="$store.browserStream.destroy()">
+                
+                <!-- Status Bar -->
+                <div class="browser-status-bar">
+                    <div class="status-indicator" 
+                         :class="{'connected': $store.browserStream.connected, 'connecting': $store.browserStream.connecting}">
+                        <span class="status-dot"></span>
+                        <span x-text="$store.browserStream.connected ? 'Live' : ($store.browserStream.connecting ? 'Connecting...' : 'Disconnected')"></span>
+                    </div>
+                    <div class="viewport-info">
+                        <span x-text="`${$store.browserStream.viewportWidth} × ${$store.browserStream.viewportHeight}`"></span>
+                    </div>
+                </div>
+                
+                <!-- Browser Canvas -->
+                <div class="browser-viewport" 
+                     @mousemove="handleMouseMove($event)"
+                     @mousedown="handleMouseDown($event)"
+                     @mouseup="handleMouseUp($event)"
+                     @wheel="handleWheel($event)"
+                     @keydown.window="handleKeyDown($event)"
+                     @keyup.window="handleKeyUp($event)">
+                    
+                    <template x-if="$store.browserStream.frameData">
+                        <img class="browser-frame" 
+                             :src="$store.browserStream.frameData"
+                             :width="$store.browserStream.viewportWidth"
+                             :height="$store.browserStream.viewportHeight"
+                             draggable="false"
+                             @load="updateAspectRatio($el)">
+                    </template>
+                    
+                    <template x-if="!$store.browserStream.frameData && !$store.browserStream.error">
+                        <div class="loading-placeholder">
+                            <div class="loading-spinner"></div>
+                            <span>Waiting for browser stream...</span>
+                        </div>
+                    </template>
+                    
+                    <template x-if="$store.browserStream.error">
+                        <div class="error-placeholder">
+                            <span class="material-symbols-outlined">error</span>
+                            <span x-text="$store.browserStream.error"></span>
+                            <button class="btn btn-ok" @click="$store.browserStream.connect()">Retry</button>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Control Bar (Footer) -->
+                <div class="browser-controls" data-modal-footer>
+                    <div class="control-group">
+                        <button class="control-btn" @click="$store.browserStream.disconnect(); closeModal();" title="End Session">
+                            <span class="material-symbols-outlined">close</span>
+                            <span>End Session</span>
+                        </button>
+                    </div>
+                    <div class="control-info">
+                        <span class="help-text">Click and type to interact with the browser</span>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <script>
+        // Mouse event handlers
+        function getRelativeCoords(event, element) {
+            const rect = element.getBoundingClientRect();
+            const img = element.querySelector('.browser-frame');
+            if (!img) return null;
+            
+            const imgRect = img.getBoundingClientRect();
+            const scaleX = Alpine.store('browserStream').viewportWidth / imgRect.width;
+            const scaleY = Alpine.store('browserStream').viewportHeight / imgRect.height;
+            
+            return {
+                x: (event.clientX - imgRect.left) * scaleX,
+                y: (event.clientY - imgRect.top) * scaleY
+            };
+        }
+        
+        window.handleMouseMove = function(event) {
+            const coords = getRelativeCoords(event, event.currentTarget);
+            if (coords) {
+                Alpine.store('browserStream').moveMouse(coords.x, coords.y);
+            }
+        };
+        
+        window.handleMouseDown = function(event) {
+            const coords = getRelativeCoords(event, event.currentTarget);
+            if (coords) {
+                const button = event.button === 0 ? 'left' : event.button === 2 ? 'right' : 'middle';
+                Alpine.store('browserStream').sendMouseEvent('mousePressed', coords.x, coords.y, button, 1);
+            }
+        };
+        
+        window.handleMouseUp = function(event) {
+            const coords = getRelativeCoords(event, event.currentTarget);
+            if (coords) {
+                const button = event.button === 0 ? 'left' : event.button === 2 ? 'right' : 'middle';
+                Alpine.store('browserStream').sendMouseEvent('mouseReleased', coords.x, coords.y, button);
+            }
+        };
+        
+        window.handleWheel = function(event) {
+            event.preventDefault();
+            const coords = getRelativeCoords(event, event.currentTarget);
+            if (coords) {
+                Alpine.store('browserStream').scroll(coords.x, coords.y, event.deltaY, event.deltaX);
+            }
+        };
+        
+        window.handleKeyDown = function(event) {
+            // Only capture when focused on browser viewport
+            if (!document.querySelector('.browser-viewport:hover')) return;
+            
+            event.preventDefault();
+            let modifiers = 0;
+            if (event.altKey) modifiers |= 1;
+            if (event.ctrlKey) modifiers |= 2;
+            if (event.metaKey) modifiers |= 4;
+            if (event.shiftKey) modifiers |= 8;
+            
+            Alpine.store('browserStream').sendKeyboardEvent('keyDown', event.key, event.code, modifiers);
+            
+            // For printable characters, also send char event
+            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+                Alpine.store('browserStream').sendKeyboardEvent('char', event.key, '');
+            }
+        };
+        
+        window.handleKeyUp = function(event) {
+            if (!document.querySelector('.browser-viewport:hover')) return;
+            
+            event.preventDefault();
+            Alpine.store('browserStream').sendKeyboardEvent('keyUp', event.key, event.code);
+        };
+        
+        window.updateAspectRatio = function(img) {
+            const container = img.closest('.browser-viewport');
+            if (container) {
+                const ratio = img.naturalWidth / img.naturalHeight;
+                container.style.aspectRatio = ratio;
+            }
+        };
+    </script>
+
+    <style>
+        .browser-stream-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-height: 80vh;
+            background: var(--color-background);
+            border-radius: var(--spacing-sm);
+            overflow: hidden;
+        }
+        
+        /* Status Bar */
+        .browser-status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-xs) var(--spacing-md);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--color-border);
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            font-size: var(--font-size-small);
+            color: var(--color-text-dim);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+            transition: background 0.3s ease;
+        }
+        
+        .status-indicator.connected .status-dot {
+            background: #4ade80;
+            box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+        }
+        
+        .status-indicator.connecting .status-dot {
+            background: #fbbf24;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .viewport-info {
+            font-size: var(--font-size-small);
+            color: var(--color-text-dim);
+            font-family: monospace;
+        }
+        
+        /* Browser Viewport */
+        .browser-viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a2e;
+            overflow: hidden;
+            cursor: default;
+            position: relative;
+            min-height: 400px;
+        }
+        
+        .browser-frame {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 
+                0 4px 20px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.05);
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        
+        /* Loading State */
+        .loading-placeholder,
+        .error-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-md);
+            color: var(--color-text-dim);
+            padding: var(--spacing-xl);
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--color-border);
+            border-top-color: var(--color-accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-placeholder .material-symbols-outlined {
+            font-size: 48px;
+            color: #ef4444;
+        }
+        
+        .error-placeholder .btn {
+            margin-top: var(--spacing-sm);
+        }
+        
+        /* Control Bar */
+        .browser-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--color-border);
+        }
+        
+        .control-group {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+        
+        .control-btn {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--color-border);
+            border-radius: var(--spacing-xs);
+            color: var(--color-text);
+            font-size: var(--font-size-small);
+            cursor: pointer;
+            transition: all var(--transition-speed) ease;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: var(--color-accent);
+        }
+        
+        .control-btn .material-symbols-outlined {
+            font-size: 18px;
+        }
+        
+        .control-info {
+            display: flex;
+            align-items: center;
+        }
+        
+        .help-text {
+            font-size: var(--font-size-small);
+            color: var(--color-text-dim);
+            opacity: 0.7;
+        }
+    </style>
+</body>
+</html>
