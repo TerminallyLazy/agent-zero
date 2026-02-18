@@ -514,7 +514,7 @@ def get_default_settings() -> Settings:
     return Settings(
         version=_get_version(),
         chat_model_provider=get_default_value("chat_model_provider", "openrouter"),
-        chat_model_name=get_default_value("chat_model_name", "google/gemini-3-pro-preview"),
+        chat_model_name=get_default_value("chat_model_name", "anthropic/claude-sonnet-4.6"),
         chat_model_api_base=get_default_value("chat_model_api_base", ""),
         chat_model_kwargs=get_default_value("chat_model_kwargs", {}),
         chat_model_ctx_length=get_default_value("chat_model_ctx_length", 100000),
@@ -539,7 +539,7 @@ def get_default_settings() -> Settings:
         embed_model_rl_requests=get_default_value("embed_model_rl_requests", 0),
         embed_model_rl_input=get_default_value("embed_model_rl_input", 0),
         browser_model_provider=get_default_value("browser_model_provider", "openrouter"),
-        browser_model_name=get_default_value("browser_model_name", "google/gemini-3-pro-preview"),
+        browser_model_name=get_default_value("browser_model_name", "anthropic/claude-sonnet-4.6"),
         browser_model_api_base=get_default_value("browser_model_api_base", ""),
         browser_model_vision=get_default_value("browser_model_vision", True),
         browser_model_rl_requests=get_default_value("browser_model_rl_requests", 0),
