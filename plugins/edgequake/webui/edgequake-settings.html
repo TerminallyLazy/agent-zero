@@ -1,0 +1,220 @@
+<html>
+<head>
+  <title>EdgeQuake Settings</title>
+  <script type="module">
+    import { store } from "/plugins/edgequake/webui/edgequake-settings-store.js";
+  </script>
+</head>
+
+<body>
+<div x-data>
+  <template x-if="$store.edgequakeSettings">
+    <div
+      x-create="$store.edgequakeSettings.load()"
+      x-destroy="$store.edgequakeSettings.destroy()"
+    >
+      <div class="section">
+        <div class="section-title">Connection</div>
+        <div class="section-description">
+          Connect to an EdgeQuake server for knowledge graph-powered RAG.
+        </div>
+
+        <!-- Server URL -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Server URL</div>
+            <div class="field-description">Base URL of the EdgeQuake server</div>
+          </div>
+          <div class="field-control">
+            <input
+              type="text"
+              x-model="$store.edgequakeSettings.base_url"
+              placeholder="http://localhost:8080"
+            />
+          </div>
+        </div>
+
+        <!-- API Key -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">API Key</div>
+            <div class="field-description">Authentication key for the EdgeQuake API</div>
+          </div>
+          <div class="field-control eq-api-key-field">
+            <input
+              :type="$store.edgequakeSettings.show_api_key ? 'text' : 'password'"
+              x-model="$store.edgequakeSettings.api_key"
+              placeholder="Enter API key"
+              autocomplete="off"
+            />
+            <button
+              class="eq-toggle-btn"
+              @click="$store.edgequakeSettings.show_api_key = !$store.edgequakeSettings.show_api_key"
+              title="Toggle visibility"
+            >
+              <span class="material-symbols-outlined" x-text="$store.edgequakeSettings.show_api_key ? 'visibility_off' : 'visibility'"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Workspace ID -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Workspace ID</div>
+            <div class="field-description">Optional workspace for multi-tenant setups</div>
+          </div>
+          <div class="field-control">
+            <input
+              type="text"
+              x-model="$store.edgequakeSettings.workspace_id"
+              placeholder="(optional)"
+            />
+          </div>
+        </div>
+
+        <!-- Tenant ID -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Tenant ID</div>
+            <div class="field-description">Optional tenant for multi-tenant setups</div>
+          </div>
+          <div class="field-control">
+            <input
+              type="text"
+              x-model="$store.edgequakeSettings.tenant_id"
+              placeholder="(optional)"
+            />
+          </div>
+        </div>
+
+        <!-- Timeout -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Timeout</div>
+            <div class="field-description">Request timeout in seconds</div>
+          </div>
+          <div class="field-control">
+            <input
+              type="number"
+              x-model.number="$store.edgequakeSettings.timeout"
+              min="5"
+              max="300"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Connection -->
+      <div class="section">
+        <div class="section-title">Connection Test</div>
+        <div class="eq-test-row">
+          <button
+            class="btn btn-ok"
+            @click="$store.edgequakeSettings.testConnection()"
+            :disabled="$store.edgequakeSettings.connection_status === 'testing'"
+          >
+            <span
+              x-show="$store.edgequakeSettings.connection_status === 'testing'"
+              class="material-symbols-outlined spinning"
+            >progress_activity</span>
+            <span x-show="$store.edgequakeSettings.connection_status !== 'testing'">Test Connection</span>
+            <span x-show="$store.edgequakeSettings.connection_status === 'testing'">Testing...</span>
+          </button>
+
+          <!-- Status indicator -->
+          <div class="eq-status" x-show="$store.edgequakeSettings.connection_status === 'connected'">
+            <span class="eq-dot eq-dot-green"></span>
+            <span x-text="$store.edgequakeSettings.connection_info"></span>
+          </div>
+          <div class="eq-status" x-show="$store.edgequakeSettings.connection_status === 'error'">
+            <span class="eq-dot eq-dot-red"></span>
+            <span x-text="$store.edgequakeSettings.connection_info"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer" data-modal-footer>
+        <button
+          class="btn btn-ok"
+          @click="$store.edgequakeSettings.save()"
+          :disabled="$store.edgequakeSettings.loading"
+        >Save</button>
+        <button
+          class="btn btn-cancel"
+          @click="window.closeModal('../plugins/edgequake/webui/edgequake-settings.html')"
+        >Cancel</button>
+      </div>
+    </div>
+  </template>
+</div>
+
+<style>
+.eq-api-key-field {
+  position: relative;
+}
+
+.eq-api-key-field input {
+  padding-right: 2.5rem;
+}
+
+.eq-toggle-btn {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text);
+  opacity: 0.6;
+  padding: 0.25rem;
+}
+
+.eq-toggle-btn:hover {
+  opacity: 1;
+}
+
+.eq-test-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.eq-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.eq-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.eq-dot-green {
+  background-color: #27ae60;
+}
+
+.eq-dot-red {
+  background-color: #e74c3c;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+  font-size: 1rem;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+</style>
+</body>
+</html>
