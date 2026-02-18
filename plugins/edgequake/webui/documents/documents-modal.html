@@ -1,0 +1,249 @@
+<html>
+<head>
+  <title>EdgeQuake Documents</title>
+  <script type="module">
+    import { store } from "/plugins/edgequake/webui/documents/documents-store.js";
+  </script>
+</head>
+
+<body>
+<div x-data>
+  <template x-if="$store.edgequakeDocuments">
+    <div
+      x-create="$store.edgequakeDocuments.load()"
+      x-destroy="$store.edgequakeDocuments.destroy()"
+      class="eq-documents"
+    >
+      <!-- Error banner -->
+      <div class="eq-error" x-show="$store.edgequakeDocuments.errorMessage" x-text="$store.edgequakeDocuments.errorMessage"></div>
+
+      <!-- Upload section -->
+      <div class="section">
+        <div class="section-title">Upload Document</div>
+        <div class="eq-upload-form">
+          <input
+            type="text"
+            class="eq-upload-title"
+            x-model="$store.edgequakeDocuments.uploadTitle"
+            placeholder="Document title (optional)"
+          />
+          <textarea
+            class="eq-upload-content"
+            x-model="$store.edgequakeDocuments.uploadContent"
+            placeholder="Paste document content here..."
+            rows="4"
+          ></textarea>
+          <button
+            class="btn btn-ok"
+            @click="$store.edgequakeDocuments.upload()"
+            :disabled="$store.edgequakeDocuments.uploading || !$store.edgequakeDocuments.uploadContent.trim()"
+          >
+            <span x-show="!$store.edgequakeDocuments.uploading">Upload</span>
+            <span x-show="$store.edgequakeDocuments.uploading">Uploading...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Documents table -->
+      <div class="section">
+        <div class="section-title">Documents</div>
+
+        <!-- Loading -->
+        <div class="eq-loading" x-show="$store.edgequakeDocuments.loading">Loading...</div>
+
+        <!-- Empty state -->
+        <div class="eq-empty" x-show="!$store.edgequakeDocuments.loading && $store.edgequakeDocuments.documents.length === 0">
+          No documents found. Upload content above to get started.
+        </div>
+
+        <!-- Table -->
+        <table class="eq-table" x-show="!$store.edgequakeDocuments.loading && $store.edgequakeDocuments.documents.length > 0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Entities</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="doc in $store.edgequakeDocuments.documents" :key="doc.document_id">
+              <tr>
+                <td x-text="doc.title || 'Untitled'"></td>
+                <td>
+                  <span class="eq-badge" :class="'eq-badge-' + (doc.status || 'unknown').toLowerCase()" x-text="doc.status"></span>
+                </td>
+                <td x-text="doc.entity_count || 0"></td>
+                <td class="eq-date" x-text="doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '-'"></td>
+                <td>
+                  <button
+                    class="eq-icon-btn"
+                    @click="$confirmClick($event, () => $store.edgequakeDocuments.deleteDocument(doc.document_id))"
+                    title="Delete document"
+                  >
+                    <span class="material-symbols-outlined">delete</span>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div class="eq-pagination" x-show="$store.edgequakeDocuments.totalPages > 1">
+          <button
+            class="eq-icon-btn"
+            @click="$store.edgequakeDocuments.prevPage()"
+            :disabled="$store.edgequakeDocuments.currentPage <= 1"
+          >
+            <span class="material-symbols-outlined">chevron_left</span>
+          </button>
+          <span class="eq-page-info">
+            Page <span x-text="$store.edgequakeDocuments.currentPage"></span>
+            of <span x-text="$store.edgequakeDocuments.totalPages"></span>
+          </span>
+          <button
+            class="eq-icon-btn"
+            @click="$store.edgequakeDocuments.nextPage()"
+            :disabled="$store.edgequakeDocuments.currentPage >= $store.edgequakeDocuments.totalPages"
+          >
+            <span class="material-symbols-outlined">chevron_right</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer" data-modal-footer>
+        <button class="btn btn-cancel" @click="window.closeModal('../plugins/edgequake/webui/documents/documents-modal.html')">Close</button>
+      </div>
+    </div>
+  </template>
+</div>
+
+<style>
+.eq-documents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+.eq-error {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.eq-upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.eq-upload-title {
+  background: var(--color-input, #1a1a2e);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text, #eee);
+  font-size: 0.875rem;
+}
+
+.eq-upload-content {
+  background: var(--color-input, #1a1a2e);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text, #eee);
+  font-size: 0.875rem;
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.eq-upload-form .btn {
+  align-self: flex-start;
+}
+
+.eq-loading, .eq-empty {
+  color: var(--color-text, #aaa);
+  opacity: 0.7;
+  padding: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.eq-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.eq-table th,
+.eq-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border, #333);
+  color: var(--color-text, #eee);
+}
+
+.eq-table th {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+.eq-date {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.eq-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.eq-badge-completed { background: rgba(39, 174, 96, 0.2); color: #27ae60; }
+.eq-badge-processing { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+.eq-badge-failed { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+.eq-badge-unknown { background: rgba(149, 165, 166, 0.2); color: #95a5a6; }
+
+.eq-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text, #aaa);
+  opacity: 0.6;
+  padding: 0.25rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.eq-icon-btn:hover { opacity: 1; }
+.eq-icon-btn:disabled { opacity: 0.3; cursor: default; }
+.eq-icon-btn .material-symbols-outlined { font-size: 1.1rem; }
+
+.eq-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.eq-page-info {
+  font-size: 0.8rem;
+  color: var(--color-text, #aaa);
+  opacity: 0.7;
+}
+</style>
+</body>
+</html>

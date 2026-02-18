@@ -1,0 +1,287 @@
+<html>
+<head>
+  <title>EdgeQuake Query</title>
+  <script type="module">
+    import { store } from "/plugins/edgequake/webui/query/query-store.js";
+  </script>
+</head>
+
+<body>
+<div x-data>
+  <template x-if="$store.edgequakeQuery">
+    <div
+      x-destroy="$store.edgequakeQuery.destroy()"
+      class="eq-query"
+    >
+      <!-- Error banner -->
+      <div class="eq-error" x-show="$store.edgequakeQuery.errorMessage" x-text="$store.edgequakeQuery.errorMessage"></div>
+
+      <!-- Query input -->
+      <div class="section">
+        <div class="section-title">Query</div>
+        <div class="eq-query-form">
+          <textarea
+            class="eq-query-input"
+            x-model="$store.edgequakeQuery.queryText"
+            placeholder="Ask a question about your knowledge graph..."
+            rows="3"
+            @keydown.ctrl.enter="$store.edgequakeQuery.execute()"
+            @keydown.meta.enter="$store.edgequakeQuery.execute()"
+          ></textarea>
+          <div class="eq-query-controls">
+            <div class="eq-mode-select">
+              <label class="eq-mode-label">Mode:</label>
+              <select x-model="$store.edgequakeQuery.mode">
+                <template x-for="m in $store.edgequakeQuery.modes" :key="m">
+                  <option :value="m" x-text="m"></option>
+                </template>
+              </select>
+            </div>
+            <button
+              class="btn btn-ok"
+              @click="$store.edgequakeQuery.execute()"
+              :disabled="$store.edgequakeQuery.querying || !$store.edgequakeQuery.queryText.trim()"
+            >
+              <span x-show="!$store.edgequakeQuery.querying">Run Query</span>
+              <span x-show="$store.edgequakeQuery.querying">Querying...</span>
+            </button>
+          </div>
+          <div class="eq-hint">Ctrl+Enter to submit</div>
+        </div>
+      </div>
+
+      <!-- Answer -->
+      <div class="section" x-show="$store.edgequakeQuery.answer || $store.edgequakeQuery.querying">
+        <div class="section-title">Answer</div>
+        <div class="eq-loading" x-show="$store.edgequakeQuery.querying">Running query...</div>
+        <div class="eq-answer" x-show="!$store.edgequakeQuery.querying && $store.edgequakeQuery.answer" x-text="$store.edgequakeQuery.answer"></div>
+
+        <!-- Sources -->
+        <div class="eq-sources" x-show="$store.edgequakeQuery.sources.length > 0">
+          <div class="eq-sources-title">Sources</div>
+          <template x-for="(src, idx) in $store.edgequakeQuery.sources" :key="idx">
+            <div class="eq-source-card">
+              <div class="eq-source-title" x-show="src.title" x-text="src.title"></div>
+              <div class="eq-source-content" x-text="src.content"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div class="section" x-show="$store.edgequakeQuery.history.length > 0">
+        <div class="eq-history-header">
+          <div class="section-title">History</div>
+          <button class="eq-icon-btn" @click="$store.edgequakeQuery.clearHistory()" title="Clear history">
+            <span class="material-symbols-outlined">delete_sweep</span>
+          </button>
+        </div>
+        <div class="eq-history-list">
+          <template x-for="(item, idx) in $store.edgequakeQuery.history" :key="idx">
+            <div class="eq-history-item" @click="$store.edgequakeQuery.loadFromHistory(item)">
+              <div class="eq-history-query" x-text="item.query"></div>
+              <div class="eq-history-meta">
+                <span class="eq-history-mode" x-text="item.mode"></span>
+                <span class="eq-history-time" x-text="item.timestamp"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer" data-modal-footer>
+        <button class="btn btn-cancel" @click="window.closeModal('../plugins/edgequake/webui/query/query-modal.html')">Close</button>
+      </div>
+    </div>
+  </template>
+</div>
+
+<style>
+.eq-query {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+.eq-error {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.eq-query-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.eq-query-input {
+  background: var(--color-input, #1a1a2e);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  padding: 0.75rem;
+  color: var(--color-text, #eee);
+  font-size: 0.875rem;
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.eq-query-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.eq-mode-select {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.eq-mode-label {
+  font-size: 0.8rem;
+  color: var(--color-text, #aaa);
+  opacity: 0.7;
+}
+
+.eq-mode-select select {
+  background: var(--color-input, #1a1a2e);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  color: var(--color-text, #eee);
+  font-size: 0.8rem;
+  width: auto;
+}
+
+.eq-hint {
+  font-size: 0.7rem;
+  color: var(--color-text, #aaa);
+  opacity: 0.5;
+}
+
+.eq-loading {
+  color: var(--color-text, #aaa);
+  opacity: 0.7;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.eq-answer {
+  background: var(--color-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-border, #333);
+  border-radius: 8px;
+  padding: 1rem;
+  color: var(--color-text, #eee);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.eq-sources {
+  margin-top: 0.75rem;
+}
+
+.eq-sources-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  margin-bottom: 0.375rem;
+  color: var(--color-text, #aaa);
+}
+
+.eq-source-card {
+  background: var(--color-input, rgba(255,255,255,0.03));
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.eq-source-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text, #ddd);
+  margin-bottom: 0.25rem;
+}
+
+.eq-source-content {
+  font-size: 0.75rem;
+  color: var(--color-text, #aaa);
+  opacity: 0.8;
+  line-height: 1.4;
+}
+
+.eq-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eq-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text, #aaa);
+  opacity: 0.6;
+  padding: 0.25rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.eq-icon-btn:hover { opacity: 1; }
+.eq-icon-btn .material-symbols-outlined { font-size: 1.1rem; }
+
+.eq-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.eq-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.375rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-text, #ccc);
+  transition: background var(--transition-speed, 0.3s) ease;
+}
+
+.eq-history-item:hover {
+  background: var(--color-input, rgba(255,255,255,0.05));
+}
+
+.eq-history-query {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 0.5rem;
+}
+
+.eq-history-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  opacity: 0.5;
+  font-size: 0.7rem;
+}
+
+.eq-history-mode {
+  text-transform: uppercase;
+}
+</style>
+</body>
+</html>
