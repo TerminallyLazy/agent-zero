@@ -29,7 +29,7 @@
             <input
               type="text"
               x-model="$store.edgequakeSettings.base_url"
-              placeholder="http://localhost:8080"
+              placeholder="http://host.docker.internal:8080"
             />
           </div>
         </div>
@@ -38,21 +38,28 @@
         <div class="field">
           <div class="field-label">
             <div class="field-title">API Key</div>
-            <div class="field-description">Authentication key for the EdgeQuake API</div>
+            <div class="field-description">Shared secret between this plugin and the EdgeQuake server</div>
           </div>
           <div class="field-control eq-api-key-field">
             <input
               :type="$store.edgequakeSettings.show_api_key ? 'text' : 'password'"
               x-model="$store.edgequakeSettings.api_key"
-              placeholder="Enter API key"
+              placeholder="Enter or generate API key"
               autocomplete="off"
             />
             <button
-              class="eq-toggle-btn"
+              class="eq-icon-btn"
               @click="$store.edgequakeSettings.show_api_key = !$store.edgequakeSettings.show_api_key"
               title="Toggle visibility"
             >
               <span class="material-symbols-outlined" x-text="$store.edgequakeSettings.show_api_key ? 'visibility_off' : 'visibility'"></span>
+            </button>
+            <button
+              class="eq-icon-btn eq-generate-btn"
+              @click="$store.edgequakeSettings.generateKey()"
+              title="Generate random API key"
+            >
+              <span class="material-symbols-outlined">casino</span>
             </button>
           </div>
         </div>
@@ -104,6 +111,81 @@
         </div>
       </div>
 
+      <!-- Server Status -->
+      <div class="section">
+        <div class="section-title">Server</div>
+        <div class="section-description">
+          EdgeQuake server status (detected via health endpoint).
+        </div>
+
+        <!-- Status row (always shown) -->
+        <div class="eq-server-row">
+          <div class="eq-server-status">
+            <!-- Running -->
+            <template x-if="$store.edgequakeSettings.server_running && !$store.edgequakeSettings.server_starting">
+              <div class="eq-status">
+                <span class="eq-dot eq-dot-green"></span>
+                <span>Running</span>
+              </div>
+            </template>
+            <!-- Starting (Docker auto-start in progress) -->
+            <template x-if="$store.edgequakeSettings.server_starting">
+              <div class="eq-status">
+                <span class="eq-dot eq-dot-yellow"></span>
+                <span>Starting...</span>
+              </div>
+            </template>
+            <!-- Not detected -->
+            <template x-if="!$store.edgequakeSettings.server_running && !$store.edgequakeSettings.server_starting">
+              <div class="eq-status">
+                <span class="eq-dot eq-dot-red"></span>
+                <span>Not detected</span>
+              </div>
+            </template>
+          </div>
+
+          <!-- Docker auto-management buttons (only when Docker SDK is available) -->
+          <template x-if="$store.edgequakeSettings.docker_available">
+            <div class="eq-server-row">
+              <button
+                class="btn btn-ok"
+                x-show="!$store.edgequakeSettings.server_running && !$store.edgequakeSettings.server_starting"
+                @click="$store.edgequakeSettings.startServer()"
+                :disabled="$store.edgequakeSettings.server_stopping"
+              >Start Server</button>
+              <button
+                class="btn btn-cancel"
+                x-show="$store.edgequakeSettings.server_running || $store.edgequakeSettings.server_starting"
+                @click="$store.edgequakeSettings.stopServer()"
+                :disabled="$store.edgequakeSettings.server_stopping"
+              >
+                <span x-show="$store.edgequakeSettings.server_stopping">Stopping...</span>
+                <span x-show="!$store.edgequakeSettings.server_stopping">Stop Server</span>
+              </button>
+            </div>
+          </template>
+
+          <!-- Refresh status -->
+          <button
+            class="eq-icon-btn"
+            @click="$store.edgequakeSettings.checkServerStatus()"
+            title="Refresh status"
+          >
+            <span class="material-symbols-outlined">refresh</span>
+          </button>
+        </div>
+
+        <!-- Error message -->
+        <div class="eq-server-error" x-show="$store.edgequakeSettings.server_error" x-text="$store.edgequakeSettings.server_error"></div>
+
+        <!-- Manual launch instructions (when Docker auto-management is not available) -->
+        <div class="eq-server-manual" x-show="!$store.edgequakeSettings.docker_available && !$store.edgequakeSettings.server_running">
+          <div class="eq-manual-title">Save settings first, then run on your host machine:</div>
+          <pre class="eq-manual-cmd" @click="navigator.clipboard.writeText('cd plugins/edgequake/docker && docker compose up -d --build')"><code>cd plugins/edgequake/docker &amp;&amp; docker compose up -d --build</code></pre>
+          <div class="eq-manual-hint">Click to copy. Save writes a .env file with your API key and LLM config (auto-read from Agent Zero settings). First build takes 10-30 min. Then refresh status above.</div>
+        </div>
+      </div>
+
       <!-- Pipeline Settings -->
       <div class="section">
         <div class="section-title">Pipeline</div>
@@ -118,9 +200,9 @@
             <div class="field-description">Automatically upload conversation turns to EdgeQuake for knowledge graph indexing</div>
           </div>
           <div class="field-control">
-            <label class="eq-toggle">
+            <label class="toggle">
               <input type="checkbox" x-model="$store.edgequakeSettings.auto_index" />
-              <span class="eq-toggle-slider"></span>
+              <span class="toggler"></span>
             </label>
           </div>
         </div>
@@ -148,9 +230,9 @@
             <div class="field-description">Automatically query the knowledge graph to enrich agent context before each response</div>
           </div>
           <div class="field-control">
-            <label class="eq-toggle">
+            <label class="toggle">
               <input type="checkbox" x-model="$store.edgequakeSettings.auto_recall" />
-              <span class="eq-toggle-slider"></span>
+              <span class="toggler"></span>
             </label>
           </div>
         </div>
@@ -218,31 +300,49 @@
 </div>
 
 <style>
+/* API key field with icon buttons */
 .eq-api-key-field {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 
 .eq-api-key-field input {
-  padding-right: 2.5rem;
+  padding-right: 4.5rem;
+  flex: 1;
 }
 
-.eq-toggle-btn {
-  position: absolute;
-  right: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
+.eq-icon-btn {
   background: none;
   border: none;
   cursor: pointer;
   color: var(--color-text);
   opacity: 0.6;
   padding: 0.25rem;
+  display: flex;
+  align-items: center;
 }
 
-.eq-toggle-btn:hover {
+.eq-icon-btn:hover {
   opacity: 1;
 }
 
+.eq-api-key-field .eq-icon-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.eq-api-key-field .eq-icon-btn:first-of-type {
+  right: 2rem;
+}
+
+.eq-api-key-field .eq-generate-btn {
+  right: 0.25rem;
+}
+
+/* Test connection row */
 .eq-test-row {
   display: flex;
   align-items: center;
@@ -250,6 +350,7 @@
   flex-wrap: wrap;
 }
 
+/* Shared status indicator */
 .eq-status {
   display: flex;
   align-items: center;
@@ -274,6 +375,95 @@
   background-color: #e74c3c;
 }
 
+.eq-dot-yellow {
+  background-color: #f39c12;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Server management section */
+.eq-server-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.eq-server-status {
+  min-width: 100px;
+}
+
+.eq-server-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(243, 156, 18, 0.1);
+  border: 1px solid rgba(243, 156, 18, 0.3);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.eq-server-notice .material-symbols-outlined {
+  font-size: 1.1rem;
+  color: #f39c12;
+}
+
+.eq-server-error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #e74c3c;
+}
+
+.eq-server-manual {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-input);
+  border-radius: 6px;
+}
+
+.eq-manual-title {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-bottom: 0.5rem;
+  color: var(--color-text);
+}
+
+.eq-manual-cmd {
+  background: var(--color-background);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.eq-manual-cmd:hover {
+  border-color: var(--color-accent);
+}
+
+.eq-manual-cmd code {
+  font-family: inherit;
+}
+
+.eq-manual-hint {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  margin-top: 0.4rem;
+  color: var(--color-text);
+}
+
+/* Animations */
 .spinning {
   animation: spin 1s linear infinite;
   font-size: 1rem;
@@ -284,46 +474,9 @@
   to { transform: rotate(360deg); }
 }
 
-.eq-toggle {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
-  cursor: pointer;
-}
-
-.eq-toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.eq-toggle-slider {
-  position: absolute;
-  inset: 0;
-  background: var(--color-input, #333);
-  border-radius: 11px;
-  transition: background var(--transition-speed, 0.3s) ease;
-}
-
-.eq-toggle-slider::before {
-  content: "";
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: var(--color-text, #ccc);
-  border-radius: 50%;
-  transition: transform var(--transition-speed, 0.3s) ease;
-}
-
-.eq-toggle input:checked + .eq-toggle-slider {
-  background: var(--color-accent, #7c8cff);
-}
-
-.eq-toggle input:checked + .eq-toggle-slider::before {
-  transform: translateX(18px);
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 </style>
 </body>

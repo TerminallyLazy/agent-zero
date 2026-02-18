@@ -7,8 +7,6 @@ Actions:
 - delete: Remove a document by ID
 """
 
-import asyncio
-
 from flask import Request
 from python.helpers.api import ApiHandler, Input, Output
 
@@ -19,82 +17,72 @@ class EdgequakeDocuments(ApiHandler):
         action = input.get("action", "list")
 
         if action == "list":
-            return await self._list(input)
+            return self._list(input)
         elif action == "upload":
-            return await self._upload(input)
+            return self._upload(input)
         elif action == "delete":
-            return await self._delete(input)
+            return self._delete(input)
         else:
             return {"error": f"Unknown action: {action}"}
 
-    def _get_client(self):
-        from plugins.edgequake.helpers.edgequake_client import get_edgequake_client
-        return get_edgequake_client()
-
-    async def _list(self, input: dict) -> dict:
-        client = self._get_client()
-        if client is None:
-            return {"error": "EdgeQuake is not configured"}
+    def _list(self, input: dict) -> dict:
+        from plugins.edgequake.helpers.edgequake_client import api_request
 
         page = int(input.get("page", 1))
         limit = int(input.get("limit", 10))
 
-        try:
-            docs = await asyncio.to_thread(client.documents.list, page=page, limit=limit)
-            items = getattr(docs, "items", docs) if not isinstance(docs, list) else docs
+        result = api_request("GET", f"/api/v1/documents?page={page}&page_size={limit}")
+        if "error" in result:
+            return result
 
-            documents = []
-            for doc in (items or []):
-                documents.append({
-                    "document_id": getattr(doc, "document_id", getattr(doc, "id", "?")),
-                    "title": getattr(doc, "title", "Untitled"),
-                    "status": getattr(doc, "status", "unknown"),
-                    "created_at": str(getattr(doc, "created_at", "")),
-                    "entity_count": getattr(doc, "entity_count", getattr(doc, "num_entities", 0)),
-                })
+        documents = []
+        for doc in result.get("documents", []):
+            documents.append({
+                "document_id": doc.get("document_id", doc.get("id", "?")),
+                "title": doc.get("title", "Untitled"),
+                "status": doc.get("status", "unknown"),
+                "created_at": str(doc.get("created_at", "")),
+                "entity_count": doc.get("entity_count", doc.get("num_entities", 0)),
+            })
 
-            total = getattr(docs, "total", len(documents))
-            return {
-                "documents": documents,
-                "page": page,
-                "limit": limit,
-                "total": total,
-            }
-        except Exception as e:
-            return {"error": f"Failed to list documents: {str(e)}"}
+        return {
+            "documents": documents,
+            "page": page,
+            "limit": limit,
+            "total": result.get("total", len(documents)),
+        }
 
-    async def _upload(self, input: dict) -> dict:
-        client = self._get_client()
-        if client is None:
-            return {"error": "EdgeQuake is not configured"}
+    def _upload(self, input: dict) -> dict:
+        from plugins.edgequake.helpers.edgequake_client import api_request
 
         content = str(input.get("content", "")).strip()
         if not content:
             return {"error": "Content is required"}
 
         title = str(input.get("title", "")).strip() or None
+        body = {"content": content}
+        if title:
+            body["title"] = title
 
-        try:
-            doc = await asyncio.to_thread(client.documents.upload, content=content, title=title)
-            return {
-                "success": True,
-                "document_id": getattr(doc, "document_id", "unknown"),
-                "title": title or "(untitled)",
-            }
-        except Exception as e:
-            return {"error": f"Failed to upload document: {str(e)}"}
+        result = api_request("POST", "/api/v1/documents", body)
+        if "error" in result:
+            return result
 
-    async def _delete(self, input: dict) -> dict:
-        client = self._get_client()
-        if client is None:
-            return {"error": "EdgeQuake is not configured"}
+        return {
+            "success": True,
+            "document_id": result.get("document_id", result.get("id", "unknown")),
+            "title": title or "(untitled)",
+        }
+
+    def _delete(self, input: dict) -> dict:
+        from plugins.edgequake.helpers.edgequake_client import api_request
 
         document_id = str(input.get("document_id", "")).strip()
         if not document_id:
             return {"error": "document_id is required"}
 
-        try:
-            await asyncio.to_thread(client.documents.delete, document_id=document_id)
-            return {"success": True}
-        except Exception as e:
-            return {"error": f"Failed to delete document: {str(e)}"}
+        result = api_request("DELETE", f"/api/v1/documents/{document_id}")
+        if "error" in result:
+            return result
+
+        return {"success": True}

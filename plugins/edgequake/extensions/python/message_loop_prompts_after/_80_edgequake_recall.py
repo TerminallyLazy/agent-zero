@@ -27,7 +27,7 @@ class EdgequakeRecall(Extension):
                 return
 
             from plugins.edgequake.helpers.edgequake_client import (
-                get_edgequake_client,
+                api_request,
                 get_edgequake_settings,
             )
 
@@ -35,8 +35,8 @@ class EdgequakeRecall(Extension):
             if not settings.get("auto_recall", False):
                 return
 
-            client = get_edgequake_client()
-            if client is None:
+            # Guard: need an API key configured
+            if not settings.get("api_key", "").strip():
                 return
 
             # Get user message text
@@ -58,9 +58,10 @@ class EdgequakeRecall(Extension):
             try:
                 result = await asyncio.wait_for(
                     asyncio.to_thread(
-                        client.query.execute,
-                        query=user_text.strip(),
-                        mode="hybrid",
+                        api_request,
+                        "POST",
+                        "/api/v1/query",
+                        {"query": user_text.strip(), "mode": "hybrid"},
                     ),
                     timeout=timeout,
                 )
@@ -68,7 +69,11 @@ class EdgequakeRecall(Extension):
                 log_item.update(heading="EdgeQuake: recall timed out")
                 return
 
-            answer = getattr(result, "answer", str(result))
+            if "error" in result:
+                log_item.update(heading=f"EdgeQuake: recall failed — {result['error']}")
+                return
+
+            answer = result.get("response", result.get("answer", ""))
             if not answer or not answer.strip():
                 log_item.update(heading="EdgeQuake: no relevant knowledge found")
                 return

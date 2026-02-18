@@ -1,0 +1,48 @@
+# Build EdgeQuake server from source
+# Based on: https://github.com/raphaelmansuy/edgequake/blob/edgequake-main/edgequake/docker/Dockerfile
+
+FROM rust:bookworm AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    git \
+  && rm -rf /var/lib/apt/lists/*
+
+# Clone the EdgeQuake source
+ARG EDGEQUAKE_BRANCH=edgequake-main
+RUN git clone --depth 1 --branch ${EDGEQUAKE_BRANCH} \
+    https://github.com/raphaelmansuy/edgequake.git /app
+
+# Build in release mode (offline SQLx to avoid needing a live DB)
+ENV SQLX_OFFLINE=true
+RUN cargo build --release --manifest-path /app/edgequake/Cargo.toml
+
+# ---------------------------------------------------------------------------
+# Runtime image
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd --create-home --shell /bin/bash edgequake
+
+COPY --from=builder --chown=edgequake:edgequake \
+    /app/edgequake/target/release/edgequake /usr/local/bin/edgequake
+
+USER edgequake
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -sf http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["edgequake"]

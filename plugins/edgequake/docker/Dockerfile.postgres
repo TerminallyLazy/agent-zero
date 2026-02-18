@@ -1,0 +1,46 @@
+# PostgreSQL 16 with pgvector + Apache AGE extensions
+# Based on: https://github.com/raphaelmansuy/edgequake/blob/edgequake-main/edgequake/docker/Dockerfile.postgres
+
+FROM postgres:16-bookworm
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    postgresql-server-dev-16 \
+    curl \
+    git \
+    flex \
+    bison \
+  && rm -rf /var/lib/apt/lists/*
+
+# Build and install pgvector
+RUN cd /tmp \
+  && git clone --branch v0.7.4 https://github.com/pgvector/pgvector.git \
+  && cd pgvector \
+  && make \
+  && make install \
+  && rm -rf /tmp/pgvector
+
+# Build and install Apache AGE
+RUN cd /tmp \
+  && git clone --branch PG16/v1.6.0-rc0 https://github.com/apache/age.git \
+  && cd age \
+  && make \
+  && make install \
+  && rm -rf /tmp/age
+
+# Remove build dependencies to shrink image
+RUN apt-get remove -y \
+    build-essential \
+    postgresql-server-dev-16 \
+    git \
+  && apt-get autoremove -y \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy extension init script (runs on first start)
+COPY init-extensions.sql /docker-entrypoint-initdb.d/01-extensions.sql
+
+EXPOSE 5432
+
+CMD ["postgres"]

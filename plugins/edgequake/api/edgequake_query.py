@@ -5,8 +5,6 @@ Actions:
 - execute: Run a knowledge graph query with specified mode
 """
 
-import asyncio
-
 from flask import Request
 from python.helpers.api import ApiHandler, Input, Output
 
@@ -19,18 +17,12 @@ class EdgequakeQuery(ApiHandler):
         action = input.get("action", "execute")
 
         if action == "execute":
-            return await self._execute(input)
+            return self._execute(input)
         else:
             return {"error": f"Unknown action: {action}"}
 
-    def _get_client(self):
-        from plugins.edgequake.helpers.edgequake_client import get_edgequake_client
-        return get_edgequake_client()
-
-    async def _execute(self, input: dict) -> dict:
-        client = self._get_client()
-        if client is None:
-            return {"error": "EdgeQuake is not configured"}
+    def _execute(self, input: dict) -> dict:
+        from plugins.edgequake.helpers.edgequake_client import api_request
 
         query = str(input.get("query", "")).strip()
         if not query:
@@ -40,22 +32,18 @@ class EdgequakeQuery(ApiHandler):
         if mode not in VALID_MODES:
             mode = "hybrid"
 
-        try:
-            result = await asyncio.to_thread(client.query.execute, query=query, mode=mode)
-            answer = getattr(result, "answer", str(result))
-            sources = getattr(result, "sources", [])
+        result = api_request("POST", "/api/v1/query", {"query": query, "mode": mode})
+        if "error" in result:
+            return result
 
-            formatted_sources = []
-            for src in (sources or []):
-                formatted_sources.append({
-                    "title": getattr(src, "title", ""),
-                    "content": getattr(src, "content", str(src))[:500],
-                })
-
-            return {
-                "answer": answer,
-                "mode": mode,
-                "sources": formatted_sources,
-            }
-        except Exception as e:
-            return {"error": f"Query failed: {str(e)}"}
+        return {
+            "answer": result.get("response", result.get("answer", "")),
+            "mode": mode,
+            "sources": [
+                {
+                    "title": src.get("title", ""),
+                    "content": src.get("content", str(src))[:500],
+                }
+                for src in result.get("sources", [])
+            ],
+        }

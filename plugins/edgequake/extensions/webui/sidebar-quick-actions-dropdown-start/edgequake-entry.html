@@ -1,0 +1,44 @@
+<!-- EdgeQuake dropdown items -->
+<div x-data style="display: contents">
+
+  <div class="dropdown-header">EdgeQuake</div>
+
+  <button
+    class="dropdown-item"
+    id="eq-dropdown-settings"
+    title="EdgeQuake Settings"
+    @click="openModal('../plugins/edgequake/webui/edgequake-settings.html'); dropdownOpen = false">
+    <span class="material-symbols-outlined">settings</span>
+    <span>Settings</span>
+  </button>
+
+  <button
+    class="dropdown-item"
+    id="eq-dropdown-documents"
+    title="EdgeQuake Documents"
+    @click="openModal('../plugins/edgequake/webui/documents/documents-modal.html'); dropdownOpen = false">
+    <span class="material-symbols-outlined">description</span>
+    <span>Documents</span>
+  </button>
+
+  <button
+    class="dropdown-item"
+    id="eq-dropdown-graph"
+    title="EdgeQuake Graph Explorer"
+    @click="openModal('../plugins/edgequake/webui/graph/graph-modal.html'); dropdownOpen = false">
+    <span class="material-symbols-outlined">account_tree</span>
+    <span>Graph Explorer</span>
+  </button>
+
+  <button
+    class="dropdown-item"
+    id="eq-dropdown-query"
+    title="EdgeQuake Query"
+    @click="openModal('../plugins/edgequake/webui/query/query-modal.html'); dropdownOpen = false">
+    <span class="material-symbols-outlined">search</span>
+    <span>Query</span>
+  </button>
+
+  <div class="dropdown-separator"></div>
+
+</div>

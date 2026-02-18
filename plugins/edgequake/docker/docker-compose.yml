@@ -1,0 +1,40 @@
+services:
+  edgequake-postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    container_name: edgequake-postgres
+    environment:
+      POSTGRES_USER: edgequake
+      POSTGRES_PASSWORD: ${EDGEQUAKE_DB_PASSWORD:-edgequake}
+      POSTGRES_DB: edgequake
+    ports:
+      - "${EDGEQUAKE_DB_PORT:-5433}:5432"
+    volumes:
+      - edgequake-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edgequake"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  edgequake:
+    build:
+      context: .
+      dockerfile: Dockerfile.edgequake
+    image: edgequake:latest
+    container_name: edgequake
+    depends_on:
+      edgequake-postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://edgequake:${EDGEQUAKE_DB_PASSWORD:-edgequake}@edgequake-postgres:5432/edgequake
+      RUST_LOG: ${EDGEQUAKE_LOG_LEVEL:-info}
+    ports:
+      - "${EDGEQUAKE_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  edgequake-pgdata:

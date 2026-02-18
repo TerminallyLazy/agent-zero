@@ -10,17 +10,19 @@
 <div x-data>
   <template x-if="$store.edgequakeGraph">
     <div
-      x-create="$store.edgequakeGraph.loadStats()"
+      x-create="$store.edgequakeGraph.open()"
       x-destroy="$store.edgequakeGraph.destroy()"
       class="eq-graph"
     >
       <!-- Error banner -->
       <div class="eq-error" x-show="$store.edgequakeGraph.errorMessage" x-text="$store.edgequakeGraph.errorMessage"></div>
 
-      <!-- Stats overview -->
-      <div class="section" x-show="$store.edgequakeGraph.stats">
-        <div class="section-title">Graph Overview</div>
-        <div class="eq-stats-row">
+      <!-- Loading -->
+      <div class="eq-loading" x-show="$store.edgequakeGraph.loading">Loading knowledge graph...</div>
+
+      <!-- Stats + Search row -->
+      <div class="eq-toolbar" x-show="!$store.edgequakeGraph.loading">
+        <div class="eq-stats-row" x-show="$store.edgequakeGraph.stats">
           <div class="eq-stat">
             <span class="eq-stat-value" x-text="$store.edgequakeGraph.stats?.entity_count || 0"></span>
             <span class="eq-stat-label">Entities</span>
@@ -30,17 +32,6 @@
             <span class="eq-stat-label">Relationships</span>
           </div>
         </div>
-        <div class="eq-labels" x-show="$store.edgequakeGraph.stats?.labels?.length > 0">
-          <span class="eq-label-title">Labels:</span>
-          <template x-for="label in ($store.edgequakeGraph.stats?.labels || []).slice(0, 20)" :key="label">
-            <span class="eq-label-tag" x-text="label"></span>
-          </template>
-        </div>
-      </div>
-
-      <!-- Search -->
-      <div class="section">
-        <div class="section-title">Entity Search</div>
         <div class="eq-search-row">
           <input
             type="text"
@@ -55,47 +46,89 @@
             :disabled="$store.edgequakeGraph.searching || !$store.edgequakeGraph.searchKeyword.trim()"
           >
             <span x-show="!$store.edgequakeGraph.searching">Search</span>
-            <span x-show="$store.edgequakeGraph.searching">Searching...</span>
+            <span x-show="$store.edgequakeGraph.searching">...</span>
           </button>
+          <button
+            class="btn btn-cancel"
+            x-show="$store.edgequakeGraph.searchKeyword.trim()"
+            @click="$store.edgequakeGraph.showAll()"
+          >Show All</button>
         </div>
       </div>
 
-      <!-- Results -->
-      <div class="section" x-show="$store.edgequakeGraph.entities.length > 0 || $store.edgequakeGraph.searching || $store.edgequakeGraph.hasSearched">
-        <div class="section-title">Results</div>
+      <!-- Graph visualization -->
+      <div class="eq-graph-container" x-show="!$store.edgequakeGraph.loading">
+        <svg id="eq-graph-svg"></svg>
+        <div
+          class="eq-graph-empty"
+          x-show="$store.edgequakeGraph.entities.length === 0 && !$store.edgequakeGraph.searching"
+        >
+          <span x-show="$store.edgequakeGraph.hasSearched && $store.edgequakeGraph.searchKeyword.trim()">No entities found.</span>
+          <span x-show="!$store.edgequakeGraph.searchKeyword.trim()">No entities in the knowledge graph yet. Ingest documents to populate it.</span>
+        </div>
+        <div class="eq-graph-hint" x-show="$store.edgequakeGraph.entities.length > 0">
+          Scroll to zoom &middot; Drag nodes to rearrange &middot; Click to select
+        </div>
+      </div>
 
-        <div class="eq-loading" x-show="$store.edgequakeGraph.searching">Searching...</div>
+      <!-- Type legend -->
+      <div class="eq-legend" x-show="!$store.edgequakeGraph.loading && $store.edgequakeGraph.entities.length > 0">
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#7c8cff"></span>Technology</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#ff7cad"></span>Organization</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#7cffc5"></span>Concept</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#ffc77c"></span>Person</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#c77cff"></span>Location</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#ff7c7c"></span>Event</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#7cd4ff"></span>Product</span>
+        <span class="eq-legend-item"><span class="eq-legend-dot" style="background:#aabbcc"></span>Other</span>
+      </div>
 
-        <div class="eq-entity-list" x-show="!$store.edgequakeGraph.searching">
-          <template x-for="(entity, idx) in $store.edgequakeGraph.entities" :key="idx">
-            <div class="eq-entity-card" :class="{'eq-entity-selected': $store.edgequakeGraph.selectedIndex === idx}"
-                 @click="$store.edgequakeGraph.selectEntity(idx)">
-              <div class="eq-entity-header">
-                <span class="eq-entity-name" x-text="entity.name"></span>
-                <span class="eq-entity-type" x-show="entity.entity_type" x-text="entity.entity_type"></span>
-              </div>
-              <div class="eq-entity-desc" x-show="entity.description" x-text="entity.description"></div>
-
-              <!-- Relationships (shown when selected) -->
-              <div class="eq-entity-rels" x-show="$store.edgequakeGraph.selectedIndex === idx && entity.relationships && entity.relationships.length > 0">
-                <div class="eq-rels-title">Relationships</div>
-                <template x-for="(rel, ridx) in (entity.relationships || [])" :key="ridx">
-                  <div class="eq-rel-row">
-                    <span class="eq-rel-source" x-text="rel.source"></span>
-                    <span class="eq-rel-arrow">&rarr;</span>
-                    <span class="eq-rel-type" x-text="rel.relationship"></span>
-                    <span class="eq-rel-arrow">&rarr;</span>
-                    <span class="eq-rel-target" x-text="rel.target"></span>
-                  </div>
-                </template>
-              </div>
+      <!-- Selected node detail -->
+      <div class="eq-detail-panel" x-show="$store.edgequakeGraph.selectedNode">
+        <template x-for="entity in $store.edgequakeGraph.entities.filter(e => e.name === $store.edgequakeGraph.selectedNode)" :key="entity.name">
+          <div>
+            <div class="eq-detail-header">
+              <span class="eq-detail-name" x-text="entity.name"></span>
+              <span class="eq-entity-type" x-show="entity.entity_type" x-text="entity.entity_type"></span>
             </div>
-          </template>
-        </div>
+            <div class="eq-entity-desc" x-show="entity.description" x-text="entity.description"></div>
+            <div class="eq-entity-rels" x-show="entity.relationships && entity.relationships.length > 0">
+              <div class="eq-rels-title">Relationships</div>
+              <template x-for="(rel, ridx) in (entity.relationships || [])" :key="ridx">
+                <div class="eq-rel-row">
+                  <span
+                    class="eq-rel-node"
+                    :class="{'eq-rel-self': rel.source === entity.name}"
+                    x-text="rel.source"
+                    @click="$store.edgequakeGraph.selectNode(rel.source)"
+                  ></span>
+                  <span class="eq-rel-arrow">&rarr;</span>
+                  <span class="eq-rel-type" x-text="rel.relationship"></span>
+                  <span class="eq-rel-arrow">&rarr;</span>
+                  <span
+                    class="eq-rel-node"
+                    :class="{'eq-rel-self': rel.target === entity.name}"
+                    x-text="rel.target"
+                    @click="$store.edgequakeGraph.selectNode(rel.target)"
+                  ></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
 
-        <div class="eq-empty" x-show="!$store.edgequakeGraph.searching && $store.edgequakeGraph.entities.length === 0 && $store.edgequakeGraph.hasSearched">
-          No entities found.
-        </div>
+      <!-- Entity label tags (quick navigation) -->
+      <div class="eq-labels" x-show="!$store.edgequakeGraph.loading && $store.edgequakeGraph.stats?.labels?.length > 0">
+        <span class="eq-label-title">All entities:</span>
+        <template x-for="label in ($store.edgequakeGraph.stats?.labels || []).slice(0, 40)" :key="label">
+          <span
+            class="eq-label-tag eq-label-clickable"
+            :class="{'eq-label-active': $store.edgequakeGraph.selectedNode === label}"
+            x-text="label"
+            @click="$store.edgequakeGraph.selectNode(label)"
+          ></span>
+        </template>
       </div>
 
       <!-- Footer -->
@@ -110,7 +143,7 @@
 .eq-graph {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md, 1rem);
+  gap: var(--spacing-sm, 0.5rem);
 }
 
 .eq-error {
@@ -121,10 +154,26 @@
   font-size: 0.875rem;
 }
 
+.eq-loading {
+  color: var(--color-text, #aaa);
+  opacity: 0.7;
+  padding: 2rem 0;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ── Toolbar: stats + search ── */
+
+.eq-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .eq-stats-row {
   display: flex;
-  gap: 2rem;
-  margin-bottom: 0.75rem;
+  gap: 1.25rem;
 }
 
 .eq-stat {
@@ -133,45 +182,25 @@
 }
 
 .eq-stat-value {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-primary, #7c8cff);
+  line-height: 1;
 }
 
 .eq-stat-label {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.6;
+  opacity: 0.5;
   color: var(--color-text, #aaa);
-}
-
-.eq-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  align-items: center;
-}
-
-.eq-label-title {
-  font-size: 0.75rem;
-  opacity: 0.6;
-  color: var(--color-text, #aaa);
-  margin-right: 0.25rem;
-}
-
-.eq-label-tag {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border-radius: 10px;
-  font-size: 0.7rem;
-  background: var(--color-input, rgba(255,255,255,0.08));
-  color: var(--color-text, #ccc);
 }
 
 .eq-search-row {
   display: flex;
   gap: 0.5rem;
+  flex: 1;
+  min-width: 200px;
 }
 
 .eq-search-input {
@@ -179,50 +208,92 @@
   background: var(--color-input, #1a1a2e);
   border: 1px solid var(--color-border, #333);
   border-radius: 6px;
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.65rem;
   color: var(--color-text, #eee);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
 }
 
-.eq-loading, .eq-empty {
-  color: var(--color-text, #aaa);
-  opacity: 0.7;
-  padding: 1rem 0;
-  font-size: 0.875rem;
-}
+/* ── Graph container ── */
 
-.eq-entity-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.eq-entity-card {
-  background: var(--color-input, rgba(255,255,255,0.04));
+.eq-graph-container {
+  position: relative;
+  height: 450px;
   border: 1px solid var(--color-border, #333);
   border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.eq-graph-container svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.eq-graph-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-text, #aaa);
+  opacity: 0.5;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.eq-graph-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-size: 0.65rem;
+  color: var(--color-text, #aaa);
+  opacity: 0.35;
+}
+
+/* ── Type legend ── */
+
+.eq-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+}
+
+.eq-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--color-text, #aaa);
+  opacity: 0.7;
+}
+
+.eq-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ── Selected node detail panel ── */
+
+.eq-detail-panel {
+  background: var(--color-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-accent, #7c8cff);
+  border-radius: 8px;
   padding: 0.75rem 1rem;
-  cursor: pointer;
-  transition: border-color var(--transition-speed, 0.3s) ease;
 }
 
-.eq-entity-card:hover {
-  border-color: var(--color-accent, #7c8cff);
-}
-
-.eq-entity-selected {
-  border-color: var(--color-accent, #7c8cff);
-  background: rgba(124, 140, 255, 0.06);
-}
-
-.eq-entity-header {
+.eq-detail-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
-.eq-entity-name {
-  font-weight: 600;
+.eq-detail-name {
+  font-weight: 700;
+  font-size: 1rem;
   color: var(--color-text, #eee);
 }
 
@@ -235,7 +306,6 @@
 }
 
 .eq-entity-desc {
-  margin-top: 0.375rem;
   font-size: 0.8rem;
   color: var(--color-text, #aaa);
   opacity: 0.8;
@@ -243,7 +313,7 @@
 }
 
 .eq-entity-rels {
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--color-border, #333);
 }
@@ -252,7 +322,7 @@
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.6;
+  opacity: 0.5;
   margin-bottom: 0.375rem;
   color: var(--color-text, #aaa);
 }
@@ -262,7 +332,7 @@
   align-items: center;
   gap: 0.375rem;
   font-size: 0.8rem;
-  padding: 0.2rem 0;
+  padding: 0.15rem 0;
   color: var(--color-text, #ccc);
 }
 
@@ -274,6 +344,59 @@
 .eq-rel-type {
   font-style: italic;
   opacity: 0.7;
+}
+
+.eq-rel-node {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.eq-rel-node:hover {
+  color: var(--color-accent, #7c8cff);
+}
+
+.eq-rel-self {
+  font-weight: 600;
+}
+
+/* ── Entity label tags ── */
+
+.eq-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.eq-label-title {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  color: var(--color-text, #aaa);
+  margin-right: 0.25rem;
+}
+
+.eq-label-tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  background: var(--color-input, rgba(255,255,255,0.08));
+  color: var(--color-text, #ccc);
+}
+
+.eq-label-clickable {
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.eq-label-clickable:hover {
+  background: rgba(124, 140, 255, 0.2);
+  color: var(--color-accent, #7c8cff);
+}
+
+.eq-label-active {
+  background: rgba(124, 140, 255, 0.3);
+  color: var(--color-accent, #7c8cff);
 }
 </style>
 </body>
