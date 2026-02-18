@@ -104,6 +104,74 @@
         </div>
       </div>
 
+      <!-- Pipeline Settings -->
+      <div class="section">
+        <div class="section-title">Pipeline</div>
+        <div class="section-description">
+          Automatic conversation indexing and knowledge recall. Both are disabled by default.
+        </div>
+
+        <!-- Auto Index -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Auto-Index Conversations</div>
+            <div class="field-description">Automatically upload conversation turns to EdgeQuake for knowledge graph indexing</div>
+          </div>
+          <div class="field-control">
+            <label class="eq-toggle">
+              <input type="checkbox" x-model="$store.edgequakeSettings.auto_index" />
+              <span class="eq-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Index Batch Size -->
+        <div class="field" x-show="$store.edgequakeSettings.auto_index">
+          <div class="field-label">
+            <div class="field-title">Index Batch Size</div>
+            <div class="field-description">Number of conversation turns to buffer before uploading</div>
+          </div>
+          <div class="field-control">
+            <input
+              type="number"
+              x-model.number="$store.edgequakeSettings.index_batch_size"
+              min="1"
+              max="50"
+            />
+          </div>
+        </div>
+
+        <!-- Auto Recall -->
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Auto-Recall Knowledge</div>
+            <div class="field-description">Automatically query the knowledge graph to enrich agent context before each response</div>
+          </div>
+          <div class="field-control">
+            <label class="eq-toggle">
+              <input type="checkbox" x-model="$store.edgequakeSettings.auto_recall" />
+              <span class="eq-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Recall Timeout -->
+        <div class="field" x-show="$store.edgequakeSettings.auto_recall">
+          <div class="field-label">
+            <div class="field-title">Recall Timeout</div>
+            <div class="field-description">Maximum seconds to wait for knowledge graph query (prevents blocking)</div>
+          </div>
+          <div class="field-control">
+            <input
+              type="number"
+              x-model.number="$store.edgequakeSettings.recall_timeout"
+              min="1"
+              max="30"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- Test Connection -->
       <div class="section">
         <div class="section-title">Connection Test</div>
@@ -214,6 +282,48 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+.eq-toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.eq-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.eq-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--color-input, #333);
+  border-radius: 11px;
+  transition: background var(--transition-speed, 0.3s) ease;
+}
+
+.eq-toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--color-text, #ccc);
+  border-radius: 50%;
+  transition: transform var(--transition-speed, 0.3s) ease;
+}
+
+.eq-toggle input:checked + .eq-toggle-slider {
+  background: var(--color-accent, #7c8cff);
+}
+
+.eq-toggle input:checked + .eq-toggle-slider::before {
+  transform: translateX(18px);
 }
 </style>
 </body>

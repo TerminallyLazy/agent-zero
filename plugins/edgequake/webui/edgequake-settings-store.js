@@ -9,6 +9,12 @@ const model = {
   tenant_id: "",
   timeout: 30,
 
+  // Phase 3: Pipeline settings
+  auto_index: false,
+  index_batch_size: 5,
+  auto_recall: false,
+  recall_timeout: 3,
+
   // UI state
   loading: false,
   connection_status: null, // null | "testing" | "connected" | "error"
@@ -28,6 +34,10 @@ const model = {
         this.workspace_id = response.settings.workspace_id || "";
         this.tenant_id = response.settings.tenant_id || "";
         this.timeout = response.settings.timeout || 30;
+        this.auto_index = response.settings.auto_index ?? false;
+        this.index_batch_size = response.settings.index_batch_size ?? 5;
+        this.auto_recall = response.settings.auto_recall ?? false;
+        this.recall_timeout = response.settings.recall_timeout ?? 3;
       }
     } catch (e) {
       console.error("EdgeQuake: failed to load settings:", e);
@@ -49,6 +59,10 @@ const model = {
             workspace_id: this.workspace_id,
             tenant_id: this.tenant_id,
             timeout: this.timeout,
+            auto_index: this.auto_index,
+            index_batch_size: this.index_batch_size,
+            auto_recall: this.auto_recall,
+            recall_timeout: this.recall_timeout,
           },
         }
       );

@@ -23,6 +23,11 @@ DEFAULTS: dict[str, Any] = {
     "workspace_id": "",
     "tenant_id": "",
     "timeout": 30,
+    # Phase 3: Pipeline settings
+    "auto_index": False,
+    "index_batch_size": 5,
+    "auto_recall": False,
+    "recall_timeout": 3,
 }
 
 # Cached client state

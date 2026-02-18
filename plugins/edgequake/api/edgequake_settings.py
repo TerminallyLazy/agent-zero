@@ -10,7 +10,19 @@ Actions:
 from flask import Request
 from python.helpers.api import ApiHandler, Input, Output
 
-ALLOWED_KEYS = {"base_url", "api_key", "workspace_id", "tenant_id", "timeout"}
+def _coerce_bool(v, default=False):
+    """Safely coerce a value to bool, handling string 'false'."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.lower() not in ("false", "0", "no", "")
+    return bool(v) if v is not None else default
+
+
+ALLOWED_KEYS = {
+    "base_url", "api_key", "workspace_id", "tenant_id", "timeout",
+    "auto_index", "index_batch_size", "auto_recall", "recall_timeout",
+}
 
 
 class EdgequakeSettings(ApiHandler):
@@ -67,6 +79,18 @@ class EdgequakeSettings(ApiHandler):
             settings["timeout"] = int(settings.get("timeout", 30))
         except (ValueError, TypeError):
             settings["timeout"] = 30
+
+        # Coerce Phase 3 settings types
+        settings["auto_index"] = _coerce_bool(settings.get("auto_index", False))
+        try:
+            settings["index_batch_size"] = int(settings.get("index_batch_size", 5))
+        except (ValueError, TypeError):
+            settings["index_batch_size"] = 5
+        settings["auto_recall"] = _coerce_bool(settings.get("auto_recall", False))
+        try:
+            settings["recall_timeout"] = int(settings.get("recall_timeout", 3))
+        except (ValueError, TypeError):
+            settings["recall_timeout"] = 3
 
         save_edgequake_settings(settings)
         return {"success": True}
