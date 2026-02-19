@@ -31,6 +31,11 @@
         <span class="material-symbols-outlined">settings</span>
       </button>
 
+      <!-- Prompt Stomper -->
+      <button class="config-button" id="prompt-stomper" @click="openModal('modals/stomper/stomper-dashboard.html')" title="Prompt Stomper">
+        <span class="material-symbols-outlined">shield</span>
+      </button>
+
       <!-- Dropdown Toggle -->
       <button class="config-button dropdown-toggle" @click="dropdownOpen = !dropdownOpen" title="More options">
         <span class="material-symbols-outlined" :class="dropdownOpen ? 'rotated' : ''">expand_more</span>
@@ -68,7 +73,12 @@
         <span class="material-symbols-outlined">settings</span>
         <span>Settings</span>
       </button>
-      
+
+      <button class="dropdown-item" @click="openModal('modals/stomper/stomper-dashboard.html'); dropdownOpen = false">
+        <span class="material-symbols-outlined">shield</span>
+        <span>Prompt Stomper</span>
+      </button>
+
       <div class="dropdown-separator"></div>
       <div class="dropdown-header">Chat Actions</div>
       
