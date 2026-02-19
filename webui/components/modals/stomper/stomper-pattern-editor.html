@@ -1,0 +1,257 @@
+<html>
+<head>
+    <script type="module">
+        import { store } from "/components/modals/stomper/stomper-pattern-editor-store.js";
+    </script>
+</head>
+<body>
+    <div x-data x-create="$store.stomperPatternEditor.open()" x-destroy="$store.stomperPatternEditor.cleanup()">
+        <template x-if="$store.stomperPatternEditor">
+            <div class="stomper-patterns">
+                <div class="stomper-patterns-header">
+                    <span class="stomper-patterns-title">Detection Patterns</span>
+                    <button class="btn btn-ok stomper-add-btn"
+                            @click="$store.stomperPatternEditor.showAddForm = !$store.stomperPatternEditor.showAddForm">
+                        <span class="material-symbols-outlined">add</span>
+                        Add Pattern
+                    </button>
+                </div>
+
+                <!-- Add pattern form -->
+                <div class="stomper-add-form" x-show="$store.stomperPatternEditor.showAddForm" x-transition>
+                    <div class="stomper-form-row">
+                        <input type="text" placeholder="Pattern name"
+                               x-model="$store.stomperPatternEditor.newPattern.name">
+                        <select x-model="$store.stomperPatternEditor.newPattern.category">
+                            <option value="system_rule_change">System Rule Change</option>
+                            <option value="conversation_mockup">Conversation Mockup</option>
+                            <option value="role_play_hijack">Role Play Hijack</option>
+                            <option value="encoding_attack">Encoding Attack</option>
+                            <option value="content_manipulation">Content Manipulation</option>
+                            <option value="data_exfiltration">Data Exfiltration</option>
+                            <option value="privilege_escalation">Privilege Escalation</option>
+                            <option value="availability_attack">Availability Attack</option>
+                        </select>
+                        <select x-model="$store.stomperPatternEditor.newPattern.attack_type">
+                            <option value="direct">Direct</option>
+                            <option value="indirect">Indirect</option>
+                        </select>
+                    </div>
+                    <div class="stomper-form-row">
+                        <input type="text" placeholder="Regex pattern"
+                               x-model="$store.stomperPatternEditor.newPattern.regex"
+                               class="stomper-regex-input">
+                        <div class="stomper-weight-control">
+                            <label>Weight:</label>
+                            <input type="range" min="0" max="1" step="0.05"
+                                   x-model="$store.stomperPatternEditor.newPattern.weight">
+                            <span x-text="parseFloat($store.stomperPatternEditor.newPattern.weight).toFixed(2)"></span>
+                        </div>
+                    </div>
+                    <div class="stomper-form-row">
+                        <input type="text" placeholder="Test text (type to test regex)"
+                               x-model="$store.stomperPatternEditor.testText"
+                               @input="$store.stomperPatternEditor.testRegex()">
+                        <template x-if="$store.stomperPatternEditor.testResult !== null">
+                            <span class="stomper-test-result"
+                                  :class="$store.stomperPatternEditor.testResult.matches ? 'match' : 'no-match'"
+                                  x-text="$store.stomperPatternEditor.testResult.matches
+                                    ? 'Match: ' + ($store.stomperPatternEditor.testResult.matched_text || '')
+                                    : ($store.stomperPatternEditor.testResult.error || 'No match')">
+                            </span>
+                        </template>
+                    </div>
+                    <div class="stomper-form-actions">
+                        <button class="btn btn-ok" @click="$store.stomperPatternEditor.addPattern()">Save Pattern</button>
+                        <button class="btn btn-cancel" @click="$store.stomperPatternEditor.showAddForm = false">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Pattern list -->
+                <div class="stomper-pattern-list">
+                    <template x-for="pattern in $store.stomperPatternEditor.patterns" :key="pattern.name">
+                        <div class="stomper-pattern-row" :class="{ 'disabled': !pattern.enabled }">
+                            <div class="stomper-pattern-info">
+                                <div class="stomper-pattern-name">
+                                    <input type="checkbox"
+                                           :checked="pattern.enabled"
+                                           @change="$store.stomperPatternEditor.togglePattern(pattern.name, $event.target.checked)">
+                                    <span x-text="pattern.name"></span>
+                                    <span class="stomper-pattern-badge builtin" x-show="pattern.builtin">built-in</span>
+                                    <span class="stomper-pattern-badge custom" x-show="!pattern.builtin">custom</span>
+                                </div>
+                                <div class="stomper-pattern-meta">
+                                    <span class="stomper-pattern-category" x-text="pattern.category"></span>
+                                    <span class="stomper-pattern-type" x-text="pattern.attack_type"></span>
+                                    <span class="stomper-pattern-weight" x-text="'w:' + pattern.weight"></span>
+                                </div>
+                                <div class="stomper-pattern-regex" x-text="pattern.regex"></div>
+                            </div>
+                            <button class="stomper-pattern-delete"
+                                    x-show="!pattern.builtin"
+                                    @click="$store.stomperPatternEditor.removePattern(pattern.name)">
+                                <span class="material-symbols-outlined">delete</span>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .stomper-patterns {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stomper-patterns-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stomper-patterns-title { font-weight: 600; }
+
+        .stomper-add-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            font-size: 13px;
+        }
+
+        .stomper-add-btn .material-symbols-outlined { font-size: 16px; }
+
+        .stomper-add-form {
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stomper-form-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .stomper-form-row input[type="text"],
+        .stomper-form-row select {
+            padding: 6px 10px;
+            background: var(--color-input);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            color: var(--color-text);
+            font-size: 13px;
+        }
+
+        .stomper-form-row input[type="text"] { flex: 1; min-width: 150px; }
+        .stomper-regex-input { font-family: monospace !important; }
+
+        .stomper-weight-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .stomper-weight-control input[type="range"] { width: 80px; }
+
+        .stomper-test-result {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .stomper-test-result.match { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+        .stomper-test-result.no-match { background: rgba(231, 76, 60, 0.1); color: #e74c3c; }
+
+        .stomper-form-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .stomper-pattern-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .stomper-pattern-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            transition: opacity var(--transition-speed) ease;
+        }
+
+        .stomper-pattern-row.disabled { opacity: 0.4; }
+
+        .stomper-pattern-info { flex: 1; min-width: 0; }
+
+        .stomper-pattern-name {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .stomper-pattern-name input[type="checkbox"] { width: auto; }
+
+        .stomper-pattern-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            text-transform: uppercase;
+        }
+
+        .stomper-pattern-badge.builtin { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+        .stomper-pattern-badge.custom { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
+
+        .stomper-pattern-meta {
+            display: flex;
+            gap: 8px;
+            margin-top: 2px;
+            font-size: 11px;
+            color: var(--color-text);
+            opacity: 0.6;
+        }
+
+        .stomper-pattern-regex {
+            margin-top: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--color-text);
+            opacity: 0.5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stomper-pattern-delete {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--color-text);
+            opacity: 0.4;
+            padding: 4px;
+        }
+
+        .stomper-pattern-delete:hover { opacity: 1; color: #e74c3c; }
+        .stomper-pattern-delete .material-symbols-outlined { font-size: 18px; }
+    </style>
+</body>
+</html>
