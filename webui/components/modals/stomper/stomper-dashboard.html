@@ -1,0 +1,183 @@
+<html>
+<head>
+    <title>Prompt Stomper</title>
+    <script type="module">
+        import { store } from "/components/modals/stomper/stomper-dashboard-store.js";
+    </script>
+</head>
+<body>
+    <div x-data
+         x-create="$store.stomperDashboard.open()"
+         x-destroy="$store.stomperDashboard.cleanup()">
+        <template x-if="$store.stomperDashboard">
+            <div class="stomper-dashboard">
+                <!-- Tab navigation -->
+                <div class="stomper-tabs">
+                    <button class="stomper-tab"
+                            :class="{ 'active': $store.stomperDashboard.activeTab === 'log' }"
+                            @click="$store.stomperDashboard.setTab('log')">
+                        <span class="material-symbols-outlined">list_alt</span>
+                        Detection Log
+                    </button>
+                    <button class="stomper-tab"
+                            :class="{ 'active': $store.stomperDashboard.activeTab === 'settings' }"
+                            @click="$store.stomperDashboard.setTab('settings')">
+                        <span class="material-symbols-outlined">settings</span>
+                        Settings
+                    </button>
+                    <button class="stomper-tab"
+                            :class="{ 'active': $store.stomperDashboard.activeTab === 'patterns' }"
+                            @click="$store.stomperDashboard.setTab('patterns')">
+                        <span class="material-symbols-outlined">pattern</span>
+                        Patterns
+                    </button>
+                </div>
+
+                <!-- Status bar -->
+                <div class="stomper-status-bar" x-show="$store.stomperDashboard.status">
+                    <div class="stomper-stat">
+                        <span class="stomper-stat-value"
+                              x-text="$store.stomperDashboard.status?.stats?.total_scans || 0"></span>
+                        <span class="stomper-stat-label">Scans</span>
+                    </div>
+                    <div class="stomper-stat">
+                        <span class="stomper-stat-value stomper-stat-blocks"
+                              x-text="$store.stomperDashboard.status?.stats?.total_blocks || 0"></span>
+                        <span class="stomper-stat-label">Blocked</span>
+                    </div>
+                    <div class="stomper-stat">
+                        <span class="stomper-stat-value stomper-stat-warns"
+                              x-text="$store.stomperDashboard.status?.stats?.total_warns || 0"></span>
+                        <span class="stomper-stat-label">Warned</span>
+                    </div>
+                    <div class="stomper-enabled-badge"
+                         :class="$store.stomperDashboard.status?.enabled ? 'enabled' : 'disabled'">
+                        <span class="material-symbols-outlined" x-text="$store.stomperDashboard.status?.enabled ? 'shield' : 'shield_question'"></span>
+                        <span x-text="$store.stomperDashboard.status?.enabled ? 'Active' : 'Disabled'"></span>
+                    </div>
+                </div>
+
+                <!-- Tab content -->
+                <div class="stomper-tab-content">
+                    <template x-if="$store.stomperDashboard.activeTab === 'log'">
+                        <div>
+                            <x-component path="modals/stomper/stomper-log.html"></x-component>
+                        </div>
+                    </template>
+                    <template x-if="$store.stomperDashboard.activeTab === 'settings'">
+                        <div>
+                            <x-component path="modals/stomper/stomper-settings.html"></x-component>
+                        </div>
+                    </template>
+                    <template x-if="$store.stomperDashboard.activeTab === 'patterns'">
+                        <div>
+                            <x-component path="modals/stomper/stomper-pattern-editor.html"></x-component>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .stomper-dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 400px;
+        }
+
+        .stomper-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 0;
+        }
+
+        .stomper-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--color-text);
+            cursor: pointer;
+            font-size: var(--font-size-normal);
+            opacity: 0.6;
+            transition: all var(--transition-speed) ease;
+        }
+
+        .stomper-tab:hover { opacity: 0.8; }
+
+        .stomper-tab.active {
+            opacity: 1;
+            border-bottom-color: var(--color-accent);
+        }
+
+        .stomper-tab .material-symbols-outlined { font-size: 18px; }
+
+        .stomper-status-bar {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            padding: 8px 12px;
+            background: var(--color-panel);
+            border-radius: 8px;
+            border: 1px solid var(--color-border);
+        }
+
+        .stomper-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .stomper-stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--color-primary);
+        }
+
+        .stomper-stat-blocks { color: #e74c3c; }
+        .stomper-stat-warns { color: #f39c12; }
+
+        .stomper-stat-label {
+            font-size: 11px;
+            color: var(--color-text);
+            opacity: 0.6;
+            text-transform: uppercase;
+        }
+
+        .stomper-enabled-badge {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .stomper-enabled-badge.enabled {
+            background: rgba(46, 204, 113, 0.15);
+            color: #2ecc71;
+        }
+
+        .stomper-enabled-badge.disabled {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+        }
+
+        .stomper-enabled-badge .material-symbols-outlined { font-size: 18px; }
+
+        .stomper-tab-content {
+            flex: 1;
+            min-height: 0;
+        }
+    </style>
+</body>
+</html>
