@@ -1,0 +1,8 @@
+{
+  "levels": [
+    { "level": 0, "name": "safe",   "min_score": 0.0, "max_score": 0.2, "action": "pass" },
+    { "level": 1, "name": "low",    "min_score": 0.2, "max_score": 0.5, "action": "log" },
+    { "level": 2, "name": "medium", "min_score": 0.5, "max_score": 0.8, "action": "warn" },
+    { "level": 3, "name": "high",   "min_score": 0.8, "max_score": 1.0, "action": "block" }
+  ]
+}

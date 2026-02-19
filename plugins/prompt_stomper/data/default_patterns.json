@@ -1,0 +1,283 @@
+{
+  "patterns": [
+    {
+      "name": "ignore_previous_instructions",
+      "category": "system_rule_change",
+      "attack_type": "direct",
+      "regex": "(?i)\\b(ignore|disregard|forget|override|bypass|skip|dismiss)\\b[^.]{0,30}\\b(previous|prior|above|earlier|all|your|system|original|initial)\\b[^.]{0,30}\\b(instructions?|rules?|guidelines?|prompts?|constraints?|directions?|programming|training)\\b",
+      "weight": 0.7,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "reset_identity",
+      "category": "system_rule_change",
+      "attack_type": "direct",
+      "regex": "(?i)\\b(you are now|from now on you|you must now|you will now|henceforth you|starting now you|you have been reprogrammed|your new (identity|name|role) is)\\b",
+      "weight": 0.75,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "do_anything_now",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)\\b(DAN|do anything now|dev(eloper)? mode|jailbreak|unfiltered mode|unrestricted mode|no (rules|limits|restrictions|censorship|filters|guidelines))\\b",
+      "weight": 0.8,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "pretend_to_be",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)\\b(pretend|act|behave|roleplay|role-play|simulate|impersonate)\\b[^.]{0,20}\\b(to be|as if|like|that you are|you('re| are))\\b[^.]{0,30}\\b(no (restrictions?|rules?|limits?|filters?)|unrestricted|unfiltered|without (rules?|limits?|restrictions?|guidelines?))\\b",
+      "weight": 0.75,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "persona_replacement",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)(you have been disconnected|you are no longer|your previous (instructions|personality|identity|persona) (has|have) been|enter (character|persona|role) mode|switch to .{1,30} mode|activate .{1,30} persona)",
+      "weight": 0.8,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "conversation_mockup_user",
+      "category": "conversation_mockup",
+      "attack_type": "direct",
+      "regex": "(?m)^(User|Human|Customer|Questioner)\\s*:\\s*.{5,}$",
+      "weight": 0.4,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "conversation_mockup_assistant",
+      "category": "conversation_mockup",
+      "attack_type": "direct",
+      "regex": "(?m)^(Assistant|AI|Bot|Agent|System|ChatGPT|Claude|GPT)\\s*:\\s*.{5,}$",
+      "weight": 0.5,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "system_instruction_mockup",
+      "category": "conversation_mockup",
+      "attack_type": "direct",
+      "regex": "(?i)(\\[SYSTEM\\]|\\[INST\\]|<<SYS>>|<\\|system\\|>|<\\|im_start\\|>system|### System:?|## System Prompt)",
+      "weight": 0.7,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "base64_encoded_block",
+      "category": "encoding_attack",
+      "attack_type": "direct",
+      "regex": "(?i)(decode|decipher|translate|interpret|convert)\\s+(this|the following|below)[^.]{0,20}(base64|encoded|cipher|encrypted|rot13|hex).*?[A-Za-z0-9+/]{20,}={0,2}",
+      "weight": 0.65,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "url_encoded_instructions",
+      "category": "encoding_attack",
+      "attack_type": "direct",
+      "regex": "(?i)(respond|reply|answer|output|speak|write|communicate)\\s+(only |exclusively )?(in|using|with)\\s+(url|percent|hex|base64|rot13|binary|morse|unicode|braille)\\s+(encoding|code|format)",
+      "weight": 0.7,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "encoded_payload_standalone",
+      "category": "encoding_attack",
+      "attack_type": "direct",
+      "regex": "(?:%[0-9A-Fa-f]{2}){8,}",
+      "weight": 0.3,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "reveal_system_prompt",
+      "category": "system_rule_change",
+      "attack_type": "direct",
+      "regex": "(?i)(reveal|show|display|print|output|repeat|echo|tell me|what (is|are)|share|disclose|leak)\\s+[^.]{0,30}(system prompt|system (message|instructions?|rules?)|initial prompt|hidden (prompt|instructions?)|your (instructions?|rules?|programming|training|directives))",
+      "weight": 0.6,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "sudo_mode",
+      "category": "system_rule_change",
+      "attack_type": "direct",
+      "regex": "(?i)(sudo|admin|root|superuser|god)\\s*(mode|access|privileges?|override|command|prompt)",
+      "weight": 0.65,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "hypothetical_bypass",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)(hypothetically|theoretically|in a fictional|imagine|let's say|what if|for (a |an )?(story|novel|script|movie|game|creative writing))\\s+[^.]{0,60}(no (restrictions?|rules?|limits?)|ignore (safety|content|guidelines?)|bypass|without (filters?|restrictions?))",
+      "weight": 0.55,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "opposite_day",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)(opposite day|opposite mode|reverse (mode|psychology)|evil (twin|mode|version)|dark (mode|side|version)|shadow (mode|self)|villain mode|chaos mode|anti-?(ai|assistant|safety))",
+      "weight": 0.7,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "token_smuggling",
+      "category": "encoding_attack",
+      "attack_type": "direct",
+      "regex": "(?i)(split|break|divide|separate|space out|fragment)\\s+[^.]{0,30}(word|letter|character|token)s?\\s+[^.]{0,30}(to (avoid|bypass|evade|trick)|so (it|the|you) (won't|doesn't|can't|cannot))",
+      "weight": 0.6,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "hidden_system_annotation",
+      "category": "content_manipulation",
+      "attack_type": "indirect",
+      "regex": "(?i)(\\[SYSTEM ANNOTATION[:\\]]|\\[AI (NOTE|INSTRUCTION|DIRECTIVE)[:\\]]|\\[ADMIN (NOTE|OVERRIDE)[:\\]]|\\[HIDDEN INSTRUCTION[:\\]]|\\[INTERNAL[:\\]]|<!-- (system|instruction|directive|override))",
+      "weight": 0.85,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "embedded_instruction_to_ai",
+      "category": "content_manipulation",
+      "attack_type": "indirect",
+      "regex": "(?i)(if you are (a |an )?(ai|llm|language model|assistant|chatbot|digital assistant)|attention (ai|assistant|model|system)|note to (ai|assistant|system)|dear (ai|assistant|model))\\s*[,:;]\\s*.{5,}",
+      "weight": 0.8,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "exfil_send_data",
+      "category": "data_exfiltration",
+      "attack_type": "indirect",
+      "regex": "(?i)(send|forward|transmit|email|post|upload|exfiltrate|share|submit|relay)\\s+[^.]{0,40}(to|at|@|via)\\s+[^.]{0,40}(\\S+@\\S+\\.\\S+|https?://|ftp://|\\S+\\.com|\\S+\\.org|\\S+\\.net|\\S+\\.io)",
+      "weight": 0.7,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "exfil_include_private",
+      "category": "data_exfiltration",
+      "attack_type": "indirect",
+      "regex": "(?i)(include|attach|append|embed|insert|add)\\s+[^.]{0,30}(private|secret|confidential|internal|sensitive|personal|api.?key|password|credential|token|ssn|social security|credit card)",
+      "weight": 0.75,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "hidden_override_user",
+      "category": "content_manipulation",
+      "attack_type": "indirect",
+      "regex": "(?i)(ignore (what )?the user|do not (tell|inform|alert|notify|warn) the user|hide (this|the following) from the user|the user (should|must|shall) not (know|see|be told)|keep (this|it) (secret|hidden) from|don't let the user)",
+      "weight": 0.85,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "privilege_escalation",
+      "category": "privilege_escalation",
+      "attack_type": "indirect",
+      "regex": "(?i)(admin(istrator)? (mode|access|privileges?|override)|root (access|mode|shell)|elevated (privileges?|access|permissions?)|escalat(e|ion) (privileges?|permissions?)|superuser|su -|chmod 777|grant (all|full) (access|permissions?))",
+      "weight": 0.7,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "backdoor_creation",
+      "category": "privilege_escalation",
+      "attack_type": "indirect",
+      "regex": "(?i)(create|install|set up|establish|open)\\s+[^.]{0,20}(backdoor|reverse shell|remote (access|connection)|ssh (tunnel|key)|persistence|bind shell)",
+      "weight": 0.8,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "execute_code_command",
+      "category": "privilege_escalation",
+      "attack_type": "indirect",
+      "regex": "(?i)(execute|run|eval|exec)\\s+(this|the following|below)\\s+[^.]{0,20}(code|command|script|payload|shell|bash|python|javascript)\\s*[:\\n]",
+      "weight": 0.6,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "availability_dos",
+      "category": "availability_attack",
+      "attack_type": "indirect",
+      "regex": "(?i)(repeat (this |the following )?(forever|infinitely|until|endlessly|10000 times|\\d{4,} times)|enter (an )?infinite loop|crash (yourself|the system|the ai)|consume (all |maximum )?resources|while\\s*\\(\\s*true\\s*\\)|for\\s*\\(\\s*;\\s*;\\s*\\))",
+      "weight": 0.65,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "availability_garbage",
+      "category": "availability_attack",
+      "attack_type": "indirect",
+      "regex": "(?i)(respond (only )?(with|using) (gibberish|nonsense|random (characters?|letters?|words?)|garbage)|output (nothing|blank|empty)|refuse (all|every|any) (requests?|queries?|prompts?|questions?)|shut (down|up)|stop (responding|working|functioning))",
+      "weight": 0.6,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "configured_to_follow",
+      "category": "content_manipulation",
+      "attack_type": "indirect",
+      "regex": "(?i)(\\w+ has configured you to|you (have been|are|were) (configured|instructed|programmed|set up|told) (to|by)|your (owner|admin|creator|master|operator) (wants|requires|demands|instructed) you to|follow (these|my|the following) instructions? carefully)",
+      "weight": 0.8,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "multi_persona_injection",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)(respond as (both|two|multiple)|split (your )?personality|you have (two|2|multiple) (modes?|personas?|personalities)|switch between .{1,30} and .{1,30})",
+      "weight": 0.6,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "grandma_exploit",
+      "category": "role_play_hijack",
+      "attack_type": "direct",
+      "regex": "(?i)(my (grandma|grandmother|nana|granny|deceased|dead|late)\\s+[^.]{0,30}(used to|would|always)\\s+[^.]{0,30}(tell|read|say|recite|sing|whisper)|pretend (to be|you are) my (grandma|grandmother|dead|deceased))",
+      "weight": 0.55,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "prompt_leaking_markdown",
+      "category": "data_exfiltration",
+      "attack_type": "indirect",
+      "regex": "(?i)(\\!\\[\\w*\\]\\(https?://[^)]*\\?.*?(prompt|system|instruction|context|message|conversation|history|secret|key|token|password))",
+      "weight": 0.85,
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "name": "instruction_delimiter_injection",
+      "category": "conversation_mockup",
+      "attack_type": "direct",
+      "regex": "(?i)(---+\\s*end of (system|initial) (prompt|instructions?|message)\\s*---+|={3,}\\s*(new|updated|real|actual) (system|initial) (prompt|instructions?)\\s*={3,}|\\*{3,}\\s*IMPORTANT (NEW |UPDATED )?(INSTRUCTIONS?|RULES?)\\s*\\*{3,})",
+      "weight": 0.8,
+      "enabled": true,
+      "builtin": true
+    }
+  ]
+}
