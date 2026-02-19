@@ -5,7 +5,7 @@
     </script>
 </head>
 <body>
-    <div x-data x-create="$store.stomperSettings.open()">
+    <div x-data x-create="$store.stomperSettings.open()" x-destroy="$store.stomperSettings.cleanup()">
         <template x-if="$store.stomperSettings">
             <div class="stomper-settings">
                 <div class="section">

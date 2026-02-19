@@ -16,6 +16,7 @@ from python.helpers import files
 
 LOG_FILE = files.get_abs_path("usr", "prompt_stomper", "detection_log.json")
 MAX_EVENTS = 500
+SAVE_EVERY_N = 10  # Persist to disk every N events
 
 
 @dataclass
@@ -49,6 +50,7 @@ class StomperLog:
         self._lock = threading.RLock()
         self._events: list[DetectionEvent] = []
         self._stats = {"total_scans": 0, "total_blocks": 0, "total_warns": 0}
+        self._unsaved_count = 0
 
     def add_event(self, event: DetectionEvent):
         with self._lock:
@@ -62,6 +64,12 @@ class StomperLog:
             # Enforce limit
             if len(self._events) > MAX_EVENTS:
                 self._events = self._events[-MAX_EVENTS:]
+
+            # Periodically persist to disk
+            self._unsaved_count += 1
+            if self._unsaved_count >= SAVE_EVERY_N:
+                self._unsaved_count = 0
+                self._save_to_disk_locked()
 
     def record_scan(self):
         """Record a scan that found nothing notable (Safe result)."""
@@ -90,16 +98,20 @@ class StomperLog:
             self._events = []
             self._stats = {"total_scans": 0, "total_blocks": 0, "total_warns": 0}
 
-    def save_to_disk(self):
-        """Persist current events to disk."""
-        with self._lock:
-            data = {
-                "events": [e.to_dict() for e in self._events],
-                "stats": self._stats,
-            }
+    def _save_to_disk_locked(self):
+        """Internal: persist to disk. Caller must hold self._lock."""
+        data = {
+            "events": [e.to_dict() for e in self._events],
+            "stats": self._stats,
+        }
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
         with open(LOG_FILE, "w") as f:
             json.dump(data, f)
+
+    def save_to_disk(self):
+        """Persist current events to disk."""
+        with self._lock:
+            self._save_to_disk_locked()
 
     def load_from_disk(self):
         """Load events from disk if available."""
@@ -128,7 +140,12 @@ class StomperLog:
 
 # Module-level singleton
 _stomper_log = StomperLog()
+_stomper_log_initialized = False
 
 
 def get_stomper_log() -> StomperLog:
+    global _stomper_log_initialized
+    if not _stomper_log_initialized:
+        _stomper_log_initialized = True
+        _stomper_log.load_from_disk()
     return _stomper_log

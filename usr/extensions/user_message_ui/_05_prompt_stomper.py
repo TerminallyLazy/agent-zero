@@ -34,6 +34,11 @@ class PromptStomperDirectShield(Extension):
             stomper_log.record_scan()
             return
 
+        # Determine effective action: for high severity, use the user's block_action preference
+        effective_action = result.action
+        if result.severity >= 3:
+            effective_action = settings.get("block_action", "block")
+
         # Log the detection event
         event = DetectionEvent(
             timestamp=time.time(),
@@ -41,7 +46,7 @@ class PromptStomperDirectShield(Extension):
             severity=result.severity,
             severity_name=result.severity_name,
             score=result.score,
-            action=result.action,
+            action=effective_action,
             categories=result.categories,
             text_snippet=result.text_snippet,
             source="user_message",
@@ -50,7 +55,7 @@ class PromptStomperDirectShield(Extension):
 
         # Log to agent's UI log
         if self.agent and self.agent.context:
-            if result.action == "block":
+            if effective_action == "block":
                 self.agent.context.log.log(
                     type="warning",
                     heading="icon://shield Prompt Stomper: Message BLOCKED",
@@ -78,7 +83,7 @@ class PromptStomperDirectShield(Extension):
                     "The original message has been removed for security.]"
                 )
 
-            elif result.action == "warn":
+            elif effective_action == "warn":
                 self.agent.context.log.log(
                     type="warning",
                     heading="icon://shield Prompt Stomper: Suspicious message detected",

@@ -17,6 +17,7 @@ from python.helpers import files
 PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_PATTERNS_FILE = os.path.join(PLUGIN_DIR, "data", "default_patterns.json")
 CUSTOM_PATTERNS_FILE = files.get_abs_path("usr", "prompt_stomper", "custom_patterns.json")
+BUILTIN_OVERRIDES_FILE = files.get_abs_path("usr", "prompt_stomper", "builtin_overrides.json")
 
 
 @dataclass
@@ -29,11 +30,17 @@ class Pattern:
     enabled: bool
     builtin: bool
     _compiled: Optional[re.Pattern] = field(default=None, repr=False, compare=False)
+    _compile_failed: bool = field(default=False, repr=False, compare=False)
 
     @property
     def compiled(self) -> re.Pattern:
-        if self._compiled is None:
-            self._compiled = re.compile(self.regex)
+        if self._compiled is None and not self._compile_failed:
+            try:
+                self._compiled = re.compile(self.regex)
+            except re.error:
+                self._compile_failed = True
+                # Return a pattern that never matches
+                self._compiled = re.compile(r"(?!)")
         return self._compiled
 
 
@@ -60,6 +67,12 @@ class PatternRegistry:
                     enabled=p.get("enabled", True),
                     builtin=True,
                 ))
+
+        # Apply built-in overrides (persisted toggle states)
+        builtin_overrides = self._load_builtin_overrides()
+        for p in self._patterns:
+            if p.builtin and p.name in builtin_overrides:
+                p.enabled = builtin_overrides[p.name]
 
         # Load custom patterns
         if os.path.exists(CUSTOM_PATTERNS_FILE):
@@ -97,7 +110,14 @@ class PatternRegistry:
         return list(self._patterns)
 
     def add_custom_pattern(self, name: str, category: str, attack_type: str, regex: str, weight: float) -> Pattern:
-        """Add a custom pattern and persist to disk."""
+        """Add a custom pattern and persist to disk. Raises ValueError if name is duplicate."""
+        self.ensure_loaded()
+
+        # Reject duplicate names
+        for existing in self._patterns:
+            if existing.name == name:
+                raise ValueError(f"A pattern named '{name}' already exists")
+
         # Validate regex compiles
         re.compile(regex)
 
@@ -124,10 +144,29 @@ class PatternRegistry:
         for p in self._patterns:
             if p.name == name:
                 p.enabled = enabled
-                if not p.builtin:
+                if p.builtin:
+                    self._save_builtin_overrides()
+                else:
                     self._save_custom_patterns()
                 return True
         return False
+
+    def _load_builtin_overrides(self) -> dict[str, bool]:
+        """Load persisted built-in pattern enable/disable overrides."""
+        if not os.path.exists(BUILTIN_OVERRIDES_FILE):
+            return {}
+        try:
+            with open(BUILTIN_OVERRIDES_FILE, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+
+    def _save_builtin_overrides(self):
+        """Persist built-in pattern enable/disable overrides to disk."""
+        overrides = {p.name: p.enabled for p in self._patterns if p.builtin}
+        os.makedirs(os.path.dirname(BUILTIN_OVERRIDES_FILE), exist_ok=True)
+        with open(BUILTIN_OVERRIDES_FILE, "w") as f:
+            json.dump(overrides, f, indent=2)
 
     def _save_custom_patterns(self):
         """Persist custom patterns to disk."""

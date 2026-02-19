@@ -1,6 +1,19 @@
 import re
+import time
 
 from python.helpers.api import ApiHandler, Input, Output, Request
+
+
+def _test_regex_performance(compiled: re.Pattern, timeout: float = 0.5) -> float | None:
+    """Test a compiled regex against a pathological string. Returns elapsed time, or None if safe."""
+    test_str = "a" * 1000
+    start = time.time()
+    try:
+        compiled.search(test_str)
+    except Exception:
+        pass
+    elapsed = time.time() - start
+    return elapsed if elapsed > timeout else None
 
 
 class StomperPatterns(ApiHandler):
@@ -39,12 +52,20 @@ class StomperPatterns(ApiHandler):
 
             # Validate regex
             try:
-                re.compile(regex)
+                compiled = re.compile(regex)
             except re.error as e:
                 return {"error": f"Invalid regex: {str(e)}"}
 
+            # ReDoS safety: test against pathological input
+            slow_time = _test_regex_performance(compiled)
+            if slow_time is not None:
+                return {"error": f"Regex is too slow ({slow_time:.1f}s on test input). Avoid nested quantifiers."}
+
             weight = max(0.0, min(1.0, weight))
-            pattern = registry.add_custom_pattern(name, category, attack_type, regex, weight)
+            try:
+                pattern = registry.add_custom_pattern(name, category, attack_type, regex, weight)
+            except ValueError as e:
+                return {"error": str(e)}
             return {"status": "added", "pattern": {"name": pattern.name, "category": pattern.category}}
 
         elif action == "remove":
@@ -67,6 +88,10 @@ class StomperPatterns(ApiHandler):
                 return {"matches": False, "error": "No regex provided"}
             try:
                 compiled = re.compile(regex)
+                # ReDoS safety check
+                slow_time = _test_regex_performance(compiled)
+                if slow_time is not None:
+                    return {"matches": False, "error": f"Regex is too slow ({slow_time:.1f}s on test input). Avoid nested quantifiers."}
                 match = compiled.search(text)
                 return {
                     "matches": bool(match),

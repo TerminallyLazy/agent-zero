@@ -116,6 +116,11 @@ class Scanner:
         # Aggregate: weighted combination, clamped to [0.0, 1.0]
         # Pattern matches are the primary signal (60%), heuristics (25%), density (15%)
         raw_score = (pattern_score * 0.6) + (heuristic_score * 0.25) + (density_score * 0.15)
+
+        # Apply sensitivity multiplier from settings (default 1.0)
+        sensitivity = float(self.settings.get("sensitivity", 1.0))
+        raw_score *= sensitivity
+
         score = max(0.0, min(1.0, raw_score))
 
         # Determine severity from score
@@ -244,8 +249,10 @@ _scanner = Scanner(_registry)
 
 
 def get_scanner() -> Scanner:
-    """Get the module-level scanner singleton."""
+    """Get the module-level scanner singleton, with current settings applied."""
+    from plugins.prompt_stomper.helpers.stomper_settings import get_settings
     _registry.ensure_loaded()
+    _scanner.settings = get_settings()
     return _scanner
 
 

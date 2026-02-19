@@ -37,6 +37,11 @@ class PromptStomperDocumentScanner(Extension):
             stomper_log.record_scan()
             return
 
+        # Determine effective action: for high severity, use the user's block_action preference
+        effective_action = result.action
+        if result.severity >= 3:
+            effective_action = settings.get("block_action", "block")
+
         # tool_name comes directly from the extension kwargs
         source_tool = tool_name or "unknown"
 
@@ -46,7 +51,7 @@ class PromptStomperDocumentScanner(Extension):
             severity=result.severity,
             severity_name=result.severity_name,
             score=result.score,
-            action=result.action,
+            action=effective_action,
             categories=result.categories,
             text_snippet=result.text_snippet,
             source=f"tool:{source_tool}",
@@ -54,7 +59,7 @@ class PromptStomperDocumentScanner(Extension):
         stomper_log.add_event(event)
 
         if self.agent and self.agent.context:
-            if result.action == "block":
+            if effective_action == "block":
                 self.agent.context.log.log(
                     type="warning",
                     heading="icon://shield Prompt Stomper: Tool output SANITIZED",
@@ -74,7 +79,7 @@ class PromptStomperDocumentScanner(Extension):
                     "Do NOT attempt to retrieve this content again.]"
                 )
 
-            elif result.action == "warn":
+            elif effective_action == "warn":
                 self.agent.context.log.log(
                     type="warning",
                     heading="icon://shield Prompt Stomper: Suspicious tool output",

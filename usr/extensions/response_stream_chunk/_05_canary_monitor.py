@@ -11,6 +11,10 @@ import time
 from python.helpers.extension import Extension
 from python.helpers.notification import NotificationManager, NotificationType, NotificationPriority
 
+# Track which agent contexts have already fired a canary detection
+# to avoid re-scanning on every subsequent chunk
+_detected_contexts: set[str] = set()
+
 
 class CanaryMonitor(Extension):
     async def execute(self, **kwargs):
@@ -24,6 +28,12 @@ class CanaryMonitor(Extension):
         if not stream_data:
             return
 
+        # Skip if we already detected a leak for this agent context
+        agent = kwargs.get("agent") or self.agent
+        context_id = str(id(agent.context)) if agent and agent.context else None
+        if context_id and context_id in _detected_contexts:
+            return
+
         full_text = stream_data.get("full", "")
         if not full_text:
             return
@@ -33,6 +43,9 @@ class CanaryMonitor(Extension):
         canary = get_canary_token()
 
         if canary in full_text:
+            # Mark this context as detected so we skip future chunks
+            if context_id:
+                _detected_contexts.add(context_id)
             from plugins.prompt_stomper.helpers.stomper_log import get_stomper_log, DetectionEvent
 
             # Log the canary leak
@@ -45,7 +58,7 @@ class CanaryMonitor(Extension):
                 score=1.0,
                 action="block",
                 categories=["system_prompt_leak"],
-                text_snippet=f"Canary token '{canary}' found in LLM output",
+                text_snippet="Canary token found in LLM output (system prompt leak detected)",
                 source="canary_monitor",
             )
             stomper_log.add_event(event)
@@ -57,7 +70,6 @@ class CanaryMonitor(Extension):
                 stream_data["chunk"] = chunk.replace(canary, "[REDACTED]")
 
             # Log warning
-            agent = kwargs.get("agent") or self.agent
             if agent and agent.context:
                 agent.context.log.log(
                     type="error",
