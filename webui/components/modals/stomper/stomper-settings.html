@@ -1,0 +1,120 @@
+<html>
+<head>
+    <script type="module">
+        import { store } from "/components/modals/stomper/stomper-settings-store.js";
+    </script>
+</head>
+<body>
+    <div x-data x-create="$store.stomperSettings.open()">
+        <template x-if="$store.stomperSettings">
+            <div class="stomper-settings">
+                <div class="section">
+                    <div class="section-title">General</div>
+                    <div class="stomper-setting-row">
+                        <label>
+                            <input type="checkbox"
+                                   :checked="$store.stomperSettings.settings.enabled"
+                                   @change="$store.stomperSettings.toggle('enabled')">
+                            <strong>Enable Prompt Stomper</strong>
+                        </label>
+                        <span class="stomper-setting-desc">Master switch -- disables all scanning when off</span>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Scan Scope</div>
+                    <div class="stomper-setting-row">
+                        <label>
+                            <input type="checkbox"
+                                   :checked="$store.stomperSettings.settings.scan_user_messages"
+                                   @change="$store.stomperSettings.toggle('scan_user_messages')">
+                            Scan user messages (direct injection)
+                        </label>
+                    </div>
+                    <div class="stomper-setting-row">
+                        <label>
+                            <input type="checkbox"
+                                   :checked="$store.stomperSettings.settings.scan_tool_outputs"
+                                   @change="$store.stomperSettings.toggle('scan_tool_outputs')">
+                            Scan tool outputs (indirect injection)
+                        </label>
+                    </div>
+                    <div class="stomper-setting-row">
+                        <label>
+                            <input type="checkbox"
+                                   :checked="$store.stomperSettings.settings.system_hardening"
+                                   @change="$store.stomperSettings.toggle('system_hardening')">
+                            System prompt hardening
+                        </label>
+                    </div>
+                    <div class="stomper-setting-row">
+                        <label>
+                            <input type="checkbox"
+                                   :checked="$store.stomperSettings.settings.canary_tokens"
+                                   @change="$store.stomperSettings.toggle('canary_tokens')">
+                            Canary token leak detection
+                        </label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Block Action</div>
+                    <div class="section-description">What to do when a high-severity injection is detected</div>
+                    <div class="stomper-setting-row">
+                        <select @change="$store.stomperSettings.settings.block_action = $event.target.value; $store.stomperSettings.save()"
+                                :value="$store.stomperSettings.settings.block_action">
+                            <option value="block">Hard block (replace message)</option>
+                            <option value="warn">Warn and continue</option>
+                            <option value="log">Log only</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .stomper-settings {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stomper-setting-row {
+            padding: 6px 0;
+        }
+
+        .stomper-setting-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: var(--font-size-normal);
+        }
+
+        .stomper-setting-row input[type="checkbox"] {
+            width: auto;
+            accent-color: var(--color-accent);
+        }
+
+        .stomper-setting-row select {
+            width: auto;
+            max-width: 300px;
+            padding: 6px 10px;
+            background: var(--color-input);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            color: var(--color-text);
+            font-size: var(--font-size-normal);
+        }
+
+        .stomper-setting-desc {
+            display: block;
+            margin-left: 24px;
+            font-size: 12px;
+            color: var(--color-text);
+            opacity: 0.5;
+        }
+    </style>
+</body>
+</html>
