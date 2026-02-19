@@ -1,0 +1,171 @@
+<html>
+<head>
+    <script type="module">
+        import { store } from "/components/modals/stomper/stomper-log-store.js";
+    </script>
+</head>
+<body>
+    <div x-data
+         x-create="$store.stomperLog.open()"
+         x-every-second="$store.stomperLog.refresh()"
+         x-destroy="$store.stomperLog.cleanup()">
+        <template x-if="$store.stomperLog">
+            <div class="stomper-log">
+                <div class="stomper-log-header">
+                    <span class="stomper-log-title">Recent Detections</span>
+                    <button class="btn btn-cancel stomper-clear-btn"
+                            @click="$store.stomperLog.clearLog()">
+                        <span class="material-symbols-outlined">delete_sweep</span>
+                        Clear
+                    </button>
+                </div>
+
+                <div class="stomper-log-table" x-show="$store.stomperLog.events.length > 0">
+                    <template x-for="event in $store.stomperLog.events" :key="event.timestamp">
+                        <div class="stomper-log-row">
+                            <div class="stomper-log-row-header">
+                                <span class="stomper-severity-badge"
+                                      :class="$store.stomperLog.severityClass(event.severity)"
+                                      x-text="event.severity_name"></span>
+                                <span class="stomper-log-type" x-text="event.scan_type"></span>
+                                <span class="stomper-log-categories" x-text="event.categories.join(', ')"></span>
+                                <span class="stomper-log-action"
+                                      :class="'action-' + event.action"
+                                      x-text="event.action"></span>
+                                <span class="stomper-log-time"
+                                      x-text="$store.stomperLog.formatTime(event.timestamp)"></span>
+                            </div>
+                            <div class="stomper-log-snippet" x-text="event.text_snippet"></div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="stomper-log-empty"
+                     x-show="!$store.stomperLog.loading && $store.stomperLog.events.length === 0">
+                    <span class="material-symbols-outlined">verified_user</span>
+                    <p>No detections yet. All clear.</p>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .stomper-log {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stomper-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stomper-log-title {
+            font-weight: 600;
+            font-size: var(--font-size-normal);
+        }
+
+        .stomper-clear-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .stomper-clear-btn .material-symbols-outlined { font-size: 16px; }
+
+        .stomper-log-table {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .stomper-log-row {
+            padding: 10px 12px;
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+        }
+
+        .stomper-log-row-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .stomper-severity-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-safe { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+        .severity-low { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+        .severity-medium { background: rgba(243, 156, 18, 0.15); color: #f39c12; }
+        .severity-high { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+
+        .stomper-log-type {
+            font-size: 12px;
+            color: var(--color-text);
+            opacity: 0.7;
+            text-transform: capitalize;
+        }
+
+        .stomper-log-categories {
+            font-size: 12px;
+            color: var(--color-accent);
+        }
+
+        .stomper-log-action {
+            margin-left: auto;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .action-block { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+        .action-warn { background: rgba(243, 156, 18, 0.15); color: #f39c12; }
+        .action-log { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+        .action-pass { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+
+        .stomper-log-time {
+            font-size: 11px;
+            color: var(--color-text);
+            opacity: 0.5;
+        }
+
+        .stomper-log-snippet {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--color-text);
+            opacity: 0.7;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 60px;
+            overflow: hidden;
+        }
+
+        .stomper-log-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 40px 0;
+            color: var(--color-text);
+            opacity: 0.4;
+        }
+
+        .stomper-log-empty .material-symbols-outlined { font-size: 48px; }
+    </style>
+</body>
+</html>
