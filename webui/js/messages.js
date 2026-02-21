@@ -12,6 +12,7 @@ import { store as stepDetailStore } from "/components/modals/process-step-detail
 import { store as preferencesStore } from "/components/sidebar/bottom/preferences/preferences-store.js";
 import { formatDuration } from "./time-utils.js";
 import { Scroller } from "./scroller.js";
+import { callJsExtensions } from "/js/extensions.js";
 
 // Delay before collapsing previous steps when a new step is added
 const STEP_COLLAPSE_DELAY = {
@@ -72,39 +73,52 @@ export function getMessageHandler(type) {
 
 // entrypoint called from poll/WS communication, this is how all messages are rendered and updated
 // input is raw log format
-export function setMessages(messages) {
-  // set _massRender flag for handlers to know how to behave
-  const history = getChatHistoryEl();
-  const historyEmpty = !history || history.childElementCount === 0;
-  const isLargeAppend = !historyEmpty && messages.length > 10;
-  const cutoff = isLargeAppend ? Math.max(0, messages.length - 2) : 0;
-  const massRender = historyEmpty || isLargeAppend;
+export async function setMessages(messages) {
+  const context = {
+    messages,
+    history: getChatHistoryEl(),
+    historyEmpty: false,
+    isLargeAppend: false,
+    cutoff: 0,
+    massRender: false,
+    scrollerOptions: {
+      smooth: true,
+      toleranceRem: 4,
+      reapplyDelayMs: 1000,
+      applyStabilization: true,
+    },
+    mainScroller: null,
+    results: [],
+  };
 
-  const mainScroller = new Scroller(history, {
-    smooth: !massRender,
-    toleranceRem: 4,
-    reapplyDelayMs: 1000,
-    applyStabilization: true,
-  });
+  context.historyEmpty = !context.history || context.history.childElementCount === 0;
+  context.isLargeAppend = !context.historyEmpty && context.messages.length > 10;
+  context.cutoff = context.isLargeAppend ? Math.max(0, context.messages.length - 2) : 0;
+  context.massRender = context.historyEmpty || context.isLargeAppend;
+  context.scrollerOptions.smooth = !context.massRender;
 
-  const results = [];
+  await callJsExtensions("set_messages_before_loop", context);
+
+  context.mainScroller = new Scroller(context.history, context.scrollerOptions);
 
   // process messages
-  for (let i = 0; i < messages.length; i++) {
-    _massRender = historyEmpty || (isLargeAppend && i < cutoff);
-    results.push(setMessage(messages[i]) || {});
+  for (let i = 0; i < context.messages.length; i++) {
+    _massRender = context.historyEmpty || (context.isLargeAppend && i < context.cutoff);
+    context.results.push(setMessage(context.messages[i]) || {});
   }
+
+  await callJsExtensions("set_messages_after_loop", context);
 
   // reset _massRender flag
   _massRender = false;
 
-  const shouldScroll = historyEmpty || !results[results.length - 1]?.dontScroll;
+  const shouldScroll = context.historyEmpty || !context.results[context.results.length - 1]?.dontScroll;
 
-  if (shouldScroll) mainScroller.reApplyScroll();
+  if (shouldScroll) context.mainScroller.reApplyScroll();
 
   if (_scrollOnNextProcessGroup === "scroll") {
     requestAnimationFrame(() => {
-      mainScroller.scrollToBottom();
+      context.mainScroller.scrollToBottom();
       _scrollOnNextProcessGroup = null;
     });
   }
@@ -1628,7 +1642,7 @@ function convertImgFilePaths(str) {
 }
 
 function convertFilePaths(str) {
-  return str.replace(/file:\/\//g, "/download_work_dir_file?path=");
+  return str.replace(/file:\/\//g, "/api/download_work_dir_file?path=");
 }
 
 function escapeHTML(str) {

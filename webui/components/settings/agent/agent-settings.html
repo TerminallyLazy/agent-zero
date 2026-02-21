@@ -40,12 +40,6 @@
                 </a>
               </li>
               <li>
-                <a href="#section-memory">
-                  <img src="/public/memory.svg" alt="Memory" />
-                  <span>Memory</span>
-                </a>
-              </li>
-              <li>
                 <a href="#section-speech">
                   <img src="/public/speech.svg" alt="Speech" />
                   <span>Speech</span>
@@ -81,10 +75,6 @@
             <x-component path="settings/agent/embed_model.html"></x-component>
           </div>
 
-          <div id="section-memory" class="section">
-            <x-component path="settings/agent/memory.html"></x-component>
-          </div>
-
           <div id="section-speech" class="section">
             <x-component path="settings/agent/speech.html"></x-component>
           </div>
@@ -93,7 +83,10 @@
             <x-component path="settings/agent/workdir.html"></x-component>
           </div>
 
-          
+          <!-- Plugin settings subsection: shows plugins tagged with "agent" -->
+          <div id="section-agent-plugins" class="section">
+            <x-component path="settings/plugins/plugins-subsection.html" data-tab="agent"></x-component>
+          </div>
 
         </div>
       </template>

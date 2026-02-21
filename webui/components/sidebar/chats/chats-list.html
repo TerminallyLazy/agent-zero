@@ -10,6 +10,7 @@
   <div x-data>
     <template x-if="$store.chats">
       <div class="chats-list-container" x-data>
+        <x-extension id="sidebar-chats-list-start"></x-extension>
         <div class="section-header-row">
           <h3 class="section-header">Chats</h3>
           <!-- New Chat Button -->
@@ -41,6 +42,7 @@
         <div class="empty-list-message" x-show="$store.chats.contexts.length === 0">
           <p><i>No chats to list.</i></p>
         </div>
+        <x-extension id="sidebar-chats-list-end"></x-extension>
       </div>
     </template>
   </div>

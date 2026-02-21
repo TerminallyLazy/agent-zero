@@ -45,7 +45,8 @@ export async function fetchApi(url, request) {
     finalRequest.headers["X-CSRF-Token"] = token;
 
     // perform the fetch with the updated request
-    const response = await fetch(url, finalRequest);
+    const apiUrl = url.startsWith('/api/') || url.startsWith('api/') ? `/${url.replace(/^\/+/, '')}` : `/api/${url.replace(/^\/+/, '')}`;
+    const response = await fetch(apiUrl, finalRequest);
 
     // check if there was an CSRF error
     if (response.status === 403 && retry) {
@@ -125,7 +126,7 @@ export async function getCsrfToken() {
         fetchOptions.signal = controller.signal;
       }
 
-      const fetchPromise = fetch("/csrf_token", fetchOptions);
+      const fetchPromise = fetch("/api/csrf_token", fetchOptions);
       response = timeoutPromise
         ? await Promise.race([fetchPromise, timeoutPromise])
         : await fetchPromise;

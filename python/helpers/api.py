@@ -1,16 +1,23 @@
 from abc import abstractmethod
 import json
+import socket
+import struct
 import threading
+from functools import wraps
+from pathlib import Path
 from typing import Union, TypedDict, Dict, Any
-from attr import dataclass
-from flask import Request, Response, jsonify, Flask, session, request, send_file
+from flask import Request, Response, jsonify, Flask, session, request, send_file, redirect, url_for
+from werkzeug.wrappers.response import Response as BaseResponse
 from agent import AgentContext
 from initialize import initialize_agent
 from python.helpers.print_style import PrintStyle
 from python.helpers.errors import format_error
-from werkzeug.serving import make_server
+from python.helpers import files, cache
 
 ThreadLockType = Union[threading.Lock, threading.RLock]
+
+CACHE_AREA = "api_handlers"
+
 
 Input = dict
 Output = Union[Dict[str, Any], Response, TypedDict]  # type: ignore
@@ -100,3 +107,165 @@ class ApiHandler:
             else:
                 raise Exception(f"Context {ctxid} not found")
             
+
+
+
+def is_loopback_address(address: str) -> bool:
+    loopback_checker = {
+        socket.AF_INET: lambda x: (
+            struct.unpack("!I", socket.inet_aton(x))[0] >> (32 - 8)
+        ) == 127,
+        socket.AF_INET6: lambda x: x == "::1",
+    }
+    address_type = "hostname"
+    try:
+        socket.inet_pton(socket.AF_INET6, address)
+        address_type = "ipv6"
+    except socket.error:
+        try:
+            socket.inet_pton(socket.AF_INET, address)
+            address_type = "ipv4"
+        except socket.error:
+            address_type = "hostname"
+
+    if address_type == "ipv4":
+        return loopback_checker[socket.AF_INET](address)
+    elif address_type == "ipv6":
+        return loopback_checker[socket.AF_INET6](address)
+    else:
+        for family in (socket.AF_INET, socket.AF_INET6):
+            try:
+                r = socket.getaddrinfo(address, None, family, socket.SOCK_STREAM)
+            except socket.gaierror:
+                return False
+            for family, _, _, _, sockaddr in r:
+                if not loopback_checker[family](sockaddr[0]):
+                    return False
+        return True
+
+
+def requires_api_key(f):
+    @wraps(f)
+    async def decorated(*args, **kwargs):
+        from python.helpers.settings import get_settings
+        valid_api_key = get_settings()["mcp_server_token"]
+
+        if api_key := request.headers.get("X-API-KEY"):
+            if api_key != valid_api_key:
+                return Response("Invalid API key", 401)
+        elif request.json and request.json.get("api_key"):
+            api_key = request.json.get("api_key")
+            if api_key != valid_api_key:
+                return Response("Invalid API key", 401)
+        else:
+            return Response("API key required", 401)
+        return await f(*args, **kwargs)
+
+    return decorated
+
+
+def requires_loopback(f):
+    @wraps(f)
+    async def decorated(*args, **kwargs):
+        if not is_loopback_address(request.remote_addr):
+            return Response("Access denied.", 403, {})
+        return await f(*args, **kwargs)
+
+    return decorated
+
+
+def requires_auth(f):
+    @wraps(f)
+    async def decorated(*args, **kwargs):
+        from python.helpers import login
+        user_pass_hash = login.get_credentials_hash()
+        if not user_pass_hash:
+            return await f(*args, **kwargs)
+        if session.get("authentication") != user_pass_hash:
+            return redirect(url_for("login_handler"))
+        return await f(*args, **kwargs)
+
+    return decorated
+
+
+def csrf_protect(f):
+    @wraps(f)
+    async def decorated(*args, **kwargs):
+        from python.helpers import runtime
+        token = session.get("csrf_token")
+        header = request.headers.get("X-CSRF-Token")
+        cookie = request.cookies.get("csrf_token_" + runtime.get_runtime_id())
+        sent = header or cookie
+        if not token or not sent or token != sent:
+            return Response("CSRF token missing or invalid", 403)
+        return await f(*args, **kwargs)
+
+    return decorated
+
+
+def register_api_route(app: Flask, lock: ThreadLockType) -> None:
+    from python.helpers.extract_tools import load_classes_from_file
+    from python.helpers import plugins
+
+    async def _dispatch(path: str) -> BaseResponse:
+        # Return cached wrapped handler if available
+        cached = cache.get(CACHE_AREA, path)
+        if cached is not None:
+            return await cached()
+
+        # Resolve file path for the handler
+        # Try built-in api folder first, then plugin api folders
+        handler_cls: type[ApiHandler] | None = None
+
+        # Check built-in python/api/<path>.py
+        builtin_file = files.get_abs_path(f"python/api/{path}.py")
+        if files.is_in_dir(builtin_file, files.get_abs_path("python/api")) and files.exists(builtin_file):
+            classes = load_classes_from_file(builtin_file, ApiHandler)
+            if classes:
+                handler_cls = classes[0]
+
+        # Check plugin api folders: path format plugins/<plugin_name>/<handler>
+        if handler_cls is None and path.startswith("plugins/"):
+            parts = path.split("/", 2)
+            if len(parts) == 3:
+                _, plugin_name, handler_name = parts
+                plugin_dir = plugins.find_plugin_dir(plugin_name)
+                if plugin_dir:
+                    plugin_file = Path(plugin_dir) / "api" / f"{handler_name}.py"
+                    if plugin_file.is_file():
+                        classes = load_classes_from_file(str(plugin_file), ApiHandler)
+                        if classes:
+                            handler_cls = classes[0]
+
+        if handler_cls is None:
+            return Response(f"API endpoint not found: {path}", 404)
+
+        # Check method is allowed
+        if request.method not in handler_cls.get_methods():
+            return Response(f"Method {request.method} not allowed for: {path}", 405)
+
+        # Build handler call, wrapping with security decorators as required
+        async def call_handler() -> BaseResponse:
+            instance = handler_cls(app, lock)
+            return await instance.handle_request(request=request)
+
+        handler_fn = call_handler
+        if handler_cls.requires_csrf():
+            handler_fn = csrf_protect(handler_fn)
+        if handler_cls.requires_api_key():
+            handler_fn = requires_api_key(handler_fn)
+        if handler_cls.requires_auth():
+            handler_fn = requires_auth(handler_fn)
+        if handler_cls.requires_loopback():
+            handler_fn = requires_loopback(handler_fn)
+
+        cache.add(CACHE_AREA, path, handler_fn)
+        return await handler_fn()
+
+    app.add_url_rule(
+        "/api/<path:path>",
+        "api_dispatch",
+        _dispatch,
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    )
+

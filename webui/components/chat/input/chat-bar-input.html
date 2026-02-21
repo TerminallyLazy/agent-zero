@@ -9,7 +9,9 @@
     </script>
 </head>
 <body>
-    <div class="input-row">
+    <div x-data>
+        <x-extension id="chat-input-box-start"></x-extension>
+        <div class="input-row">
         <!-- Attachment icon with tooltip -->
         <div class="attachment-wrapper">
             <label for="file-input" class="attachment-icon" title="Add attachments to the message" data-bs-placement="top" data-bs-trigger="hover">
@@ -50,10 +52,12 @@
                 </svg>
             </button>
         </div>
-    </div>
+        </div>
 
-    <!-- Full Screen Input Modal -->
-    <x-component path="modals/full-screen-input/full-screen-input.html"></x-component>
+        <!-- Full Screen Input Modal -->
+        <x-component path="modals/full-screen-input/full-screen-input.html"></x-component>
+        <x-extension id="chat-input-box-end"></x-extension>
+    </div>
 
 
     <style>

@@ -491,6 +491,8 @@ class Agent:
                             if tools_result:  # final response of message loop available
                                 return tools_result  # break the execution if the task is done
 
+                        error_retries = 0  # reset retry counter on successful iteration
+
                     # exceptions inside message loop:
                     except InterventionException as e:
                         error_retries = 0  # reset retry counter on user intervention
@@ -515,7 +517,7 @@ class Agent:
                                 "message_loop_end", loop_data=self.loop_data
                             )
 
-                    error_retries = 0  # reset retry counter on successful iteration
+
 
             # exceptions outside message loop:
             except InterventionException as e:
@@ -645,6 +647,7 @@ class Agent:
 
     def parse_prompt(self, _prompt_file: str, **kwargs):
         dirs = subagents.get_paths(self, "prompts")
+
         prompt = files.parse_file(
             _prompt_file, _directories=dirs, _agent=self, **kwargs
         )
@@ -652,6 +655,7 @@ class Agent:
 
     def read_prompt(self, file: str, **kwargs) -> str:
         dirs = subagents.get_paths(self, "prompts")
+
         prompt = files.read_prompt_file(file, _directories=dirs, _agent=self, **kwargs)
         if files.is_full_json_template(prompt):
             prompt = files.remove_code_fences(prompt)
@@ -987,6 +991,7 @@ class Agent:
 
         # search for tools in agent's folder hierarchy
         paths = subagents.get_paths(self, "tools", name + ".py", default_root="python")
+
         for path in paths:
             try:
                 classes = extract_tools.load_classes_from_file(path, Tool)  # type: ignore[arg-type]

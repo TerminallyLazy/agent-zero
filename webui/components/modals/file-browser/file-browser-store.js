@@ -453,7 +453,7 @@ const model = {
 
   downloadFile(file) {
     const link = document.createElement("a");
-    link.href = `/download_work_dir_file?path=${encodeURIComponent(file.path)}`;
+    link.href = `/api/download_work_dir_file?path=${encodeURIComponent(file.path)}`;
     link.download = file.name;
     document.body.appendChild(link);
     link.click();

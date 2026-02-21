@@ -138,7 +138,7 @@ def _get_rfc_url() -> str:
     if url.endswith("/"):
         url = url[:-1]
     url = url + ":" + str(set["rfc_port_http"])
-    url += "/rfc"
+    url += "/api/rfc"
     return url
 
 

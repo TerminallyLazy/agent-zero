@@ -38,9 +38,12 @@ function ensureBootstrapTooltip(element) {
 
 function initBootstrapTooltips(root = document) {
   if (!globalThis.bootstrap?.Tooltip) return;
-  const tooltipTargets = root.querySelectorAll(
-    "[title]:not([data-bs-tooltip-initialized]), [data-bs-original-title]:not([data-bs-tooltip-initialized])"
-  );
+  const selector = "[title], [data-bs-original-title]";
+  const rootIsElement = root instanceof Element;
+  const tooltipTargets = [
+    ...(rootIsElement && root.matches(selector) ? [root] : []),
+    ...Array.from(root.querySelectorAll(selector)),
+  ];
   tooltipTargets.forEach((element) => ensureBootstrapTooltip(element));
 }
 
@@ -52,7 +55,11 @@ function observeBootstrapTooltips() {
   
   bootstrapTooltipObserver = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
-      if (mutation.type === "attributes" && mutation.attributeName === "title") {
+      if (
+        mutation.type === "attributes" &&
+        (mutation.attributeName === "title" ||
+          mutation.attributeName === "data-bs-original-title")
+      ) {
         ensureBootstrapTooltip(mutation.target);
         return;
       }
@@ -61,8 +68,13 @@ function observeBootstrapTooltips() {
         // Check removed nodes for tooltip cleanup
         mutation.removedNodes.forEach((node) => {
           if (!(node instanceof Element)) return;
-          const tooltipElements = node.matches?.('[data-bs-tooltip-initialized]') ? [node] : Array.from(node.querySelectorAll?.('[data-bs-tooltip-initialized]') || []);
+          const tooltipElements = node.matches?.("[data-bs-tooltip-initialized]")
+            ? [node]
+            : Array.from(
+                node.querySelectorAll?.("[data-bs-tooltip-initialized]") || []
+              );
           tooltipElements.forEach((el) => {
+            if (el.isConnected) return;
             const instance = globalThis.bootstrap?.Tooltip?.getInstance(el);
             if (instance) {
               instance.dispose();
@@ -72,7 +84,10 @@ function observeBootstrapTooltips() {
         
         mutation.addedNodes.forEach((node) => {
           if (!(node instanceof Element)) return;
-          if (node.matches("[title]") || node.querySelector("[title]")) {
+          if (
+            node.matches("[title], [data-bs-original-title]") ||
+            node.querySelector("[title], [data-bs-original-title]")
+          ) {
             initBootstrapTooltips(node);
           }
         });
@@ -84,7 +99,7 @@ function observeBootstrapTooltips() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["title"],
+    attributeFilter: ["title", "data-bs-original-title"],
   });
 }
 

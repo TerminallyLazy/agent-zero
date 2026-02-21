@@ -1,0 +1,255 @@
+<html>
+<head>
+    <title>Plugins</title>
+    <script type="module">
+        import { store } from "/components/plugins/list/pluginListStore.js";
+    </script>
+</head>
+
+<body>
+    <div x-data>
+        <template x-if="$store.pluginListStore">
+            <div x-init="$store.pluginListStore.init && $store.pluginListStore.init()">
+
+                <ul class="nav nav-tabs" id="plugin-list-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link"
+                            :class="{ active: $store.pluginListStore.activeTab === 'custom' }"
+                            id="plugins-custom-tab"
+                            type="button"
+                            role="tab"
+                            aria-controls="plugins-custom"
+                            :aria-selected="$store.pluginListStore.activeTab === 'custom'"
+                            @click="$store.pluginListStore.setTab('custom')">
+                            Custom
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link"
+                            :class="{ active: $store.pluginListStore.activeTab === 'builtin' }"
+                            id="plugins-builtin-tab"
+                            type="button"
+                            role="tab"
+                            aria-controls="plugins-builtin"
+                            :aria-selected="$store.pluginListStore.activeTab === 'builtin'"
+                            @click="$store.pluginListStore.setTab('builtin')">
+                            Builtin
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="plugins-toolbar">
+                    <div class="plugins-toolbar-actions">
+                        <button type="button"
+                            class="button confirm"
+                            title="Refresh"
+                            @click="$store.pluginListStore.refresh()"
+                            :disabled="$store.pluginListStore.loading">
+                            <span class="icon material-symbols-outlined">refresh</span> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div x-show="$store.pluginListStore.loading" class="loading">
+                    <span>Loading plugins...</span>
+                </div>
+
+                <div class="plugins-list">
+                    <template x-for="plugin in ($store.pluginListStore.plugins || [])" :key="plugin.path || plugin.name">
+                        <div class="plugin-card">
+                            <div class="plugin-header">
+                                <div class="plugin-heading">
+                                    <div class="plugin-title" x-text="plugin.display_name || plugin.name || '(unnamed plugin)'"></div>
+                                    <code class="plugin-path" x-text="plugin.path"></code>
+                                </div>
+                                <div class="plugin-actions">
+                                    <template x-if="plugin.has_main_screen">
+                                        <button type="button"
+                                            class="button"
+                                            title="Open"
+                                            @click="$store.pluginListStore.openPlugin(plugin)">
+                                            <span class="icon material-symbols-outlined">dashboard</span> Open
+                                        </button>
+                                    </template>
+                                    <template x-if="plugin.has_config_screen">
+                                        <button type="button"
+                                            class="button"
+                                            title="Config"
+                                            @click="$store.pluginListStore.openPluginConfig(plugin)">
+                                            <span class="icon material-symbols-outlined">settings</span> Config
+                                        </button>
+                                    </template>
+                                    <button type="button"
+                                        class="button"
+                                        title="Info"
+                                        @click="$store.pluginListStore.openPluginInfo(plugin)">
+                                        <span class="icon material-symbols-outlined">info</span> Info
+                                    </button>
+                                    <template x-if="plugin.is_custom">
+                                        <button type="button"
+                                            class="button cancel icon-button"
+                                            title="Delete"
+                                            @click="$confirmClick($event, () => $store.pluginListStore.deletePlugin(plugin))">
+                                            <span class="icon material-symbols-outlined">delete</span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="plugin-description" x-text="plugin.description || 'No description provided.'"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .nav {
+            display: flex;
+            padding-left: 0;
+            margin: 0.75rem 0 0 0;
+            list-style: none;
+            border-bottom: 1px solid var(--color-border);
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            font-family: "Rubik", Arial, Helvetica, sans-serif;
+            border: 1px solid transparent;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            padding: 0.4rem 0.7rem;
+            background: transparent;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+        }
+
+        .nav-link.active {
+            color: var(--color-text-primary);
+            border-color: var(--color-border);
+            border-bottom-color: transparent;
+            background: var(--color-bg-primary);
+        }
+
+        .plugins-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .plugins-toolbar-actions {
+            margin-left: auto;
+            flex: 0 0 auto;
+        }
+
+        .plugins-list {
+            margin-top: 0.25rem;
+        }
+
+        .plugin-card {
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-top: 0.75rem;
+            background: var(--color-bg-primary);
+        }
+
+        .plugin-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: nowrap;
+            min-width: 0;
+        }
+
+        .plugin-heading {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .plugin-title {
+            font-weight: 600;
+            font-size: 1rem;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .plugin-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding-bottom: var(--spacing-sm);
+            flex-wrap: nowrap;
+            min-width: 0;
+            flex: 0 0 auto;
+            max-width: 100%;
+            justify-content: flex-end;
+        }
+
+        .plugin-actions .button {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.9rem;
+        }
+
+        .plugin-actions .button .icon {
+            font-size: 1.1rem;
+        }
+
+        .plugin-description {
+            margin-top: 0.35rem;
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-small);
+        }
+
+        .plugin-path {
+            margin-top: 0.35rem;
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            min-width: 0;
+            max-width: 100%;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .loading {
+            width: 100%;
+            text-align: center;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+            color: var(--color-secondary);
+        }
+
+        @media (max-width: 640px) {
+            .plugin-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .plugin-heading {
+                width: 100%;
+                flex: 0 0 auto;
+            }
+
+            .plugin-actions {
+                width: 100%;
+                justify-content: flex-start;
+                padding-bottom: 0;
+                flex-wrap: wrap;
+            }
+
+            .plugin-path {
+                white-space: normal;
+                word-break: break-word;
+            }
+        }
+    </style>
+</body>
+
+</html>

@@ -1,5 +1,6 @@
 // Import the component loader and page utilities
 import { importComponent } from "/js/components.js";
+import { callJsExtensions } from "/js/extensions.js";
 
 // Modal functionality
 const modalStack = [];
@@ -63,7 +64,8 @@ function createModalElement(path) {
 
   // Create modal structure
   newModal.innerHTML = `
-    <div class="modal-inner">
+    <div class="modal-inner" x-data>
+      <x-extension id="modal-shell-start"></x-extension>
       <div class="modal-header">
         <h2 class="modal-title"></h2>
         <button class="modal-close">&times;</button>
@@ -72,6 +74,7 @@ function createModalElement(path) {
         <div class="modal-bd"></div>
       </div>
       <div class="modal-footer-slot" style="display: none;"></div>
+      <x-extension id="modal-shell-end"></x-extension>
     </div>
   `;
 
@@ -104,12 +107,18 @@ function createModalElement(path) {
 }
 
 // Function to open modal with content from URL
-export function openModal(modalPath, beforeClose = null) {
+export async function openModal(modalPath, beforeClose = null) {
+  const openCtx = { modalPath, modal: null, cancel: false };
+  await callJsExtensions("open_modal_before", openCtx);
+  if (openCtx.cancel) return;
+  modalPath = openCtx.modalPath;
+
   return new Promise((resolve) => {
     try {
       // Create new modal instance
       const modal = createModalElement(modalPath);
       modal.beforeClose = beforeClose;
+      openCtx.modal = modal;
 
       new MutationObserver(
         (_, o) =>
@@ -173,7 +182,7 @@ export function openModal(modalPath, beforeClose = null) {
 }
 
 // Function to close modal
-export function closeModal(modalPath = null) {
+export async function closeModal(modalPath = null) {
   if (modalStack.length === 0) return;
 
   let modalIndex = modalStack.length - 1; // Default to last modal
@@ -190,6 +199,10 @@ export function closeModal(modalPath = null) {
     // Just get the last modal (removal happens after beforeClose)
     modal = modalStack[modalStack.length - 1];
   }
+
+  const closeCtx = { modalPath: modalPath ?? null, modal, cancel: false };
+  await callJsExtensions("close_modal_before", closeCtx);
+  if (closeCtx.cancel) return false;
 
   const canClose = async () => {
     if (!modal.beforeClose) return true;

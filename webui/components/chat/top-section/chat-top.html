@@ -14,19 +14,23 @@
     <!-- This construct of x-data + x-if is used to ensure the component is only rendered when the store is available -->
     <div x-data>
         <template x-if="$store.chatTop">
-
             <!-- Time and Date -->
             <div id="time-date-container">
+                <x-extension id="chat-top-start"></x-extension>
                 <div id="time-date"></div>
                 <x-component path="sync/sync-status.html"></x-component>
                 <!-- Notification Toggle positioned next to time-date -->
                 <x-component path="notifications/notification-icons.html"></x-component>
                 <!-- Project Selector -->
                 <x-component path="projects/project-selector.html"></x-component>
+                <x-extension id="chat-top-end"></x-extension>
             </div>
-
         </template>
     </div>
+
+    <style>
+    #time-date-container > x-extension { display: contents; }
+    </style>
 
 </body>
 

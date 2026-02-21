@@ -1,0 +1,123 @@
+<html>
+<head>
+    <title>Plugin Info</title>
+    <script type="module">
+        import { store } from "/components/plugins/list/pluginListStore.js";
+    </script>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.pluginListStore && $store.pluginListStore.selectedPlugin">
+            <div class="plugin-info-view">
+                <div class="plugin-info-header">
+                    <h2 class="plugin-info-title"
+                        x-text="$store.pluginListStore.selectedPlugin.display_name || $store.pluginListStore.selectedPlugin.name"></h2>
+                    <div class="plugin-info-source"
+                        x-text="$store.pluginListStore.selectedPlugin.is_custom ? 'Custom plugin' : 'Builtin plugin'"></div>
+                </div>
+
+                <div class="plugin-info-description"
+                    x-text="$store.pluginListStore.selectedPlugin.description || 'No description provided.'"></div>
+
+                <div class="plugin-info-grid">
+                    <div class="plugin-info-label">Plugin ID:</div>
+                    <div class="plugin-info-value">
+                        <code x-text="$store.pluginListStore.selectedPlugin.name"></code>
+                    </div>
+
+                    <div class="plugin-info-label">Version:</div>
+                    <div class="plugin-info-value"
+                        x-text="$store.pluginListStore.selectedPlugin.version || 'n/a'"></div>
+
+                    <div class="plugin-info-label">Path:</div>
+                    <div class="plugin-info-value">
+                        <code x-text="$store.pluginListStore.selectedPlugin.path"></code>
+                    </div>
+
+                    <div class="plugin-info-label">Settings sections:</div>
+                    <div class="plugin-info-value"
+                        x-text="($store.pluginListStore.selectedPlugin.settings_sections || []).length ? $store.pluginListStore.selectedPlugin.settings_sections.join(', ') : 'None'"></div>
+
+                    <div class="plugin-info-label">Per-project config:</div>
+                    <div class="plugin-info-value"
+                        x-text="$store.pluginListStore.selectedPlugin.per_project_config ? 'Yes' : 'No'"></div>
+
+                    <div class="plugin-info-label">Per-agent config:</div>
+                    <div class="plugin-info-value"
+                        x-text="$store.pluginListStore.selectedPlugin.per_agent_config ? 'Yes' : 'No'"></div>
+
+                    <div class="plugin-info-label">Main screen:</div>
+                    <div class="plugin-info-value"
+                        x-text="$store.pluginListStore.selectedPlugin.has_main_screen ? 'Available' : 'Not available'"></div>
+
+                    <div class="plugin-info-label">Config screen:</div>
+                    <div class="plugin-info-value"
+                        x-text="$store.pluginListStore.selectedPlugin.has_config_screen ? 'Available' : 'Not available'"></div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div class="modal-footer" data-modal-footer>
+        <button class="btn btn-cancel" @click="window.closeModal?.()">Close</button>
+    </div>
+
+    <style>
+        .plugin-info-view {
+            padding: 1rem;
+        }
+        
+        .plugin-info-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .plugin-info-title {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .plugin-info-source {
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-small);
+        }
+
+        .plugin-info-description {
+            margin-bottom: 1rem;
+            color: var(--color-text-secondary);
+        }
+
+        .plugin-info-grid {
+            display: grid;
+            grid-template-columns: 12rem 1fr;
+            gap: 0.5rem 0.75rem;
+        }
+
+        .plugin-info-label {
+            font-weight: 600;
+            color: var(--color-text-secondary);
+        }
+
+        .plugin-info-value {
+            min-width: 0;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 640px) {
+            .plugin-info-grid {
+                grid-template-columns: 1fr;
+                gap: 0.25rem;
+            }
+
+            .plugin-info-label {
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</body>
+</html>

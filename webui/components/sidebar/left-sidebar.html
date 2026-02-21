@@ -11,6 +11,7 @@
   <div x-data>
     <template x-if="$store.sidebar">
       <div id="left-panel" class="panel" x-data :class="{'hidden': !$store.sidebar.isOpen}">
+        <x-extension id="sidebar-start"></x-extension>
         <!--Sidebar upper elements-->
         <div class="left-panel-top no-scrollbar">
           <!-- Top Section: Header Icons + Quick Actions -->
@@ -29,6 +30,7 @@
         <div class="left-panel-bottom">
           <x-component path="sidebar/bottom/sidebar-bottom.html"></x-component>
         </div>
+        <x-extension id="sidebar-end"></x-extension>
       </div>
     </template>
   </div>

@@ -67,7 +67,7 @@ def get_project_folder(name: str):
     return files.get_abs_path(get_projects_parent_folder(), name)
 
 
-def get_project_meta_folder(name: str, *sub_dirs: str):
+def get_project_meta(name: str, *sub_dirs: str):
     return files.get_abs_path(get_project_folder(name), PROJECT_META_DIR, *sub_dirs)
 
 
@@ -398,20 +398,20 @@ def get_context_project_name(context: "AgentContext") -> str | None:
 
 def load_project_variables(name: str):
     try:
-        abs_path = files.get_abs_path(get_project_meta_folder(name), "variables.env")
+        abs_path = files.get_abs_path(get_project_meta(name), "variables.env")
         return files.read_file(abs_path)
     except Exception:
         return ""
 
 
 def save_project_variables(name: str, variables: str):
-    abs_path = files.get_abs_path(get_project_meta_folder(name), "variables.env")
+    abs_path = files.get_abs_path(get_project_meta(name), "variables.env")
     files.write_file(abs_path, variables)
 
 
 def load_project_subagents(name: str) -> dict[str, SubAgentSettings]:
     try:
-        abs_path = files.get_abs_path(get_project_meta_folder(name), "agents.json")
+        abs_path = files.get_abs_path(get_project_meta(name), "agents.json")
         data = dirty_json.parse(files.read_file(abs_path))
         if isinstance(data, dict):
             return _normalize_subagents(data)  # type: ignore[arg-type,return-value]
@@ -421,7 +421,7 @@ def load_project_subagents(name: str) -> dict[str, SubAgentSettings]:
 
 
 def save_project_subagents(name: str, subagents_data: dict[str, SubAgentSettings]):
-    abs_path = files.get_abs_path(get_project_meta_folder(name), "agents.json")
+    abs_path = files.get_abs_path(get_project_meta(name), "agents.json")
     normalized = _normalize_subagents(subagents_data)
     content = dirty_json.stringify(normalized)
     files.write_file(abs_path, content)
@@ -475,21 +475,15 @@ def get_context_memory_subdir(context: "AgentContext") -> str | None:
 
 def create_project_meta_folders(name: str):
     # create instructions folder
-    files.create_dir(get_project_meta_folder(name, PROJECT_INSTRUCTIONS_DIR))
+    files.create_dir(get_project_meta(name, PROJECT_INSTRUCTIONS_DIR))
 
-    # create knowledge folders
-    files.create_dir(get_project_meta_folder(name, PROJECT_KNOWLEDGE_DIR))
-    from python.helpers import memory
-
-    for memory_type in memory.Memory.Area:
-        files.create_dir(
-            get_project_meta_folder(name, PROJECT_KNOWLEDGE_DIR, memory_type.value)
-        )
+    # create knowledge folders (plugins create their own subdirs lazily)
+    files.create_dir(get_project_meta(name, PROJECT_KNOWLEDGE_DIR))
 
 
 def get_knowledge_files_count(name: str):
     knowledge_folder = files.get_abs_path(
-        get_project_meta_folder(name, PROJECT_KNOWLEDGE_DIR)
+        get_project_meta(name, PROJECT_KNOWLEDGE_DIR)
     )
     return len(files.list_files_in_dir_recursively(knowledge_folder))
 

@@ -1,0 +1,191 @@
+<html>
+<head>
+    <script type="module">
+        import { store } from "/components/plugins/plugin-settings-store.js";
+    </script>
+</head>
+<body>
+    <!--
+        Reusable plugin subsection for a settings tab.
+        Parent must pass data-tab attribute on the x-component tag, e.g.:
+          <x-component path="settings/plugins/plugins-subsection.html" data-tab="agent"></x-component>
+        The tab value is read at init time from the x-component element's dataset.
+    -->
+    <div x-data="{
+        tab: '',
+        plugins: [],
+        loading: false,
+        async init() {
+            // find closest x-component ancestor to read the data-tab attribute
+            const host = this.$el.closest('x-component') || this.$el.parentElement?.closest('x-component');
+            this.tab = host?.getAttribute('data-tab') || '';
+            await this.load();
+        },
+        async load() {
+            if (!this.tab) return;
+            this.loading = true;
+            try {
+                const r = await globalThis.fetchApi('/plugins_list', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filter: { custom: true, builtin: true },
+                    }),
+                });
+                const data = await r.json().catch(() => ({}));
+                const plugins = data.ok ? (data.plugins || []) : [];
+                this.plugins = plugins.filter((plugin) => {
+                    const sections = Array.isArray(plugin.settings_sections)
+                        ? plugin.settings_sections
+                        : [];
+                    return plugin.has_config_screen && sections.includes(this.tab);
+                });
+            } catch {
+                this.plugins = [];
+            } finally {
+                this.loading = false;
+            }
+        },
+        async openPluginConfig(plugin) {
+            if (!plugin?.name) return;
+            await Alpine.store('pluginSettings')?.open(plugin.name);
+            window.openModal?.('components/plugins/plugin-settings.html');
+        }
+    }" x-init="init()">
+
+        <template x-if="loading || plugins.length > 0">
+            <div>
+                <div class="section-title">Plugins</div>
+                <div class="section-description">
+                    Plugin-specific settings for this tab.
+                </div>
+
+                <div x-show="loading" class="loading">
+                    <span>Loading plugins...</span>
+                </div>
+
+                <div class="plugins-list">
+                    <template x-for="plugin in plugins" :key="plugin.path || plugin.name">
+                        <div class="plugin-card">
+                            <div class="plugin-header">
+                                <div class="plugin-heading">
+                                    <div class="plugin-title" x-text="plugin.display_name || plugin.name || '(unnamed plugin)'"></div>
+                                    <code class="plugin-path" x-text="plugin.path"></code>
+                                </div>
+                                <div class="plugin-actions">
+                                    <button type="button"
+                                        class="button"
+                                        title="Config"
+                                        @click="openPluginConfig(plugin)">
+                                        <span class="icon material-symbols-outlined">settings</span> Config
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="plugin-description" x-text="plugin.description || 'No description provided.'"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        /* Reused styles from plugin-list.html for uniformity */
+        .plugins-list {
+            margin-top: 0.25rem;
+        }
+
+        .plugin-card {
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-top: 0.75rem;
+            background: var(--color-bg-primary);
+        }
+
+        .plugin-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: nowrap;
+            min-width: 0;
+        }
+
+        .plugin-heading {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .plugin-title {
+            font-weight: 600;
+            font-size: 1rem;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .plugin-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding-bottom: var(--spacing-sm);
+            flex-wrap: nowrap;
+            min-width: 0;
+            flex: 0 0 auto;
+            max-width: 100%;
+            justify-content: flex-end;
+        }
+
+        .plugin-description {
+            margin-top: 0.35rem;
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-small);
+        }
+
+        .plugin-path {
+            margin-top: 0.35rem;
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            min-width: 0;
+            max-width: 100%;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .loading {
+            width: 100%;
+            text-align: center;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+            color: var(--color-secondary);
+        }
+
+        @media (max-width: 640px) {
+            .plugin-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .plugin-heading {
+                width: 100%;
+                flex: 0 0 auto;
+            }
+
+            .plugin-actions {
+                width: 100%;
+                justify-content: flex-start;
+                padding-bottom: 0;
+                flex-wrap: wrap;
+            }
+
+            .plugin-path {
+                white-space: normal;
+                word-break: break-word;
+            }
+        }
+    </style>
+</body>
+</html>

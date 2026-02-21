@@ -44,7 +44,7 @@ class Skills(ApiHandler):
             ]
             if project_name:
                 roots.append(
-                    projects.get_project_meta_folder(project_name, "agents", agent_profile, "skills")
+                    projects.get_project_meta(project_name, "agents", agent_profile, "skills")
                 )
 
             skill_list = [

@@ -8,6 +8,7 @@
   <div class="tasks-list-root">
     <template x-if="$store.tasks">
       <div x-data class="tasks-list-inner">
+        <x-extension id="sidebar-tasks-list-start"></x-extension>
         <h3 class="section-header section-header-collapsible" 
             data-bs-toggle="collapse"
             @click="$store.sidebar.toggleSection('tasks')"
@@ -64,6 +65,7 @@
           </div>
           </div>
         </div>
+        <x-extension id="sidebar-tasks-list-end"></x-extension>
       </div>
     </template>
   </div>
