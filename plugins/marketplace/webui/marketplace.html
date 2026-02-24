@@ -1,0 +1,466 @@
+<html>
+
+<head>
+    <title>Plugin Marketplace</title>
+    <script type="module">
+        import { store } from "/plugins/marketplace/webui/marketplace-store.js";
+    </script>
+</head>
+
+<body>
+    <div x-data>
+        <template x-if="$store.marketplace">
+            <div x-create="$store.marketplace.onOpen()"
+                 x-destroy="$store.marketplace.cleanup()"
+                 class="marketplace">
+
+                <!-- Search -->
+                <div class="marketplace-search">
+                    <span class="material-symbols-outlined search-icon">search</span>
+                    <input type="text"
+                        placeholder="Search plugins..."
+                        x-model="$store.marketplace.searchQuery"
+                        @input="$store.marketplace.onSearchInput()"
+                        class="search-input" />
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="marketplace-tabs">
+                    <template x-for="tab in ['all', 'featured', 'popular', 'installed']" :key="tab">
+                        <button class="tab-btn"
+                            :class="{ 'tab-active': $store.marketplace.activeFilter === tab }"
+                            @click="$store.marketplace.setFilter(tab)"
+                            x-text="tab.charAt(0).toUpperCase() + tab.slice(1)">
+                        </button>
+                    </template>
+                </div>
+
+                <!-- Loading -->
+                <div x-show="$store.marketplace.loading" class="marketplace-loading">
+                    <span>Loading plugins...</span>
+                </div>
+
+                <!-- Error -->
+                <div x-show="$store.marketplace.error" class="marketplace-error">
+                    <span class="material-symbols-outlined">error</span>
+                    <span x-text="$store.marketplace.error"></span>
+                    <button class="btn btn-ok" @click="$store.marketplace.fetchRegistry()">Retry</button>
+                </div>
+
+                <!-- Plugin Grid -->
+                <div x-show="!$store.marketplace.loading && !$store.marketplace.error"
+                     class="marketplace-grid">
+                    <template x-for="plugin in $store.marketplace.filteredPlugins" :key="plugin.id">
+                        <div class="plugin-card"
+                             :class="{ 'plugin-featured': plugin.featured }">
+
+                            <!-- Card Header -->
+                            <div class="card-header">
+                                <span class="material-symbols-outlined card-icon"
+                                    x-text="plugin.icon || 'extension'"></span>
+                                <div class="card-title-group">
+                                    <div class="card-name" x-text="plugin.name"></div>
+                                    <div class="card-meta">
+                                        <span class="card-version" x-text="'v' + plugin.version"></span>
+                                        <template x-if="plugin.author">
+                                            <span class="card-author" x-text="plugin.author"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <template x-if="plugin.featured">
+                                    <span class="featured-badge" title="Featured">
+                                        <span class="material-symbols-outlined">star</span>
+                                    </span>
+                                </template>
+                            </div>
+
+                            <!-- Description -->
+                            <div class="card-description" x-text="plugin.description"></div>
+
+                            <!-- Tags -->
+                            <div class="card-tags" x-show="plugin.tags && plugin.tags.length > 0">
+                                <template x-for="tag in (plugin.tags || []).slice(0, 3)" :key="tag">
+                                    <span class="tag" x-text="tag"></span>
+                                </template>
+                            </div>
+
+                            <!-- Install Count -->
+                            <div class="card-stats" x-show="plugin.install_count > 0">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">download</span>
+                                <span x-text="plugin.install_count"></span>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="card-actions">
+                                <!-- In progress spinner -->
+                                <template x-if="$store.marketplace.isActionInProgress(plugin.id)">
+                                    <div class="action-progress">
+                                        <span class="spinner"></span>
+                                        <span x-text="$store.marketplace.getActionLabel(plugin.id) + '...'"></span>
+                                    </div>
+                                </template>
+
+                                <!-- Available: Install button -->
+                                <template x-if="plugin.status === 'available' && !$store.marketplace.isActionInProgress(plugin.id)">
+                                    <button class="btn btn-ok btn-install"
+                                        @click="$store.marketplace.installPlugin(plugin)">
+                                        <span class="material-symbols-outlined">download</span>
+                                        Install
+                                    </button>
+                                </template>
+
+                                <!-- Installed: Toggle + Config + Uninstall -->
+                                <template x-if="plugin.status !== 'available' && !$store.marketplace.isActionInProgress(plugin.id)">
+                                    <div class="installed-actions">
+                                        <!-- Toggle -->
+                                        <button class="toggle-btn"
+                                            :class="{ 'toggle-active': plugin.status === 'active' }"
+                                            @click="$store.marketplace.togglePlugin(plugin)"
+                                            :title="plugin.status === 'active' ? 'Deactivate' : 'Activate'">
+                                            <span class="material-symbols-outlined"
+                                                x-text="plugin.status === 'active' ? 'toggle_on' : 'toggle_off'"></span>
+                                        </button>
+
+                                        <!-- Config gear (if has config) -->
+                                        <template x-if="plugin.has_config">
+                                            <button class="icon-btn" title="Settings"
+                                                @click="Alpine.store('pluginSettings')?.open(plugin.id); openModal('components/plugins/plugin-settings.html');">
+                                                <span class="material-symbols-outlined">settings</span>
+                                            </button>
+                                        </template>
+
+                                        <!-- Uninstall (only user-installed) -->
+                                        <template x-if="!plugin.is_builtin">
+                                            <button class="icon-btn icon-btn-danger" title="Uninstall"
+                                                @click="$confirmClick($event, () => $store.marketplace.uninstallPlugin(plugin))">
+                                                <span class="material-symbols-outlined">delete</span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Empty state -->
+                    <div x-show="$store.marketplace.filteredPlugins.length === 0 && !$store.marketplace.loading"
+                         class="marketplace-empty">
+                        <span class="material-symbols-outlined">inventory_2</span>
+                        <p>No plugins found.</p>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .marketplace {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        /* Search */
+        .marketplace-search {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--color-input);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+        }
+
+        .search-icon {
+            color: var(--color-text-secondary);
+            font-size: 20px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--color-text);
+            font-size: var(--font-size-normal);
+        }
+
+        /* Filter Tabs */
+        .marketplace-tabs {
+            display: flex;
+            gap: 0.25rem;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            padding: 0.375rem 0.75rem;
+            border: none;
+            background: transparent;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: var(--font-size-small);
+            transition: all var(--transition-speed) ease;
+        }
+
+        .tab-btn:hover {
+            background: var(--color-input);
+            color: var(--color-text);
+        }
+
+        .tab-active {
+            background: var(--color-accent);
+            color: #fff;
+        }
+
+        .tab-active:hover {
+            background: var(--color-accent);
+            color: #fff;
+        }
+
+        /* Grid */
+        .marketplace-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 0.75rem;
+        }
+
+        /* Cards */
+        .plugin-card {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            background: var(--color-panel);
+            transition: border-color var(--transition-speed) ease;
+        }
+
+        .plugin-card:hover {
+            border-color: var(--color-accent);
+        }
+
+        .plugin-featured {
+            border-color: rgba(255, 193, 7, 0.4);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .card-icon {
+            font-size: 28px;
+            color: var(--color-accent);
+            flex-shrink: 0;
+        }
+
+        .card-title-group {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--color-text);
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            margin-top: 0.125rem;
+        }
+
+        .card-author::before {
+            content: "\00b7 ";
+        }
+
+        .featured-badge {
+            color: #ffc107;
+            flex-shrink: 0;
+        }
+
+        .featured-badge .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        .card-description {
+            font-size: var(--font-size-small);
+            color: var(--color-text-secondary);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .card-tags {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            font-size: 0.7rem;
+            padding: 0.1rem 0.4rem;
+            background: var(--color-input);
+            border-radius: 3px;
+            color: var(--color-text-secondary);
+        }
+
+        .card-stats {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+        }
+
+        /* Actions */
+        .card-actions {
+            margin-top: auto;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--color-border);
+        }
+
+        .btn-install {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            padding: 0.375rem;
+            font-size: var(--font-size-small);
+        }
+
+        .btn-install .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        .installed-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toggle-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            color: var(--color-text-secondary);
+            display: flex;
+            align-items: center;
+        }
+
+        .toggle-active {
+            color: var(--color-accent);
+        }
+
+        .toggle-btn .material-symbols-outlined {
+            font-size: 28px;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.25rem;
+            color: var(--color-text-secondary);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        .icon-btn:hover {
+            background: var(--color-input);
+            color: var(--color-text);
+        }
+
+        .icon-btn-danger:hover {
+            color: #dc3545;
+        }
+
+        .icon-btn .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        /* Progress */
+        .action-progress {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: var(--font-size-small);
+            color: var(--color-text-secondary);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--color-border);
+            border-top-color: var(--color-accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* States */
+        .marketplace-loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--color-text-secondary);
+        }
+
+        .marketplace-error {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            border-radius: 6px;
+            color: #dc3545;
+            font-size: var(--font-size-small);
+        }
+
+        .marketplace-error .btn {
+            margin-left: auto;
+        }
+
+        .marketplace-empty {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--color-text-secondary);
+        }
+
+        .marketplace-empty .material-symbols-outlined {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .marketplace-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .marketplace-tabs {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+            }
+        }
+    </style>
+</body>
+
+</html>
