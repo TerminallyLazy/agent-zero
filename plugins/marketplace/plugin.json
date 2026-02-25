@@ -1,8 +1,0 @@
-{
-  "name": "Marketplace",
-  "description": "Browse, install, and manage Agent Zero plugins.",
-  "version": "1.0.0",
-  "settings_sections": [],
-  "per_project_config": false,
-  "per_agent_config": false
-}
