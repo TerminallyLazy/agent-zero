@@ -7,11 +7,11 @@
 
 | Aspect | Value |
 |--------|-------|
-| **Tech Stack** | Alpine.js, ES Modules, CSS Variables |
-| **Component Tag** | `<x-component path="...">` |
-| **State Management** | `createStore(name, model)` from `/js/AlpineStore.js` |
-| **Modals** | `openModal(path)` / `closeModal()` from `/js/modals.js` |
-| **API Layer** | `callJsonApi()` / `fetchApi()` from `/js/api.js` |
+| Tech Stack | Alpine.js, ES Modules, CSS Variables |
+| Component Tag | `<x-component path="...">` |
+| State Management | `createStore(name, model)` from `/js/AlpineStore.js` |
+| Modals | `openModal(path)` / `closeModal()` from `/js/modals.js` |
+| API Layer | `callJsonApi()` / `fetchApi()` from `/js/api.js` |
 
 ---
 
@@ -182,7 +182,7 @@ This enables safe module-level initialization before Alpine loads.
 | Module import | `import { store } from "./feature-store.js"; store.prop` |
 | Global (avoid) | `Alpine.store("featureStore").prop` |
 
-**Prefer module imports over global lookups.**
+Prefer module imports over global lookups.
 
 ### Persistence Helpers
 
@@ -262,7 +262,7 @@ const model = {
 };
 ```
 
-**Key distinction:**
+Key distinction:
 - `init()` → once per app load (store registration)
 - `onOpen()` → each time component mounts (modal opens, etc.)
 - `cleanup()`/`destroy()` → teardown resources
@@ -360,7 +360,7 @@ Parent `x-component` attributes accessible via `globalThis.xAttrs(element)`:
 </div>
 ```
 
-**Always gate components that depend on stores.** Prevents errors during initial load race.
+Always gate components that depend on stores. Prevents errors during initial load race.
 
 ---
 
@@ -422,7 +422,7 @@ When `x-component` wrapper would break flex layout:
 
 ### Common Mistakes
 
-**Race condition: store not ready**
+Race condition: store not ready
 ```html
 <!-- ❌ BAD: No gate -->
 <div x-data>
@@ -437,7 +437,7 @@ When `x-component` wrapper would break flex layout:
 </div>
 ```
 
-**Duplicate initialization**
+Duplicate initialization
 ```javascript
 // ❌ BAD: Runs every time store accessed
 init() {
@@ -452,7 +452,7 @@ init() {
 }
 ```
 
-**Leaking listeners**
+Leaking listeners
 ```javascript
 // ❌ BAD: No cleanup
 init() {
@@ -474,7 +474,7 @@ destroy() {
 
 ### Minimum Requirements for External Apps
 
-1. **Files to copy:**
+1. Files to copy:
    ```
    /js/components.js      # Component loader
    /js/AlpineStore.js     # Store factory
@@ -482,11 +482,11 @@ destroy() {
    /js/initFw.js          # Alpine bootstrap + directives
    ```
 
-2. **Dependencies:**
+2. Dependencies:
    - Alpine.js (vendor or CDN)
    - CSS variables (define your theme)
 
-3. **Bootstrap sequence:**
+3. Bootstrap sequence:
    ```javascript
    // initFw.js pattern:
    await import("path/to/alpine.min.js");
@@ -497,7 +497,7 @@ destroy() {
    // etc.
    ```
 
-4. **HTML entry point:**
+4. HTML entry point:
    ```html
    <script type="module" src="/js/initFw.js"></script>
    <x-component path="app/root.html"></x-component>
@@ -516,10 +516,10 @@ destroy() {
 
 | Framework | Consideration |
 |-----------|--------------|
-| **Vanilla/Static** | Works directly, include initFw.js |
-| **Electron** | Works, may need CSP adjustments for Blob URLs |
-| **React/Vue** | Mount Alpine in specific container, avoid conflicts |
-| **SPA Routers** | MutationObserver handles dynamic inserts |
+| Vanilla/Static | Works directly, include initFw.js |
+| Electron | Works, may need CSP adjustments for Blob URLs |
+| React/Vue | Mount Alpine in specific container, avoid conflicts |
+| SPA Routers | MutationObserver handles dynamic inserts |
 
 ---
 
@@ -551,7 +551,7 @@ webui/components/
     └── ...
 ```
 
-**Naming conventions:**
+Naming conventions:
 - Components: `feature-name.html`
 - Stores: `feature-store.js` or `feature-name-store.js`
 - Modals: placed in `modals/` or feature folder

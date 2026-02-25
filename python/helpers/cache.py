@@ -1,3 +1,4 @@
+import fnmatch
 import threading
 from typing import Any
 
@@ -25,6 +26,12 @@ def remove(area: str, key: str) -> None:
 
 def clear(area: str) -> None:
     with _lock:
+        if any(ch in area for ch in "*?["):
+            keys_to_remove = [k for k in _cache.keys() if fnmatch.fnmatch(k, area)]
+            for k in keys_to_remove:
+                _cache.pop(k, None)
+            return
+
         _cache.pop(area, None)
 
 

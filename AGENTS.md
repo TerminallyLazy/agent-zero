@@ -1,43 +1,128 @@
-# Agent Zero — Full-Stack Agent & Plugin Architecture
+# Agent Zero - AGENTS.md
 
-This document bridges the gap between the **Python Backend** (AgentContext, LLM loop) and the **Frontend Component System** (Alpine.js, Modals). Use this as the canonical reference for building deep integrations.
+[Generated using reconnaissance on 2026-02-22]
+
+## Quick Reference
+Tech Stack: Python 3.12+ | Flask | Alpine.js | LiteLLM | WebSocket (Socket.io)
+Dev Server: python run_ui.py (runs on http://localhost:50001 by default)
+Run Tests: pytest (standard) or pytest tests/test_name.py (file-scoped)
+Documentation: README.md | docs/
+Frontend Deep Dives: [Component System](docs/agents/AGENTS.components.md) | [Modal System](docs/agents/AGENTS.modals.md) | [Plugin Architecture](AGENTS.plugins.md)
 
 ---
 
-## 1. The Core Concept: `AgentContext`
+## Table of Contents
+1. [Project Overview](#project-overview)
+2. [Core Commands](#core-commands)
+3. [Docker Environment](#docker-environment)
+4. [Project Structure](#project-structure)
+5. [Development Patterns & Conventions](#development-patterns--conventions)
+6. [Safety and Permissions](#safety-and-permissions)
+7. [Code Examples](#code-examples)
+8. [Git Workflow](#git-workflow)
+9. [API Documentation](#api-documentation)
+10. [Troubleshooting](#troubleshooting)
 
-Every conversation in Agent Zero is an `AgentContext`. It owns the message history, the LLM state, the tool definitions, and the log queue.
+---
 
-### Backend: Managing Contexts
-When building a plugin, you must interact with the context system correctly:
+## Project Overview
 
-```python
-from agent import AgentContext, AgentContextType, initialize_agent
-from python.helpers.messages import UserMessage
+Agent Zero is a dynamic, organic agentic framework designed to grow and learn. It uses the operating system as a tool, featuring a multi-agent cooperation model where every agent can create subordinates to break down tasks.
 
-# 1. Access an existing context (e.g., from a stored ID)
-context = AgentContext.use(context_id)
+Type: Full-Stack Agentic Framework (Python Backend + Alpine.js Frontend)
+Status: Active Development
+Primary Language(s): Python, JavaScript (ES Modules)
 
-# 2. Or create a new one
-config = {} # use defaults
-context = AgentContext(config=config, type=AgentContextType.USER)
-await initialize_agent(context)
+---
 
-# 3. Communicate (send a message and wait for completion)
-task = context.communicate(UserMessage("Hello Agent!"))
-response_text = await task.result()
+## Core Commands
+
+### Setup
+Do not combine these commands; run them individually:
+```bash
+pip install -r requirements.txt
+pip install -r requirements2.txt
+```
+- Start WebUI: python run_ui.py
+
+---
+
+## Docker Environment
+
+When running in Docker, Agent Zero uses two distinct Python runtimes to isolate the framework from the code being executed:
+
+### 1. Framework Runtime (/opt/venv-a0)
+- Version: Python 3.12.4
+- Purpose: Runs the Agent Zero backend, API, and core logic.
+- Packages: Contains all dependencies from requirements.txt.
+
+### 2. Execution Runtime (/opt/venv)
+- Version: Python 3.13
+- Purpose: Default environment for the interactive terminal and the agent's code execution tool.
+- Behavior: This is the environment active when you docker exec into the container. Packages installed by the agent via pip install during a task are stored here.
+
+---
+
+## Project Structure
+
+```
+/
+├── agent.py              # Core Agent and AgentContext definitions
+├── initialize.py         # Framework initialization logic
+├── models.py             # LLM provider configurations
+├── run_ui.py             # WebUI server entry point
+├── python/
+│   ├── api/              # API Handlers (ApiHandler subclasses)
+│   ├── extensions/       # Backend lifecycle extensions
+│   ├── helpers/          # Shared Python utilities (plugins, files, etc.)
+│   ├── tools/            # Agent tools (Tool subclasses)
+│   └── websocket_handlers/# WebSocket event handlers
+├── webui/
+│   ├── components/       # Alpine.js components
+│   ├── js/               # Core frontend logic (modals, stores, etc.)
+│   └── index.html        # Main UI shell
+├── usr/                  # User data directory (isolated from core)
+│   ├── plugins/          # Custom user plugins
+│   ├── settings.json     # User-specific configuration
+│   └── workdir/          # Default agent workspace
+├── plugins/              # Core system plugins
+├── agents/               # Agent profiles (prompts and config)
+├── prompts/              # System and message prompt templates
+└── tests/                # Pytest suite
 ```
 
-### The Glue: `MessageQueue` (mq)
-The frontend listens to a WebSocket. To make messages appear in the WebUI from your plugin, use the log helper:
+Key Files:
+- agent.py: Defines AgentContext and the main Agent class.
+- python/helpers/plugins.py: Plugin discovery and configuration logic.
+- webui/js/AlpineStore.js: Store factory for reactive frontend state.
+- python/helpers/api.py: Base class for all API endpoints.
+- docs/agents/AGENTS.components.md: Deep dive into the frontend component architecture.
+- docs/agents/AGENTS.modals.md: Guide to the stacked modal system.
+- AGENTS.plugins.md: Comprehensive guide to the full-stack plugin system.
 
-```python
-# In your ApiHandler or bridge
-from python.helpers.messages import mq
+---
 
-# This makes the user message appear in the UI immediately
-mq.log_user_message(context.id, "Incoming message from WhatsApp", source="WhatsApp")
+## Development Patterns & Conventions
+
+### Backend (Python)
+- Context Access: Use from agent import AgentContext, AgentContextType (not python.helpers.context).
+- Communication: Use mq from python.helpers.messages to log proactive UI messages:
+  mq.log_user_message(context.id, "Message", source="Plugin")
+- API Handlers: Derive from ApiHandler in python/helpers/api.py.
+- Extensions: Use the extension framework in python/helpers/extension.py for lifecycle hooks.
+- Error Handling: Use RepairableException for errors the LLM might be able to fix.
+
+### Frontend (Alpine.js)
+- Store Gating: Always wrap store-dependent content in a template:
+```html
+<div x-data>
+  <template x-if="$store.myStore">
+    <div x-init="$store.myStore.onOpen()">...</div>
+  </template>
+</div>
 ```
+- Store Registration: Use createStore from /js/AlpineStore.js.
+- Modals: Use openModal(path) and closeModal() from /js/modals.js.
 
 ---
 
@@ -83,21 +168,22 @@ For plugins that surface **existing core settings** (e.g. wrapping `settings/age
 
 ## 4. Lifecycle Synchronization
 
+### Lifecycle Synchronization
 | Action | Backend Extension | Frontend Lifecycle |
 |---|---|---|
-| **Initialization** | `agent_init` | `init()` in Store |
-| **Mounting** | N/A | `x-create` directive |
-| **Processing** | `monologue_start/end` | UI loading state |
-| **Cleanup** | `context_deleted` | `x-destroy` directive |
+| Initialization | agent_init | init() in Store |
+| Mounting | N/A | x-create directive |
+| Processing | monologue_start/end | UI loading state |
+| Cleanup | context_deleted | x-destroy directive |
 
 ---
 
-## 5. Directory Mapping (Plugin Layout)
+## Safety and Permissions
 
-> [!IMPORTANT]
-> **Always create new plugins in `usr/plugins/`.** The root `/plugins/` folder is reserved for core Agent Zero plugins and may be overwritten during framework updates.
+### Allowed Without Asking
+- Read any file in the repository.
+- Update code files in usr/.
 
-```text
 usr/plugins/my-plugin/
 ├── plugin.yaml           # Required manifest (name, version, settings_sections)
 ├── api/                  # ApiHandler (python.helpers.api)
@@ -107,7 +193,72 @@ usr/plugins/my-plugin/
 └── webui/
     ├── config.html       # Optional: plugin settings UI
     └── my-modal.html     # Full plugin pages + stores
+
+### Ask Before Executing
+- pip install (new dependencies).
+- Deleting core files outside of usr/ or tmp/.
+- Modifying agent.py or initialize.py.
+- Making git commits or pushes.
+
+### Never Do
+- Commit, hardcode or leak secrets or .env files.
+- Bypass CSRF or authentication checks.
+- Hardcode API keys.
+
+---
+
+## Code Examples
+
+### API Handler (Good)
+```python
+from python.helpers.api import ApiHandler, Request, Response
+
+class MyHandler(ApiHandler):
+    async def process(self, input: dict, request: Request) -> dict | Response:
+        # Business logic here
+        return {"ok": True, "data": "result"}
 ```
 
-Refer to `docs/agents/AGENTS.components.md` for deep UI technicals and `docs/agents/AGENTS.modals.md` for modal-specific CSS classes (`btn-ok`, `btn-cancel`).
+### Alpine Store (Good)
+```javascript
+import { createStore } from "/js/AlpineStore.js";
 
+export const store = createStore("myStore", {
+    items: [],
+    init() { /* global setup */ },
+    onOpen() { /* mount setup */ },
+    cleanup() { /* unmount cleanup */ }
+});
+```
+
+### Tool Definition (Good)
+```python
+from python.helpers.tool import Tool, ToolResult
+
+class MyTool(Tool):
+    async def execute(self, arg1: str):
+        # Tool logic
+        return ToolResult("Success")
+```
+
+---
+
+## Troubleshooting
+
+### Dependency Conflicts
+If pip install fails, try running in a clean virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements2.txt
+```
+
+### WebSocket Connection Failures
+- Check if X-CSRF-Token is being sent.
+- Ensure the runtime ID in the session matches the current server instance.
+
+---
+
+*Last updated: 2026-02-22*
+*Maintained by: Agent Zero Core Team*

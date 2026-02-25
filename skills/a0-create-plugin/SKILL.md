@@ -6,17 +6,17 @@ description: Create, extend, or modify Agent Zero plugins. Follows strict full-s
 # Agent Zero Plugin Development
 
 > [!IMPORTANT]
-> **Always create new plugins in `usr/plugins/<plugin_name>/`.** The root `/plugins` directory is reserved for core system plugins.
+> Always create new plugins in usr/plugins/<plugin_name>/. The root /plugins directory is reserved for core system plugins.
 
 Primary references:
-- `/a0/AGENTS.md` (Full-stack architecture & AgentContext)
-- `/a0/docs/agents/AGENTS.components.md` (Component system deep dive)
-- `/a0/docs/agents/AGENTS.modals.md` (Modal system & CSS conventions)
-- `/a0/plugins/README.md` (Extension points, plugin.json, settings system)
+- /a0/AGENTS.md (Full-stack architecture & AgentContext)
+- /a0/docs/agents/AGENTS.components.md (Component system deep dive)
+- /a0/docs/agents/AGENTS.modals.md (Modal system & CSS conventions)
+- /a0/AGENTS.plugins.md (Extension points, plugin.json, settings system)
 
-## 📋 Plugin Manifest (`plugin.json`)
+## Plugin Manifest (plugin.json)
 
-Every plugin **must** have a `plugin.json` or it will not be discovered:
+Every plugin must have a plugin.json or it will not be discovered:
 
 ```json
 {
@@ -27,12 +27,12 @@ Every plugin **must** have a `plugin.json` or it will not be discovered:
 }
 ```
 
-`settings_sections` controls which Settings tabs show a subsection for this plugin. Valid values: `agent`, `external`, `mcp`, `developer`, `backup`. Use `[]` for no subsection.
+settings_sections controls which Settings tabs show a subsection for this plugin. Valid values: agent, external, mcp, developer, backup. Use [] for no subsection.
 
-## 🛠️ Mandatory Frontend Patterns
+## Mandatory Frontend Patterns
 
 ### 1. The "Store Gate" Template
-To avoid race conditions and "undefined" errors, every component must use this wrapper:
+To avoid race conditions and undefined errors, every component must use this wrapper:
 ```html
 <div x-data>
   <template x-if="$store.myPluginStore">
@@ -44,30 +44,31 @@ To avoid race conditions and "undefined" errors, every component must use this w
 ```
 
 ### 2. Separate Store Module
-Place store logic in a separate `.js` file. Do NOT use `alpine:init` listeners inside HTML.
+Place store logic in a separate .js file. Do NOT use alpine:init listeners inside HTML.
 ```javascript
 // webui/my-store.js
 import { createStore } from "/js/AlpineStore.js";
 export const store = createStore("myPluginStore", {
     status: 'idle',
     init() { ... },
-    onOpen() { ... }
+    onOpen() { ... },
+    cleanup() { ... }
 });
 ```
-Import it in the HTML `<head>`:
+Import it in the HTML <head>:
 ```html
 <head>
   <script type="module" src="/plugins/<plugin_name>/webui/my-store.js"></script>
 </head>
 ```
 
-## ⚙️ Plugin Settings
+## Plugin Settings
 
-If your plugin needs user-configurable settings, add `webui/config.html`. The system detects it automatically and shows a Settings button in the relevant tabs (per `settings_sections` in `plugin.json`).
+If your plugin needs user-configurable settings, add webui/config.html. The system detects it automatically and shows a Settings button in the relevant tabs (per settings_sections in plugin.json).
 
 ### Settings modal contract
 
-The modal provides Project + Agent profile context selectors. Your `config.html` binds to `$store.pluginSettings.settings`:
+The modal provides Project + Agent profile context selectors. Your config.html binds to $store.pluginSettings.settings:
 
 ```html
 <html>
@@ -86,11 +87,11 @@ The modal provides Project + Agent profile context selectors. Your `config.html`
 </html>
 ```
 
-The modal's Save button persists `$store.pluginSettings.settings` to `config.json` in the correct scope (project/agent/global).
+The modal's Save button persists $store.pluginSettings.settings to config.json in the correct scope (project/agent/global).
 
 ### Surfacing core settings (e.g. memory pattern)
 
-If your plugin exposes **existing core settings** rather than plugin-specific ones, set `saveMode = 'core'` so Save delegates to the core settings API:
+If your plugin exposes existing core settings rather than plugin-specific ones, set saveMode = 'core' so Save delegates to the core settings API:
 
 ```html
 <div x-data x-init="
@@ -102,15 +103,16 @@ If your plugin exposes **existing core settings** rather than plugin-specific on
 ```
 
 ### Sidebar Button (sidebar entry point)
-- **Extension point**: `sidebar-quick-actions-main-start`
-- **Class**: `class="config-button"`
-- **Placement**: `x-move-after=".config-button#dashboard"`
-- **Action**: `@click="openModal('/plugins/<plugin_name>/webui/my-modal.html')"`
+- Extension point: sidebar-quick-actions-main-start
+- Class: class="config-button"
+- Placement: x-move-after=".config-button#dashboard"
+- Action: @click="openModal('/plugins/<plugin_name>/webui/my-modal.html')"
 
-## 🐍 Backend API & Context
+## Backend API & Context
 
 ### Import Paths
-- **Correct**: `from agent import AgentContext` (not python.helpers.agent)
+- Correct: from agent import AgentContext, AgentContextType
+- Correct: from initialize import initialize_agent
 
 ### Sending Messages Proactively
 ```python
@@ -138,7 +140,7 @@ save_plugin_config(
 )
 ```
 
-## 📁 Directory Layout
+## Directory Layout
 ```
 usr/plugins/<name>/
   plugin.json           # Required manifest

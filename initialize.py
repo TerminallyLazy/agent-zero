@@ -142,7 +142,7 @@ def initialize_preload():
 def initialize_migration():
     from python.helpers import migration, dotenv
     # run migration
-    migration.migrate_user_data()
+    migration.startup_migration()
     # reload .env as it might have been moved
     dotenv.load_dotenv()
     # reload settings to ensure new paths are picked up

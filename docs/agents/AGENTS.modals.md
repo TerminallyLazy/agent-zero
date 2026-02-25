@@ -149,7 +149,7 @@ Use these standard button classes for modal actions:
 | `btn btn-ok` | Positive/confirmatory actions (Save, Create, Confirm) | Solid blue background, white text |
 | `btn btn-cancel` | Dismissive/negative actions (Cancel, Close, Delete) | Transparent with accent border |
 
-Footer button order convention: **positive action first** (left), **negative action second** (right).
+Footer button order convention: positive action first (left), negative action second (right).
 
 Example footer markup:
 

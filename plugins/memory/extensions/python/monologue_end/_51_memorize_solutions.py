@@ -15,7 +15,9 @@ class MemorizeSolutions(Extension):
     async def execute(self, loop_data: LoopData = LoopData(), **kwargs):
         # try:
 
-        set = plugins.get_plugin_config("memory")
+        set = plugins.get_plugin_config("memory", self.agent)
+        if not set:
+            return None
 
         if not set["memory_memorize_enabled"]:
             return
@@ -34,7 +36,10 @@ class MemorizeSolutions(Extension):
 
     async def memorize(self, loop_data: LoopData, log_item: LogItem, **kwargs):
         try:
-            set = plugins.get_plugin_config("memory")
+            set = plugins.get_plugin_config("memory", self.agent)
+            if not set:
+                return None
+
 
             db = await Memory.get(self.agent)
 

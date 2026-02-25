@@ -1,4 +1,5 @@
 from python.helpers import files
+from python.helpers import yaml as yaml_helper
 from typing import TypedDict, TYPE_CHECKING
 from pydantic import BaseModel, model_validator
 import json
@@ -88,8 +89,13 @@ def _get_agents_list_from_dir(dir: str, origin: Origin) -> dict[str, SubAgentLis
 
     for subdir in subdirs:
         try:
-            agent_json = files.read_file(files.get_abs_path(dir, subdir, "agent.json"))
-            agent_data = SubAgentListItem.model_validate_json(agent_json)
+            agent_yaml_path = files.get_abs_path(dir, subdir, "agent.yaml")
+            if files.exists(agent_yaml_path):
+                agent_yaml = files.read_file(agent_yaml_path)
+                agent_data = SubAgentListItem.model_validate(yaml_helper.loads(agent_yaml) or {})
+            else:
+                agent_json = files.read_file(files.get_abs_path(dir, subdir, "agent.json"))
+                agent_data = SubAgentListItem.model_validate_json(agent_json)
             name = agent_data.name or subdir
             agent_data.name = name
             agent_data.path = files.get_abs_path(dir, subdir)
@@ -176,8 +182,13 @@ def delete_agent_data(name: str) -> None:
 
 def _load_agent_data_from_dir(dir: str, name: str, origin: Origin) -> SubAgent | None:
     try:
-        subagent_json = files.read_file(files.get_abs_path(dir, name, "agent.json"))
-        subagent = SubAgent.model_validate_json(subagent_json)
+        agent_yaml_path = files.get_abs_path(dir, name, "agent.yaml")
+        if files.exists(agent_yaml_path):
+            agent_yaml = files.read_file(agent_yaml_path)
+            subagent = SubAgent.model_validate(yaml_helper.loads(agent_yaml) or {})
+        else:
+            subagent_json = files.read_file(files.get_abs_path(dir, name, "agent.json"))
+            subagent = SubAgent.model_validate_json(subagent_json)
     except Exception:
         # backward compatibility (before agent.json existed)
         try:
@@ -388,8 +399,8 @@ def get_paths(
         # plugins/*/subpaths...
         from python.helpers import plugins
 
-        for plugin in plugins.get_enhanced_plugins_list():
-            path = files.get_abs_path(str(plugin.path), *subpaths)
+        for plugin_dir in plugins.get_enabled_plugin_paths(agent):
+            path = files.get_abs_path(plugin_dir, *subpaths)
             if (not must_exist_completely) or files.exists(path):
                 if path not in paths:
                     paths.append(path)

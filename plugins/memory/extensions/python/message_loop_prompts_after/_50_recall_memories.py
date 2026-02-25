@@ -25,11 +25,13 @@ class RecallMemories(Extension):
 
     async def execute(self, loop_data: LoopData = LoopData(), **kwargs):
 
-        set = plugins.get_plugin_config("memory")
+        set = plugins.get_plugin_config("memory", self.agent)
+        if not set:
+            return None
 
         # turned off in settings?
         if not set["memory_recall_enabled"]:
-            return
+            return None
 
         # every X iterations (or the first one) recall memories
         if loop_data.iteration % set["memory_recall_interval"] == 0:
@@ -63,7 +65,9 @@ class RecallMemories(Extension):
             del extras["solutions"]
 
 
-        set = plugins.get_plugin_config("memory")
+        set = plugins.get_plugin_config("memory", self.agent)
+        if not set:
+            return None
         # try:
 
         # get system message and chat history for util llm

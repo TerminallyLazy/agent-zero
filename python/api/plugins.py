@@ -53,11 +53,12 @@ class Plugins(ApiHandler):
 
         if action == "list_configs":
             plugin_name = input.get("plugin_name", "")
+            asset_type = input.get("asset_type", "config")
             if not plugin_name:
                 return Response(status=400, response="Missing plugin_name")
 
             configs = plugins.find_plugin_assets(
-                plugins.CONFIG_FILE_NAME,
+                plugins.CONFIG_FILE_NAME if asset_type == "config" else plugins.TOGGLE_FILE_PATTERN,
                 plugin_name=plugin_name,
                 project_name="*",
                 agent_profile="*",

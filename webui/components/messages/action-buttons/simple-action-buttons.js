@@ -59,10 +59,14 @@ export function showButtonFeedback(button, success, originalIcon) {
 
 /**
  * Create action button element
+ *
+ * @param {string} icon
+ * @param {string} [text]
+ * @param {(() => (any | Promise<any>)) | null} [handler]
+ * @returns {HTMLButtonElement}
  */
 export function createActionButton(icon, text = "", handler = null) {
   const iconName = resolveActionIcon(icon);
-  if (!iconName) return null;
 
   const button = document.createElement("button");
   button.type = "button";
@@ -72,12 +76,17 @@ export function createActionButton(icon, text = "", handler = null) {
     button.setAttribute("aria-label", label);
     button.setAttribute("title", label);
   }
-  button.innerHTML = `<span class="material-symbols-outlined">${iconName}</span>`;
+
+  if (iconName) {
+    button.innerHTML = `<span class="material-symbols-outlined">${iconName}</span>`;
+  } else if (text) {
+    button.textContent = text;
+  }
 
   if (typeof handler === "function") {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
-      const shouldShowFeedback = true; // icon === "copy" || icon === "speak";
+      const shouldShowFeedback = Boolean(iconName); // icon === "copy" || icon === "speak";
       try {
         await handler();
         if (shouldShowFeedback) {
