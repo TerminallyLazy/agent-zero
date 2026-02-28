@@ -30,6 +30,9 @@ tmp/**
 usr/**
 !usr/**/
 
+# Context Engine plugin (tracked)
+!usr/plugins/context-engine/**
+
 # Handle knowledge directory
 
 # Global rule to include .gitkeep files anywhere
