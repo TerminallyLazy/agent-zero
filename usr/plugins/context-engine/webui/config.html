@@ -359,6 +359,20 @@
                             placeholder="~/.context-engine/repo" />
                     </div>
                 </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Host Index Path</div>
+                        <div class="field-description">
+                            Local directory to mount into the Context Engine containers for indexing.
+                            Point this to your project or codebase root.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.host_index_path"
+                            placeholder="~" />
+                    </div>
+                </div>
             </div>
         </template>
     </div>
