@@ -12,26 +12,29 @@ class DockerHandler(ApiHandler):
     """Docker Compose lifecycle handler for the Context Engine stack."""
 
     async def process(self, input: dict, request: Request) -> dict | Response:
-        action = input.get("action", "").strip().lower()
+        try:
+            action = input.get("action", "").strip().lower()
 
-        if action not in ("up", "down", "ps"):
-            return {
-                "ok": False,
-                "error": "Invalid action. Use 'up', 'down', or 'ps'.",
-            }
+            if action not in ("up", "down", "ps"):
+                return {
+                    "ok": False,
+                    "error": "Invalid action. Use 'up', 'down', or 'ps'.",
+                }
 
-        if not _compose_file.is_file():
-            return {
-                "ok": False,
-                "error": f"Compose file not found: {_compose_file}",
-            }
+            if not _compose_file.is_file():
+                return {
+                    "ok": False,
+                    "error": f"Compose file not found: {_compose_file}",
+                }
 
-        if action == "up":
-            return await self._up()
-        elif action == "down":
-            return await self._down()
-        else:
-            return await self._ps()
+            if action == "up":
+                return await self._up()
+            elif action == "down":
+                return await self._down()
+            else:
+                return await self._ps()
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     async def _up(self) -> dict:
         return await self._run_compose(
@@ -56,6 +59,11 @@ class DockerHandler(ApiHandler):
         except FileNotFoundError:
             return {"ok": False, "error": "Docker is not installed or not in PATH."}
         except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except ProcessLookupError:
+                pass
             return {
                 "ok": False,
                 "error": "Timed out checking services. Try running 'docker compose ps' manually.",
@@ -100,6 +108,11 @@ class DockerHandler(ApiHandler):
         except FileNotFoundError:
             return {"ok": False, "error": "Docker is not installed or not in PATH."}
         except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except ProcessLookupError:
+                pass
             return {
                 "ok": False,
                 "error": f"Command timed out after {timeout}s. Try pulling images manually with 'docker compose pull'.",
