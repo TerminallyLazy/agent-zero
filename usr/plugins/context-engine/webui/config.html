@@ -26,8 +26,14 @@
         connectionOk: null,
         connectionError: '',
         testingConnection: false,
+        _csrfToken: '',
 
         async init() {
+            try {
+                const res = await fetch('/api/csrf_token', { credentials: 'same-origin' });
+                const data = await res.json();
+                if (data.ok) this._csrfToken = data.token;
+            } catch (e) { /* CSRF bootstrap failed, apiCall will return errors */ }
             await this.checkDockerStatus();
         },
 
@@ -36,11 +42,15 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-Token': document.cookie.match(/csrf_token_[^=]+=([^;]+)/)?.[1] || ''
+                    'X-CSRF-Token': this._csrfToken
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify(data)
             });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || 'HTTP ' + res.status);
+            }
             return await res.json();
         },
 
