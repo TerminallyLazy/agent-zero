@@ -37,16 +37,19 @@ class ContextEngineClient:
     async def _call_mcp(
         self, endpoint: str, tool_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
-        """Send a JSON-RPC 2.0 ``tools/call`` request to an MCP HTTP endpoint."""
+        """Send a JSON-RPC 2.0 ``tools/call`` request to an MCP HTTP endpoint.
+
+        The MCP streamable-http transport may respond with either:
+        - ``application/json`` — a direct JSON-RPC response body, or
+        - ``text/event-stream`` — SSE frames (``event: message\\ndata: {json}``).
+        This method handles both formats transparently.
+        """
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
             "params": {"name": tool_name, "arguments": arguments},
         }
-        # MCP streamable-http transport requires Accept to include both
-        # application/json (for direct responses) and text/event-stream
-        # (for SSE streaming responses).
         headers = {
             "Accept": "application/json, text/event-stream",
             "Content-Type": "application/json",
@@ -57,7 +60,8 @@ class ContextEngineClient:
                     if resp.status != 200:
                         text = await resp.text()
                         return {"ok": False, "error": f"HTTP {resp.status}: {text}"}
-                    body = await resp.json()
+
+                    body = await self._parse_response(resp)
 
                     if "error" in body:
                         err = body["error"]
@@ -65,21 +69,49 @@ class ContextEngineClient:
                         return {"ok": False, "error": msg}
 
                     result = body.get("result", body)
-                    # MCP tool results wrap content in a list of {type, text} items
-                    if isinstance(result, dict) and "content" in result:
-                        for item in result["content"]:
-                            if item.get("type") == "text":
-                                try:
-                                    return json.loads(item["text"])
-                                except (json.JSONDecodeError, KeyError):
-                                    return {"ok": True, "text": item["text"]}
-                    return result
+                    return self._unwrap_mcp_result(result)
         except aiohttp.ClientError as exc:
             PrintStyle.error(f"Context Engine connection error ({tool_name}): {exc}")
             return {"ok": False, "error": f"Connection error: {exc}"}
         except Exception as exc:
             PrintStyle.error(f"Context Engine error ({tool_name}): {exc}")
             return {"ok": False, "error": f"Unexpected error: {exc}"}
+
+    @staticmethod
+    async def _parse_response(resp: aiohttp.ClientResponse) -> dict[str, Any]:
+        """Parse either JSON or SSE response from MCP streamable-http."""
+        content_type = resp.content_type or ""
+
+        if "text/event-stream" in content_type:
+            # SSE format: lines of "event: <type>\ndata: <json>\n\n"
+            # We extract the last JSON-RPC message from the data lines.
+            raw = await resp.text()
+            last_data = None
+            for line in raw.splitlines():
+                if line.startswith("data: "):
+                    last_data = line[6:]
+            if last_data:
+                return json.loads(last_data)
+            return {"error": "Empty SSE response from MCP server"}
+
+        # Default: plain JSON response
+        return await resp.json()
+
+    @staticmethod
+    def _unwrap_mcp_result(result: Any) -> dict[str, Any]:
+        """Unwrap MCP tool result content envelope.
+
+        MCP tool results wrap content in a list of ``{type, text}`` items.
+        Extract and parse the first text item as JSON.
+        """
+        if isinstance(result, dict) and "content" in result:
+            for item in result["content"]:
+                if item.get("type") == "text":
+                    try:
+                        return json.loads(item["text"])
+                    except (json.JSONDecodeError, KeyError):
+                        return {"ok": True, "text": item["text"]}
+        return result
 
     # ------------------------------------------------------------------
     # Indexer service tools (port 8003)
