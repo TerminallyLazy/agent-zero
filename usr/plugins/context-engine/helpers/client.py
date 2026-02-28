@@ -164,13 +164,21 @@ class ContextEngineClient:
             },
         )
 
-    async def index(self, path: str, collection: str | None = None) -> dict[str, Any]:
-        """Trigger indexing of a file or directory."""
-        return await self._call_mcp(
-            self.indexer_endpoint,
-            "index",
-            {"path": path, "collection": collection or self.collection},
-        )
+    async def index(self, subdir: str = "", collection: str | None = None, recreate: bool = False) -> dict[str, Any]:
+        """Trigger indexing of the workspace or a subdirectory.
+
+        Args:
+            subdir: Relative path under /work to index ("" for full workspace).
+            collection: Target Qdrant collection (defaults to configured collection).
+            recreate: If True, drop and recreate the collection before indexing.
+        """
+        args: dict[str, Any] = {"collection": collection or self.collection}
+        if subdir:
+            args["subdir"] = subdir
+            return await self._call_mcp(self.indexer_endpoint, "qdrant_index", args)
+        if recreate:
+            args["recreate"] = True
+        return await self._call_mcp(self.indexer_endpoint, "qdrant_index_root", args)
 
     async def search_tests(self, query: str, limit: int = 10) -> dict[str, Any]:
         """Find test files related to a query."""

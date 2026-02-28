@@ -16,23 +16,28 @@ class IndexHandler(ApiHandler):
 
     async def process(self, input: dict, request: Request) -> dict | Response:
         try:
-            root_path = input.get("path", "").strip()
-            if not root_path:
-                return {"ok": False, "error": "Path is required"}
-
+            # "path" is a subdirectory relative to /work inside the container.
+            # Empty or "/" means index the full workspace.
+            subdir = input.get("path", "").strip().strip("/")
             collection = input.get("collection") or None
+            recreate = bool(input.get("recreate", False))
 
             config = plugins.get_plugin_config("context-engine")
             client = ContextEngineClient(config)
 
-            result = await client.index(path=root_path, collection=collection)
+            result = await client.index(
+                subdir=subdir,
+                collection=collection,
+                recreate=recreate,
+            )
 
             if isinstance(result, dict) and result.get("ok") is False:
                 return {"ok": False, "error": result.get("error", "Indexing failed")}
 
+            target = subdir or "workspace root"
             return {
                 "ok": True,
-                "message": f"Indexing started for: {root_path}",
+                "message": f"Indexing started for: {target}",
                 "result": result,
             }
         except Exception as e:

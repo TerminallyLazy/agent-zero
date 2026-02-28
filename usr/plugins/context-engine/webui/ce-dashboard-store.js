@@ -121,21 +121,15 @@ const ceDashboardStore = {
   // --- Indexing ---
 
   async triggerIndex() {
-    const path = this.indexPath.trim();
-    if (!path) {
-      justToast("Please enter a path to index", "warning");
-      return;
-    }
-
     this.indexing = true;
     this.indexError = null;
 
+    const path = this.indexPath.trim();
     try {
       const response = await API.callJsonApi(INDEX_API, { path });
       if (response.ok) {
         justToast(response.message || "Indexing started", "success");
         this.indexPath = "";
-        // Refresh status after indexing
         await this.checkStatus();
       } else {
         this.indexError = response.error || "Indexing failed";

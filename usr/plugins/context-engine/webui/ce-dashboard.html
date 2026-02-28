@@ -54,7 +54,7 @@
                     </button>
                     <button class="ce-tab" :class="{ 'active': $store.ceDashboardStore.activeTab === 'index' }"
                         @click="$store.ceDashboardStore.activeTab = 'index'">
-                        <span class="material-symbols-outlined">index</span> Index
+                        <span class="material-symbols-outlined">contextual_token</span> Index
                     </button>
                 </div>
 
@@ -191,17 +191,21 @@
                 <!-- Index Tab -->
                 <div x-show="$store.ceDashboardStore.activeTab === 'index'" class="ce-tab-content">
                     <div class="ce-index-form">
+                        <div class="ce-index-hint">
+                            Indexes files from the Host Index Path configured in settings (mounted as /work
+                            in the container). Leave subdirectory empty to index the full workspace.
+                        </div>
                         <div class="ce-index-row">
-                            <label>Directory or file path to index:</label>
+                            <label>Subdirectory (optional, relative to workspace):</label>
                             <input type="text" x-model="$store.ceDashboardStore.indexPath"
-                                placeholder="/path/to/your/project"
+                                placeholder="e.g. src/ or leave empty for full workspace"
                                 @keyup.enter="$store.ceDashboardStore.triggerIndex()" />
                         </div>
                         <div class="ce-index-actions">
                             <button class="btn btn-ok" @click="$store.ceDashboardStore.triggerIndex()"
-                                :disabled="$store.ceDashboardStore.indexing || !$store.ceDashboardStore.indexPath.trim()">
+                                :disabled="$store.ceDashboardStore.indexing">
                                 <span class="material-symbols-outlined">bolt</span>
-                                <span x-text="$store.ceDashboardStore.indexing ? 'Indexing...' : 'Start Indexing'"></span>
+                                <span x-text="$store.ceDashboardStore.indexing ? 'Indexing...' : ($store.ceDashboardStore.indexPath.trim() ? 'Index Subdirectory' : 'Index Full Workspace')"></span>
                             </button>
                         </div>
                         <div x-show="$store.ceDashboardStore.indexError" class="error-state">
@@ -549,6 +553,16 @@
             display: flex;
             flex-direction: column;
             gap: 0.4rem;
+        }
+
+        .ce-index-hint {
+            font-size: 0.8rem;
+            color: var(--color-text);
+            opacity: 0.7;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
         }
 
         .ce-index-row label {
