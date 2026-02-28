@@ -24,7 +24,7 @@ class DockerHandler(ApiHandler):
             if not _compose_file.is_file():
                 return {
                     "ok": False,
-                    "error": f"Compose file not found: {_compose_file}",
+                    "error": "Compose file not found. Ensure the context-engine plugin is installed correctly.",
                 }
 
             if action == "up":
@@ -75,15 +75,23 @@ class DockerHandler(ApiHandler):
                 "error": stderr.decode().strip() or "docker compose ps failed",
             }
 
+        # docker compose ps --format json outputs a JSON array (v2.21+)
+        # or one JSON object per line (older versions). Handle both.
+        raw = stdout.decode().strip()
         services = []
-        for line in stdout.decode().strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
+        if raw:
             try:
-                services.append(json.loads(line))
+                parsed = json.loads(raw)
+                services = parsed if isinstance(parsed, list) else [parsed]
             except json.JSONDecodeError:
-                continue
+                for line in raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        services.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
 
         running_count = sum(
             1 for s in services if s.get("State") == "running"
