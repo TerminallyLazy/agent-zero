@@ -1,10 +1,192 @@
 <html>
 <head>
     <title>Context Engine</title>
+    <style>
+        .docker-section { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--color-border, #333); }
+        .docker-status { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.9rem; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .dot-green { background: #4caf50; }
+        .dot-orange { background: #ff9800; }
+        .dot-red { background: #f44336; }
+        .dot-gray { background: #666; }
+        .docker-btn { margin-top: 0.75rem; padding: 0.4rem 1rem; border: 1px solid var(--color-border, #555); border-radius: 4px; background: var(--color-panel, #1e1e1e); color: var(--color-text, #ccc); cursor: pointer; font-size: 0.85rem; }
+        .docker-btn:hover { opacity: 0.85; }
+        .docker-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .docker-conn { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.85rem; }
+    </style>
 </head>
 
 <body>
-    <div x-data>
+    <div x-data="{
+        dockerStatus: 'unknown',
+        dockerError: '',
+        dockerServiceCount: 0,
+        dockerRunningCount: 0,
+        dockerBusy: false,
+        connectionOk: null,
+        connectionError: '',
+        testingConnection: false,
+
+        async init() {
+            await this.checkDockerStatus();
+        },
+
+        async apiCall(endpoint, data) {
+            const res = await fetch('/api/plugins/context-engine/' + endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': document.cookie.match(/csrf_token_[^=]+=([^;]+)/)?.[1] || ''
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(data)
+            });
+            return await res.json();
+        },
+
+        async checkDockerStatus() {
+            try {
+                const result = await this.apiCall('docker', { action: 'ps' });
+                if (!result.ok) {
+                    this.dockerStatus = 'error';
+                    this.dockerError = result.error || 'Unknown error';
+                    this.dockerServiceCount = 0;
+                    this.dockerRunningCount = 0;
+                    return;
+                }
+                this.dockerServiceCount = result.service_count || 0;
+                this.dockerRunningCount = result.running_count || 0;
+                if (this.dockerServiceCount === 0) {
+                    this.dockerStatus = 'stopped';
+                } else if (result.running) {
+                    this.dockerStatus = 'running';
+                } else if (this.dockerRunningCount > 0) {
+                    this.dockerStatus = 'partial';
+                } else {
+                    this.dockerStatus = 'stopped';
+                }
+                this.dockerError = '';
+            } catch (e) {
+                this.dockerStatus = 'error';
+                this.dockerError = e.message || 'Failed to check status';
+            }
+        },
+
+        get dockerToggled() {
+            return ['running', 'partial', 'starting'].includes(this.dockerStatus);
+        },
+
+        async toggleDocker() {
+            if (this.dockerBusy) return;
+            this.dockerBusy = true;
+            this.dockerError = '';
+            const wantUp = ['stopped', 'error', 'unknown'].includes(this.dockerStatus);
+            this.dockerStatus = wantUp ? 'starting' : 'stopping';
+            try {
+                const result = await this.apiCall('docker', { action: wantUp ? 'up' : 'down' });
+                if (!result.ok) {
+                    this.dockerStatus = 'error';
+                    this.dockerError = result.error || 'Command failed';
+                } else {
+                    await this.checkDockerStatus();
+                }
+            } catch (e) {
+                this.dockerStatus = 'error';
+                this.dockerError = e.message || 'Request failed';
+            } finally {
+                this.dockerBusy = false;
+            }
+        },
+
+        async testConnection() {
+            this.testingConnection = true;
+            this.connectionOk = null;
+            this.connectionError = '';
+            try {
+                const result = await this.apiCall('status', {});
+                if (result.ok && result.connected) {
+                    this.connectionOk = true;
+                    this.connectionError = '';
+                } else {
+                    this.connectionOk = false;
+                    this.connectionError = result.error || 'Connection failed';
+                }
+            } catch (e) {
+                this.connectionOk = false;
+                this.connectionError = e.message || 'Request failed';
+            } finally {
+                this.testingConnection = false;
+            }
+        }
+    }">
+        <!-- Docker Services Section -->
+        <div class="docker-section">
+            <div class="section-title">Docker Services</div>
+            <div class="section-description">
+                Manage the Context Engine Docker stack (Qdrant, Indexer MCP, Memory MCP).
+            </div>
+
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Deploy</div>
+                    <div class="field-description">
+                        Start or stop all Context Engine containers.
+                    </div>
+                </div>
+                <div class="field-control">
+                    <label class="toggle">
+                        <input type="checkbox"
+                            :checked="dockerToggled"
+                            @change="toggleDocker()"
+                            :disabled="dockerBusy" />
+                        <span class="toggler"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="docker-status">
+                <template x-if="dockerStatus === 'running'">
+                    <span><span class="dot dot-green"></span> Running (<span x-text="dockerRunningCount"></span>/<span x-text="dockerServiceCount"></span> services)</span>
+                </template>
+                <template x-if="dockerStatus === 'partial'">
+                    <span><span class="dot dot-orange"></span> Partial (<span x-text="dockerRunningCount"></span>/<span x-text="dockerServiceCount"></span> services)</span>
+                </template>
+                <template x-if="dockerStatus === 'starting'">
+                    <span><span class="dot dot-orange"></span> Starting...</span>
+                </template>
+                <template x-if="dockerStatus === 'stopping'">
+                    <span><span class="dot dot-orange"></span> Stopping...</span>
+                </template>
+                <template x-if="dockerStatus === 'stopped'">
+                    <span><span class="dot dot-gray"></span> Stopped</span>
+                </template>
+                <template x-if="dockerStatus === 'error'">
+                    <span><span class="dot dot-red"></span> Error: <span x-text="dockerError"></span></span>
+                </template>
+                <template x-if="dockerStatus === 'unknown'">
+                    <span><span class="dot dot-gray"></span> Checking...</span>
+                </template>
+            </div>
+
+            <button class="docker-btn"
+                @click="testConnection()"
+                :disabled="testingConnection">
+                <span x-text="testingConnection ? 'Testing...' : 'Test Connection'"></span>
+            </button>
+
+            <template x-if="connectionOk === true">
+                <div class="docker-conn" style="color: #4caf50;">
+                    &#10003; MCP endpoints are responding
+                </div>
+            </template>
+            <template x-if="connectionOk === false">
+                <div class="docker-conn" style="color: #f44336;">
+                    &#10007; <span x-text="connectionError"></span>
+                </div>
+            </template>
+        </div>
+
+        <!-- Settings Section -->
         <template x-if="$store.pluginSettings.settings">
             <div>
                 <div class="section-title">Context Engine</div>
