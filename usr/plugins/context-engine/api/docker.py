@@ -43,16 +43,29 @@ FASTMCP_HTTP_TRANSPORT=streamable-http
 FASTMCP_HTTP_PORT=8002
 FASTMCP_INDEXER_HTTP_PORT=8003
 HOST_INDEX_PATH={{host_index_path}}
+CTXCE_AUTH_SHARED_TOKEN=
+CTXCE_AUTH_DB_URL=
+QWEN3_INSTRUCTION_TEXT=
 """
 
-# docker-compose.override.yml — pins qdrant to a version compatible with
-# the qdrant-client library bundled in Context Engine (1.15.x).
-# Server minor version must be within 1 of client minor version.
+# docker-compose.override.yml — Agent Zero customizations:
+# 1. Pin qdrant to a version compatible with qdrant-client 1.15.x
+#    (server minor must be within 1 of client minor).
+# 2. Let Docker assign the network subnet automatically instead of
+#    using the upstream hardcoded 172.20.0.0/16 which conflicts with
+#    existing networks.
+# 3. Disable auth env vars not needed for local Agent Zero usage.
 _OVERRIDE_TEMPLATE = f"""\
 {_AUTOGEN_MARKER}
 services:
   qdrant:
     image: qdrant/qdrant:v1.16.1
+
+networks:
+  dev-remote-network:
+    driver: bridge
+    ipam:
+      driver: default
 """
 
 # Server-side lock to prevent concurrent clone/deploy operations.
@@ -127,7 +140,11 @@ class DockerHandler(ApiHandler):
             self._generate_env(repo_path / ".env", config)
             self._generate_override(repo_path / "docker-compose.override.yml")
 
-            # Step 3: docker compose up -d (builds images on first run)
+            # Step 3: Tear down any containers from a previous project name
+            # (e.g. "repo") to free the Docker network subnet.
+            await self._cleanup_old_project(repo_path)
+
+            # Step 4: docker compose up -d (builds images on first run)
             return await self._run_compose(repo_path, ["up", "-d", "--build"], timeout=600)
 
     async def _down(self, compose_file: Path) -> dict:
@@ -242,6 +259,30 @@ class DockerHandler(ApiHandler):
             }
 
         return {"ok": True, "output": "Repository cloned successfully."}
+
+    async def _cleanup_old_project(self, repo_dir: Path) -> None:
+        """Tear down containers from previous deploys that used different project names.
+
+        When we switched to -p context-engine, old containers from the default
+        project name (the directory name, e.g. "repo") remain running and hold
+        the Docker network subnet. This silently stops them so the new project
+        can start cleanly.
+        """
+        # The old project name was derived from the repo directory name
+        old_project = repo_dir.name
+        if old_project == _COMPOSE_PROJECT:
+            return  # same project name, nothing to clean up
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "compose", "-p", old_project,
+                "down", "--remove-orphans",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(repo_dir),
+            )
+            await asyncio.wait_for(proc.communicate(), timeout=60)
+        except (asyncio.TimeoutError, FileNotFoundError, ProcessLookupError):
+            pass  # best-effort cleanup, don't block deploy
 
     def _generate_env(self, env_file: Path, config: dict) -> None:
         """Generate .env from template with Agent Zero defaults.
