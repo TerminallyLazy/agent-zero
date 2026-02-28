@@ -44,9 +44,16 @@ class ContextEngineClient:
             "method": "tools/call",
             "params": {"name": tool_name, "arguments": arguments},
         }
+        # MCP streamable-http transport requires Accept to include both
+        # application/json (for direct responses) and text/event-stream
+        # (for SSE streaming responses).
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        }
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                async with session.post(endpoint, json=payload) as resp:
+                async with session.post(endpoint, json=payload, headers=headers) as resp:
                     if resp.status != 200:
                         text = await resp.text()
                         return {"ok": False, "error": f"HTTP {resp.status}: {text}"}
