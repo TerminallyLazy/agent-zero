@@ -38,7 +38,7 @@ _ENV_TEMPLATE = f"""\
 {_AUTOGEN_MARKER}
 QDRANT_URL=http://qdrant:6333
 COLLECTION_NAME={{collection_name}}
-EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5
+EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5-Q
 EMBEDDING_PROVIDER=remote
 EMBEDDING_SERVICE_URL=http://embedding:8100
 CODEBASE_STATE_BACKEND=redis
