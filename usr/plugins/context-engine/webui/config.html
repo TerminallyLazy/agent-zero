@@ -133,14 +133,16 @@
         <div class="docker-section">
             <div class="section-title">Docker Services</div>
             <div class="section-description">
-                Manage the Context Engine Docker stack (Qdrant, Indexer MCP, Memory MCP).
+                Deploy and manage the Context Engine Docker stack. On first run, the plugin
+                automatically clones the repository and builds Docker images.
             </div>
 
             <div class="field">
                 <div class="field-label">
                     <div class="field-title">Deploy</div>
                     <div class="field-description">
-                        Start or stop all Context Engine containers.
+                        Start or stop all Context Engine containers. First deploy clones the
+                        repository and builds images (may take several minutes).
                     </div>
                 </div>
                 <div class="field-control">
@@ -162,7 +164,7 @@
                     <span><span class="dot dot-orange"></span> Partial (<span x-text="dockerRunningCount"></span>/<span x-text="dockerServiceCount"></span> services)</span>
                 </template>
                 <template x-if="dockerStatus === 'starting'">
-                    <span><span class="dot dot-orange"></span> Starting...</span>
+                    <span><span class="dot dot-orange"></span> Deploying... (first run builds images, may take several minutes)</span>
                 </template>
                 <template x-if="dockerStatus === 'stopping'">
                     <span><span class="dot dot-orange"></span> Stopping...</span>
@@ -341,6 +343,20 @@
                     <div class="field-control">
                         <input type="number"
                             x-model.number="$store.pluginSettings.settings.connection_timeout" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Context Engine Repository Path</div>
+                        <div class="field-description">
+                            Local path where the Context Engine repository is cloned. The plugin clones it
+                            automatically on first deploy if this directory is empty.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.context_engine_repo_path"
+                            placeholder="~/.context-engine/repo" />
                     </div>
                 </div>
             </div>

@@ -8,3 +8,4 @@ auto_context_interval: 3
 auto_context_max_results: 5
 auto_context_history_len: 10000
 connection_timeout: 10
+context_engine_repo_path: ~/.context-engine/repo
