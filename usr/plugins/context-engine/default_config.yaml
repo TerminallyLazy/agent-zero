@@ -1,5 +1,5 @@
-indexer_endpoint: http://localhost:8003
-memory_endpoint: http://localhost:8002
+indexer_endpoint: http://localhost:8003/mcp
+memory_endpoint: http://localhost:8002/mcp
 collection_name: codebase
 search_limit: 10
 search_threshold: 0.7
