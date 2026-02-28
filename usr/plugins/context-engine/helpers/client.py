@@ -7,6 +7,7 @@ All methods return dicts parsed from JSON responses.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -35,7 +36,11 @@ class ContextEngineClient:
     # ------------------------------------------------------------------
 
     async def _call_mcp(
-        self, endpoint: str, tool_name: str, arguments: dict[str, Any]
+        self,
+        endpoint: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
         """Send a JSON-RPC 2.0 ``tools/call`` request to an MCP HTTP endpoint.
 
@@ -43,6 +48,10 @@ class ContextEngineClient:
         - ``application/json`` — a direct JSON-RPC response body, or
         - ``text/event-stream`` — SSE frames (``event: message\\ndata: {json}``).
         This method handles both formats transparently.
+
+        Args:
+            timeout_seconds: Override the default connection timeout (seconds).
+                             Use for long-running operations like indexing.
         """
         payload = {
             "jsonrpc": "2.0",
@@ -54,8 +63,13 @@ class ContextEngineClient:
             "Accept": "application/json, text/event-stream",
             "Content-Type": "application/json",
         }
+        timeout = (
+            aiohttp.ClientTimeout(total=timeout_seconds)
+            if timeout_seconds
+            else self.timeout
+        )
         try:
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(endpoint, json=payload, headers=headers) as resp:
                     if resp.status != 200:
                         text = await resp.text()
@@ -70,6 +84,9 @@ class ContextEngineClient:
 
                     result = body.get("result", body)
                     return self._unwrap_mcp_result(result)
+        except asyncio.TimeoutError:
+            PrintStyle.error(f"Context Engine timeout ({tool_name}): request exceeded {timeout.total}s")
+            return {"ok": False, "error": f"Request timed out after {int(timeout.total)}s. Indexing large codebases can take several minutes — try increasing the connection timeout in settings."}
         except aiohttp.ClientError as exc:
             PrintStyle.error(f"Context Engine connection error ({tool_name}): {exc}")
             return {"ok": False, "error": f"Connection error: {exc}"}
@@ -175,10 +192,10 @@ class ContextEngineClient:
         args: dict[str, Any] = {"collection": collection or self.collection}
         if subdir:
             args["subdir"] = subdir
-            return await self._call_mcp(self.indexer_endpoint, "qdrant_index", args)
+            return await self._call_mcp(self.indexer_endpoint, "qdrant_index", args, timeout_seconds=300)
         if recreate:
             args["recreate"] = True
-        return await self._call_mcp(self.indexer_endpoint, "qdrant_index_root", args)
+        return await self._call_mcp(self.indexer_endpoint, "qdrant_index_root", args, timeout_seconds=300)
 
     async def search_tests(self, query: str, limit: int = 10) -> dict[str, Any]:
         """Find test files related to a query."""
