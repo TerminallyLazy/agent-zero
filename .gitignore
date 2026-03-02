@@ -43,3 +43,7 @@ agent_history.gif
 
 .agent/**
 .claude/**
+
+# ignore pycache files from usr plugins
+usr/plugins/**/__pycache__/
+
