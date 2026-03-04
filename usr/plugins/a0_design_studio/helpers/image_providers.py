@@ -15,11 +15,9 @@ def _get_litellm():
     return litellm
 
 
-def _resolve_api_key(model: str) -> str | None:
-    """Extract provider from model string and look up the API key
-    using Agent Zero's key management (env vars: API_KEY_<PROVIDER>,
-    <PROVIDER>_API_KEY, <PROVIDER>_API_TOKEN)."""
-    provider = model.split("/")[0] if "/" in model else model
+def _resolve_api_key(provider: str) -> str | None:
+    """Look up the API key for a provider using Agent Zero's key management
+    (env vars: API_KEY_<PROVIDER>, <PROVIDER>_API_KEY, <PROVIDER>_API_TOKEN)."""
     try:
         from models import get_api_key
         key = get_api_key(provider)
@@ -32,7 +30,7 @@ def _resolve_api_key(model: str) -> str | None:
 
 async def generate_image(
     prompt: str,
-    model: str = "openai/dall-e-3",
+    model: str = "gemini/imagen-4.0-generate-001",
     size: str = "1024x1024",
     n: int = 1,
     **kwargs,
@@ -41,7 +39,7 @@ async def generate_image(
 
     Args:
         prompt: Text description of the desired image.
-        model: LiteLLM model identifier (e.g. "openai/dall-e-3").
+        model: LiteLLM model identifier (e.g. "gemini/imagen-4.0-generate-001").
         size: Image dimensions as "WxH" string.
         n: Number of images to generate.
         **kwargs: Extra arguments forwarded to litellm.aimage_generation.
@@ -50,7 +48,10 @@ async def generate_image(
         List of dicts, each with keys: b64_json, url, revised_prompt.
     """
     litellm = _get_litellm()
-    api_key = _resolve_api_key(model)
+
+    # Extract provider prefix for API key lookup (e.g. "gemini" from "gemini/imagen-...")
+    provider = model.split("/")[0] if "/" in model else model
+    api_key = _resolve_api_key(provider)
     if api_key:
         kwargs.setdefault("api_key", api_key)
 
@@ -97,7 +98,8 @@ async def edit_image(
         List of dicts, each with keys: content, revised_prompt.
     """
     litellm = _get_litellm()
-    api_key = _resolve_api_key(model)
+    provider = model.split("/")[0] if "/" in model else model
+    api_key = _resolve_api_key(provider)
     if api_key:
         kwargs.setdefault("api_key", api_key)
 
@@ -177,7 +179,7 @@ def get_plugin_config() -> dict:
         pass
 
     return {
-        "image_generation_model": "openai/dall-e-3",
+        "image_generation_model": "gemini/imagen-4.0-generate-001",
         "image_edit_model": "google/gemini-2.0-flash",
         "default_size": "1024x1024",
         "default_count": 1,
