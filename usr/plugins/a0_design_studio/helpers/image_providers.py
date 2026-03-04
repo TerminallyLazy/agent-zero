@@ -36,12 +36,19 @@ _PROVIDER_TO_KEY_NAME: dict[str, str] = {
 }
 
 # Available image generation models shown in the UI dropdown.
+# "method" indicates whether the model uses the chat completion endpoint
+# (with modalities=["image","text"]) or the dedicated image_generation endpoint.
 IMAGE_MODELS: list[dict] = [
-    {"id": "gemini/imagen-4.0-generate-001", "name": "Gemini Imagen 4.0", "provider": "google"},
-    {"id": "dall-e-3", "name": "DALL-E 3", "provider": "openai"},
-    {"id": "dall-e-2", "name": "DALL-E 2", "provider": "openai"},
-    {"id": "openai/gpt-image-1", "name": "GPT Image 1", "provider": "openai"},
+    {"id": "gemini/gemini-2.0-flash-exp-image-generation", "name": "Gemini Flash Image", "provider": "google", "method": "completion"},
+    {"id": "dall-e-3", "name": "DALL-E 3", "provider": "openai", "method": "image_generation"},
+    {"id": "dall-e-2", "name": "DALL-E 2", "provider": "openai", "method": "image_generation"},
+    {"id": "openai/gpt-image-1", "name": "GPT Image 1", "provider": "openai", "method": "image_generation"},
 ]
+
+# Models that use acompletion + modalities instead of aimage_generation.
+_COMPLETION_IMAGE_MODELS: set[str] = {
+    m["id"] for m in IMAGE_MODELS if m.get("method") == "completion"
+}
 
 
 def _resolve_api_key(provider: str) -> str | None:
@@ -85,19 +92,15 @@ def check_api_key(provider: str) -> bool:
 
 async def generate_image(
     prompt: str,
-    model: str = "gemini/imagen-4.0-generate-001",
+    model: str = "gemini/gemini-2.0-flash-exp-image-generation",
     size: str = "1024x1024",
     n: int = 1,
     **kwargs,
 ) -> list[dict]:
     """Generate images from a text prompt via LiteLLM.
 
-    Args:
-        prompt: Text description of the desired image.
-        model: LiteLLM model identifier (e.g. "gemini/imagen-4.0-generate-001").
-        size: Image dimensions as "WxH" string.
-        n: Number of images to generate.
-        **kwargs: Extra arguments forwarded to litellm.aimage_generation.
+    Gemini models use acompletion with modalities=["image","text"].
+    OpenAI/DALL-E models use aimage_generation.
 
     Returns:
         List of dicts, each with keys: b64_json, url, revised_prompt.
@@ -107,7 +110,6 @@ async def generate_image(
     """
     litellm = _get_litellm()
 
-    # Extract provider prefix for API key lookup (e.g. "gemini" from "gemini/imagen-...")
     provider = model.split("/")[0] if "/" in model else model
     api_key = _resolve_api_key(provider)
     if not api_key:
@@ -119,31 +121,72 @@ async def generate_image(
     _inject_env_key(provider, api_key)
     kwargs.setdefault("api_key", api_key)
 
+    if model in _COMPLETION_IMAGE_MODELS:
+        return await _generate_via_completion(litellm, prompt, model, **kwargs)
+    else:
+        return await _generate_via_image_api(litellm, prompt, model, size, n, **kwargs)
+
+
+async def _generate_via_completion(litellm, prompt, model, **kwargs):
+    """Generate image using acompletion + modalities (Gemini models)."""
+    response = await litellm.acompletion(
+        model=model,
+        messages=[{"role": "user", "content": f"Generate an image: {prompt}"}],
+        modalities=["image", "text"],
+        drop_params=True,
+        **kwargs,
+    )
+
+    log.info("completion image response: %s", response)
+
+    results = []
+    for choice in response.choices:
+        images = getattr(choice.message, "images", None) or []
+        for img in images:
+            # images are like {"image_url": {"url": "data:image/png;base64,..."}}
+            data_url = img.get("image_url", {}).get("url", "")
+            b64 = None
+            if data_url.startswith("data:"):
+                # Strip the data:image/png;base64, prefix
+                b64 = data_url.split(",", 1)[1] if "," in data_url else None
+            results.append({
+                "b64_json": b64,
+                "url": data_url if not b64 else None,
+                "revised_prompt": getattr(choice.message, "content", None),
+            })
+
+    if not results:
+        # Check if there's text content that might explain the refusal
+        text = getattr(response.choices[0].message, "content", "") if response.choices else ""
+        raise RuntimeError(
+            f"Image generation returned no images. "
+            f"Model response: {text or response}"
+        )
+
+    return results
+
+
+async def _generate_via_image_api(litellm, prompt, model, size, n, **kwargs):
+    """Generate image using aimage_generation (OpenAI/DALL-E models)."""
     response = await litellm.aimage_generation(
         model=model,
         prompt=prompt,
         size=size,
         n=n,
+        response_format="b64_json",
         drop_params=True,
         **kwargs,
     )
 
-    log.info("aimage_generation response type: %s", type(response))
-    log.info("aimage_generation response: %s", response)
-
     data = getattr(response, "data", None) or []
     if not data:
-        raise RuntimeError(
-            f"Image generation returned no results. "
-            f"Raw response: {response}"
-        )
+        raise RuntimeError(f"Image generation returned no results. Raw response: {response}")
 
     results = []
     for item in data:
         b64 = getattr(item, "b64_json", None)
         url = getattr(item, "url", None)
 
-        # If provider returned a URL but no b64, download and convert
         if not b64 and url:
             try:
                 with urlopen(url) as resp:
@@ -270,7 +313,7 @@ def get_plugin_config() -> dict:
         pass
 
     return {
-        "image_generation_model": "gemini/imagen-4.0-generate-001",
+        "image_generation_model": "gemini/gemini-2.0-flash-exp-image-generation",
         "image_edit_model": "gemini/gemini-2.0-flash",
         "default_size": "1024x1024",
         "default_count": 1,
