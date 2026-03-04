@@ -39,16 +39,22 @@ _PROVIDER_TO_KEY_NAME: dict[str, str] = {
 # "method" indicates whether the model uses the chat completion endpoint
 # (with modalities=["image","text"]) or the dedicated image_generation endpoint.
 IMAGE_MODELS: list[dict] = [
-    {"id": "gemini/gemini-2.0-flash-exp-image-generation", "name": "Gemini Flash Image", "provider": "google", "method": "completion"},
+    {"id": "gemini/gemini-3.1-flash-image-preview", "name": "Gemini 3.1 Flash Image", "provider": "google", "method": "completion"},
+    {"id": "gemini/gemini-3-pro-image-preview", "name": "Gemini 3 Pro Image", "provider": "google", "method": "completion"},
+    {"id": "gemini/gemini-2.5-flash-image", "name": "Gemini 2.5 Flash Image", "provider": "google", "method": "completion"},
     {"id": "dall-e-3", "name": "DALL-E 3", "provider": "openai", "method": "image_generation"},
-    {"id": "dall-e-2", "name": "DALL-E 2", "provider": "openai", "method": "image_generation"},
     {"id": "openai/gpt-image-1", "name": "GPT Image 1", "provider": "openai", "method": "image_generation"},
 ]
 
-# Models that use acompletion + modalities instead of aimage_generation.
-_COMPLETION_IMAGE_MODELS: set[str] = {
-    m["id"] for m in IMAGE_MODELS if m.get("method") == "completion"
-}
+
+def _uses_completion_api(model: str) -> bool:
+    """Return True if this model generates images via acompletion + modalities.
+
+    All Gemini models use the completion endpoint for image generation.
+    OpenAI/DALL-E models use the dedicated image_generation endpoint.
+    """
+    provider = _extract_provider(model)
+    return provider in ("gemini", "google")
 
 
 def _extract_provider(model: str) -> str:
@@ -110,7 +116,7 @@ def check_api_key(provider: str) -> bool:
 
 async def generate_image(
     prompt: str,
-    model: str = "gemini/gemini-2.0-flash-exp-image-generation",
+    model: str = "gemini/gemini-3.1-flash-image-preview",
     size: str = "1024x1024",
     n: int = 1,
     **kwargs,
@@ -139,7 +145,7 @@ async def generate_image(
     _inject_env_key(provider, api_key)
     kwargs.setdefault("api_key", api_key)
 
-    if model in _COMPLETION_IMAGE_MODELS:
+    if _uses_completion_api(model):
         return await _generate_via_completion(litellm, prompt, model, **kwargs)
     else:
         return await _generate_via_image_api(litellm, prompt, model, size, n, **kwargs)
@@ -331,7 +337,7 @@ def get_plugin_config() -> dict:
         pass
 
     return {
-        "image_generation_model": "gemini/gemini-2.0-flash-exp-image-generation",
+        "image_generation_model": "gemini/gemini-3.1-flash-image-preview",
         "image_edit_model": "gemini/gemini-2.0-flash",
         "default_size": "1024x1024",
         "default_count": 1,

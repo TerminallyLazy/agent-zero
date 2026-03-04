@@ -1,4 +1,4 @@
-image_generation_model: "gemini/gemini-2.0-flash-exp-image-generation"
+image_generation_model: "gemini/gemini-3.1-flash-image-preview"
 image_edit_model: "gemini/gemini-2.0-flash"
 default_size: "1024x1024"
 default_count: 1
