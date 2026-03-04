@@ -8,6 +8,8 @@ import pytest
 
 PLUGIN_ROOT = Path(__file__).parent.parent / "usr" / "plugins" / "a0_design_studio"
 
+FAKE_API_KEY = "test-key-12345"
+
 
 @pytest.fixture(autouse=True)
 def _plugin_path():
@@ -59,7 +61,10 @@ async def test_generate_returns_image_list():
     mock_litellm = MagicMock()
     mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
 
-    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
+    with (
+        patch("helpers.image_providers._get_litellm", return_value=mock_litellm),
+        patch("helpers.image_providers._resolve_api_key", return_value=FAKE_API_KEY),
+    ):
         result = await generate_image("a cat sitting on a mat")
 
     assert isinstance(result, list)
@@ -86,7 +91,10 @@ async def test_generate_passes_size_and_n():
     mock_litellm = MagicMock()
     mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
 
-    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
+    with (
+        patch("helpers.image_providers._get_litellm", return_value=mock_litellm),
+        patch("helpers.image_providers._resolve_api_key", return_value=FAKE_API_KEY),
+    ):
         await generate_image(
             "a dog", model="openai/dall-e-3", size="512x512", n=4
         )
@@ -98,7 +106,21 @@ async def test_generate_passes_size_and_n():
             n=4,
             response_format="b64_json",
             drop_params=True,
+            api_key=FAKE_API_KEY,
         )
+
+
+@pytest.mark.asyncio
+async def test_generate_raises_on_missing_key():
+    """generate_image raises ValueError when API key is not configured."""
+    from helpers.image_providers import generate_image
+
+    with (
+        patch("helpers.image_providers._get_litellm", return_value=MagicMock()),
+        patch("helpers.image_providers._resolve_api_key", return_value=None),
+    ):
+        with pytest.raises(ValueError, match="API key for GOOGLE is not configured"):
+            await generate_image("test prompt")
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +142,10 @@ async def test_edit_returns_image_list():
     mock_litellm = MagicMock()
     mock_litellm.acompletion = AsyncMock(return_value=mock_response)
 
-    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
+    with (
+        patch("helpers.image_providers._get_litellm", return_value=mock_litellm),
+        patch("helpers.image_providers._resolve_api_key", return_value=FAKE_API_KEY),
+    ):
         result = await edit_image(
             image_b64="imagedata", prompt="make the sky blue"
         )
@@ -146,7 +171,10 @@ async def test_edit_includes_mask_when_provided():
     mock_litellm = MagicMock()
     mock_litellm.acompletion = AsyncMock(return_value=mock_response)
 
-    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
+    with (
+        patch("helpers.image_providers._get_litellm", return_value=mock_litellm),
+        patch("helpers.image_providers._resolve_api_key", return_value=FAKE_API_KEY),
+    ):
         await edit_image(
             image_b64="imagedata",
             prompt="remove the background",

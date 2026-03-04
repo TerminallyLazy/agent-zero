@@ -43,12 +43,30 @@
 .ds-top-controls {
     display: flex;
     gap: 6px;
+    align-items: center;
 }
 
 .ds-select {
     width: auto;
     padding: 6px 8px;
     font-size: 12px;
+}
+
+.ds-model-select-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.ds-select-warn {
+    border-color: #e8a838 !important;
+}
+
+.ds-key-warn {
+    font-size: 16px;
+    color: #e8a838;
+    cursor: help;
 }
 
 /* --- Main Layout --- */

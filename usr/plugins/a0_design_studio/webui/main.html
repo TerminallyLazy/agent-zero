@@ -29,6 +29,24 @@
                         </button>
                     </div>
                     <div class="ds-top-controls">
+                        <!-- Model Dropdown -->
+                        <div class="ds-model-select-wrapper">
+                            <select class="ds-select"
+                                    x-model="$store.designStudioStore.models.selected"
+                                    :class="{ 'ds-select-warn': $store.designStudioStore.getSelectedModel() && !$store.designStudioStore.getSelectedModel().key_set }">
+                                <template x-for="m in $store.designStudioStore.models.available" :key="m.id">
+                                    <option :value="m.id"
+                                            x-text="m.name + (!m.key_set ? ' (no key)' : '')">
+                                    </option>
+                                </template>
+                            </select>
+                            <span class="material-symbols-outlined ds-key-warn"
+                                  x-show="$store.designStudioStore.getSelectedModel() && !$store.designStudioStore.getSelectedModel().key_set"
+                                  title="API key not configured — add it in Settings">
+                                warning
+                            </span>
+                        </div>
+                        <!-- Size Dropdown -->
                         <select class="ds-select"
                                 x-model="$store.designStudioStore.generation.size">
                             <option value="1024x1024">1024x1024</option>

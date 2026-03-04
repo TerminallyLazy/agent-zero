@@ -26,7 +26,7 @@ class ImageGenerate(ApiHandler):
             return {"error": "prompt is required", "images": []}
 
         config = get_plugin_config()
-        model = input.get("model") or config.get("image_generation_model", "openai/dall-e-3")
+        model = input.get("model") or config.get("image_generation_model", "gemini/imagen-4.0-generate-001")
         size = input.get("size") or config.get("default_size", "1024x1024")
         n = input.get("n") or config.get("default_count", 1)
 

@@ -5,6 +5,7 @@ import { store as notificationStore } from "/components/notifications/notificati
 const GENERATE_API = "/plugins/a0_design_studio/image_generate";
 const EDIT_API = "/plugins/a0_design_studio/image_edit";
 const GALLERY_API = "/plugins/a0_design_studio/image_gallery";
+const MODELS_API = "/plugins/a0_design_studio/image_models";
 
 function toast(text, type = "info", timeout = 5000) {
     notificationStore.addFrontendToastOnly(type, text, "", timeout / 1000);
@@ -23,10 +24,16 @@ const designStudioStore = {
         redoStack: [],
     },
 
+    // --- Model Selection ---
+    models: {
+        available: [],
+        selected: "",
+        loaded: false,
+    },
+
     // --- Generation State ---
     generation: {
         prompt: "",
-        model: "",
         size: "1024x1024",
         count: 1,
         loading: false,
@@ -60,7 +67,24 @@ const designStudioStore = {
     init() {},
 
     async onOpen() {
-        await this.loadGallery();
+        await Promise.all([this.loadModels(), this.loadGallery()]);
+    },
+
+    async loadModels() {
+        try {
+            const response = await API.callJsonApi(MODELS_API, {});
+            this.models.available = response.models || [];
+            if (this.models.available.length > 0 && !this.models.selected) {
+                this.models.selected = this.models.available[0].id;
+            }
+            this.models.loaded = true;
+        } catch (err) {
+            console.error("Failed to load models:", err);
+        }
+    },
+
+    getSelectedModel() {
+        return this.models.available.find((m) => m.id === this.models.selected);
     },
 
     cleanup() {
@@ -76,11 +100,21 @@ const designStudioStore = {
             return;
         }
 
+        const selectedModel = this.getSelectedModel();
+        if (selectedModel && !selectedModel.key_set) {
+            toast(
+                `API key for ${selectedModel.provider.toUpperCase()} is not configured. Please add it in Settings.`,
+                "error",
+                8000,
+            );
+            return;
+        }
+
         this.generation.loading = true;
         try {
             const response = await API.callJsonApi(GENERATE_API, {
                 prompt,
-                model: this.generation.model || undefined,
+                model: this.models.selected || undefined,
                 size: this.generation.size,
                 n: this.generation.count,
             });
