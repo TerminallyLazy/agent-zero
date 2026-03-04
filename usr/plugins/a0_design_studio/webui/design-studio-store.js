@@ -63,6 +63,9 @@ const designStudioStore = {
         fullscreen: false,
     },
 
+    // Tracks gallery load generation to abort stale thumbnail fetches.
+    _thumbGen: 0,
+
     // --- Lifecycle ---
     init() {},
 
@@ -88,6 +91,7 @@ const designStudioStore = {
     },
 
     cleanup() {
+        this._thumbGen++;
         this.generation.results = [];
         this.editing.results = [];
     },
@@ -139,8 +143,6 @@ const designStudioStore = {
                 } else {
                     toast("Image generated but no image data returned", "warning");
                 }
-            } else if (response.error) {
-                toast(response.error, "error");
             } else {
                 toast("No images were generated. Check server logs for details.", "warning");
             }
@@ -188,13 +190,39 @@ const designStudioStore = {
     // --- Gallery ---
     async loadGallery() {
         this.gallery.loading = true;
+        this._thumbGen++;
         try {
             const response = await API.callJsonApi(GALLERY_API, { action: "list" });
-            this.gallery.images = response.images || [];
+            this.gallery.images = (response.images || []).map((img) => ({
+                ...img,
+                thumbnail_b64: null,
+            }));
+            this._loadThumbnails();
         } catch (err) {
             console.error("Failed to load gallery:", err);
         } finally {
             this.gallery.loading = false;
+        }
+    },
+
+    async _loadThumbnails() {
+        const gen = this._thumbGen;
+        for (let i = 0; i < this.gallery.images.length; i++) {
+            if (gen !== this._thumbGen) return;
+            const image = this.gallery.images[i];
+            if (image.thumbnail_b64) continue;
+            try {
+                const res = await API.callJsonApi(GALLERY_API, {
+                    action: "get",
+                    filename: image.filename,
+                });
+                if (gen !== this._thumbGen) return;
+                if (res.image_b64) {
+                    this.gallery.images[i].thumbnail_b64 = res.image_b64;
+                }
+            } catch (err) {
+                // Skip failed thumbnails silently
+            }
         }
     },
 
@@ -228,14 +256,19 @@ const designStudioStore = {
         this.editing.sourceImage = b64;
     },
 
-    loadGalleryImageToCanvas(image) {
+    async loadGalleryImageToCanvas(image) {
         this.gallery.selectedImage = image;
-        API.callJsonApi(GALLERY_API, { action: "get", filename: image.filename })
-            .then((res) => {
-                if (res.image_b64) {
-                    this.loadImageToCanvas(res.image_b64);
-                }
+        try {
+            const res = await API.callJsonApi(GALLERY_API, {
+                action: "get",
+                filename: image.filename,
             });
+            if (res.image_b64) {
+                this.loadImageToCanvas(res.image_b64);
+            }
+        } catch (err) {
+            toast("Failed to load image: " + err.message, "error");
+        }
     },
 
     setTool(toolName) {

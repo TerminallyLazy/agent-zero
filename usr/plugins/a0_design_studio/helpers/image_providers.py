@@ -231,7 +231,7 @@ async def edit_image(
     image_b64: str,
     prompt: str,
     mask_b64: str | None = None,
-    model: str = "gemini/gemini-2.0-flash",
+    model: str = "gemini/gemini-3.1-flash-lite-preview",
     **kwargs,
 ) -> list[dict]:
     """Edit an image using a vision-capable chat model.

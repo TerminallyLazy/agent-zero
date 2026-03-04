@@ -19,7 +19,12 @@
                  :class="{'selected': $store.designStudioStore.gallery.selectedImage?.filename === image.filename}"
                  @click="$store.designStudioStore.loadGalleryImageToCanvas(image)">
                 <div class="ds-gallery-thumb">
-                    <span class="material-symbols-outlined ds-gallery-thumb-icon">image</span>
+                    <img x-show="image.thumbnail_b64"
+                         :src="'data:image/png;base64,' + image.thumbnail_b64"
+                         class="ds-gallery-thumb-img"
+                         alt="">
+                    <span x-show="!image.thumbnail_b64"
+                          class="material-symbols-outlined ds-gallery-thumb-icon">image</span>
                 </div>
                 <div class="ds-gallery-meta">
                     <span class="ds-gallery-prompt" x-text="image.prompt || 'No prompt'" :title="image.prompt"></span>
