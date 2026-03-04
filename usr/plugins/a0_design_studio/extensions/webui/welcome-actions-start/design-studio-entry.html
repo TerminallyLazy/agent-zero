@@ -1,9 +1,6 @@
-<!-- A0 Design Studio - Welcome Screen Entry -->
-<div x-data x-move-to-start>
-    <button class="welcome-action-btn"
-            @click="openModal('/plugins/a0_design_studio/webui/main.html')"
-            title="Open A0 Design Studio">
-        <span class="material-symbols-outlined">palette</span>
-        <span>Design Studio</span>
-    </button>
+<div class="welcome-action-card"
+     @click="openModal('/plugins/a0_design_studio/webui/main.html')"
+     title="Open A0 Design Studio">
+    <span class="material-symbols-outlined welcome-action-icon">palette</span>
+    <h3 class="welcome-action-title">Design Studio</h3>
 </div>

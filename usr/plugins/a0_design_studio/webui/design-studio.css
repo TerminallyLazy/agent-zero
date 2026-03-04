@@ -1,4 +1,6 @@
-/* A0 Design Studio - Modal Styles */
+/* A0 Design Studio - Modal Styles
+   Uses the app's --color-* CSS custom properties from index.css.
+   Inputs, selects, and .btn are globally styled via settings.css / modals.css. */
 
 .design-studio {
     display: flex;
@@ -14,7 +16,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color, #333);
+    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
 }
 
@@ -22,21 +24,20 @@
     display: flex;
     flex: 1;
     gap: 6px;
+    align-items: center;
 }
 
 .ds-prompt-input {
     flex: 1;
+    width: auto;
     padding: 8px 12px;
-    border: 1px solid var(--border-color, #333);
-    border-radius: 6px;
-    background: var(--input-bg, #1a1a2e);
-    color: var(--text-color, #e0e0e0);
     font-size: 14px;
+    border-radius: 6px;
 }
 
 .ds-prompt-input:focus {
     outline: none;
-    border-color: var(--accent-color, #6c5ce7);
+    filter: brightness(1.2);
 }
 
 .ds-top-controls {
@@ -45,11 +46,8 @@
 }
 
 .ds-select {
+    width: auto;
     padding: 6px 8px;
-    border: 1px solid var(--border-color, #333);
-    border-radius: 4px;
-    background: var(--input-bg, #1a1a2e);
-    color: var(--text-color, #e0e0e0);
     font-size: 12px;
 }
 
@@ -66,7 +64,7 @@
     flex-direction: column;
     width: 48px;
     padding: 8px 4px;
-    border-right: 1px solid var(--border-color, #333);
+    border-right: 1px solid var(--color-border);
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
@@ -74,7 +72,7 @@
 
 .ds-tools-title {
     font-size: 10px;
-    color: var(--text-muted, #888);
+    color: var(--color-text-muted);
     text-transform: uppercase;
     margin-bottom: 4px;
 }
@@ -88,19 +86,19 @@
     border: 1px solid transparent;
     border-radius: 6px;
     background: none;
-    color: var(--text-color, #e0e0e0);
+    color: var(--color-text);
     cursor: pointer;
     transition: all 0.15s;
 }
 
 .ds-tool-btn:hover {
-    background: var(--hover-bg, rgba(255,255,255,0.05));
+    background: var(--color-background-hover);
 }
 
 .ds-tool-btn.active {
-    background: var(--accent-color, #6c5ce7);
+    background: var(--color-highlight);
     color: #fff;
-    border-color: var(--accent-color, #6c5ce7);
+    border-color: var(--color-highlight);
 }
 
 .ds-tool-btn .material-symbols-outlined {
@@ -110,7 +108,7 @@
 .ds-tool-divider {
     width: 24px;
     height: 1px;
-    background: var(--border-color, #333);
+    background: var(--color-border);
     margin: 4px 0;
 }
 
@@ -134,7 +132,7 @@
 
 .ds-range {
     width: 100%;
-    accent-color: var(--accent-color, #6c5ce7);
+    accent-color: var(--color-highlight);
 }
 
 /* --- Canvas Viewport --- */
@@ -142,7 +140,7 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    background: var(--bg-secondary, #0d0d1a);
+    background: var(--color-panel);
 }
 
 .ds-canvas-container {
@@ -186,7 +184,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     text-align: center;
-    color: var(--text-muted, #666);
+    color: var(--color-text-muted);
     z-index: 10;
     pointer-events: none;
 }
@@ -204,7 +202,7 @@
 /* --- Gallery Panel --- */
 .ds-gallery-panel {
     width: 200px;
-    border-left: 1px solid var(--border-color, #333);
+    border-left: 1px solid var(--color-border);
     overflow-y: auto;
     flex-shrink: 0;
 }
@@ -219,7 +217,7 @@
 .ds-gallery-title {
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-muted, #888);
+    color: var(--color-text-muted);
     text-transform: uppercase;
 }
 
@@ -227,7 +225,7 @@
 .ds-gallery-empty {
     text-align: center;
     padding: 20px 0;
-    color: var(--text-muted, #666);
+    color: var(--color-text-muted);
 }
 
 .ds-gallery-empty .material-symbols-outlined {
@@ -246,25 +244,25 @@
     flex-direction: column;
     gap: 4px;
     padding: 6px;
-    border: 1px solid var(--border-color, #333);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
 }
 
 .ds-gallery-item:hover {
-    border-color: var(--accent-color, #6c5ce7);
+    border-color: var(--color-highlight);
 }
 
 .ds-gallery-item.selected {
-    border-color: var(--accent-color, #6c5ce7);
-    background: rgba(108, 92, 231, 0.1);
+    border-color: var(--color-highlight);
+    background: color-mix(in srgb, var(--color-highlight) 15%, transparent);
 }
 
 .ds-gallery-thumb {
     width: 100%;
     aspect-ratio: 1;
-    background: var(--bg-secondary, #0d0d1a);
+    background: var(--color-panel);
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -273,7 +271,7 @@
 
 .ds-gallery-thumb-icon {
     font-size: 24px;
-    color: var(--text-muted, #666);
+    color: var(--color-text-muted);
 }
 
 .ds-gallery-meta {
@@ -284,7 +282,7 @@
 
 .ds-gallery-prompt {
     font-size: 11px;
-    color: var(--text-color, #e0e0e0);
+    color: var(--color-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -292,7 +290,7 @@
 
 .ds-gallery-time {
     font-size: 10px;
-    color: var(--text-muted, #888);
+    color: var(--color-text-muted);
 }
 
 .ds-gallery-actions {
@@ -310,7 +308,7 @@
     align-items: center;
     gap: 12px;
     padding: 8px 12px;
-    border-top: 1px solid var(--border-color, #333);
+    border-top: 1px solid var(--color-border);
     flex-shrink: 0;
 }
 
@@ -324,7 +322,7 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: var(--text-muted, #888);
+    color: var(--color-text-muted);
 }
 
 .ds-zoom-range {
@@ -336,15 +334,13 @@
     flex: 1;
     gap: 6px;
     margin-left: auto;
+    align-items: center;
 }
 
 .ds-edit-input {
     flex: 1;
+    width: auto;
     padding: 6px 10px;
-    border: 1px solid var(--border-color, #333);
-    border-radius: 4px;
-    background: var(--input-bg, #1a1a2e);
-    color: var(--text-color, #e0e0e0);
     font-size: 12px;
 }
 
@@ -359,6 +355,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    font-family: "Rubik", Arial, Helvetica, sans-serif;
 }
 
 .ds-btn:disabled {
@@ -367,7 +364,7 @@
 }
 
 .ds-btn-primary {
-    background: var(--accent-color, #6c5ce7);
+    background: var(--color-highlight);
     color: #fff;
 }
 
@@ -376,13 +373,13 @@
 }
 
 .ds-btn-secondary {
-    background: var(--bg-secondary, #1a1a2e);
-    color: var(--text-color, #e0e0e0);
-    border: 1px solid var(--border-color, #333);
+    background: var(--color-panel);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
 }
 
 .ds-btn-secondary:hover:not(:disabled) {
-    border-color: var(--accent-color, #6c5ce7);
+    border-color: var(--color-highlight);
 }
 
 .ds-btn-sm {
@@ -397,15 +394,15 @@
 .ds-btn-icon {
     background: none;
     border: none;
-    color: var(--text-muted, #888);
+    color: var(--color-text-muted);
     cursor: pointer;
     padding: 2px;
     border-radius: 4px;
 }
 
 .ds-btn-icon:hover {
-    color: var(--text-color, #e0e0e0);
-    background: var(--hover-bg, rgba(255,255,255,0.05));
+    color: var(--color-text);
+    background: var(--color-background-hover);
 }
 
 .loading-sm {

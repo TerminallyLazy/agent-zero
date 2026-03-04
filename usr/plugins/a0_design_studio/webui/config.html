@@ -1,58 +1,102 @@
 <html>
+<head>
+    <title>Design Studio</title>
+</head>
 <body>
 <div x-data>
     <template x-if="$store.pluginSettings.settings">
-        <div class="plugin-settings-section">
-
-            <h3>Image Generation</h3>
-
-            <div class="settings-row">
-                <label for="ds-gen-model">Generation Model</label>
-                <input type="text" id="ds-gen-model"
-                       x-model="$store.pluginSettings.settings.image_generation_model"
-                       placeholder="openai/dall-e-3">
-                <small>LiteLLM model string (e.g., openai/dall-e-3, vertex_ai/imagen-3.0-generate-002)</small>
+        <div>
+            <div class="section-title">Design Studio</div>
+            <div class="section-description">
+                AI-powered image generation and visual editing studio with multi-provider support via LiteLLM.
             </div>
 
-            <div class="settings-row">
-                <label for="ds-edit-model">Edit Model (Vision)</label>
-                <input type="text" id="ds-edit-model"
-                       x-model="$store.pluginSettings.settings.image_edit_model"
-                       placeholder="google/gemini-2.0-flash">
-                <small>Vision-capable model for image editing (e.g., google/gemini-2.0-flash, openai/gpt-4o)</small>
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Generation Model</div>
+                    <div class="field-description">
+                        LiteLLM model string for image generation (e.g., openai/dall-e-3, vertex_ai/imagen-3.0-generate-002).
+                    </div>
+                </div>
+                <div class="field-control">
+                    <input type="text"
+                           x-model="$store.pluginSettings.settings.image_generation_model"
+                           placeholder="openai/dall-e-3">
+                </div>
             </div>
 
-            <div class="settings-row">
-                <label for="ds-default-size">Default Image Size</label>
-                <select id="ds-default-size" x-model="$store.pluginSettings.settings.default_size">
-                    <option value="1024x1024">1024x1024</option>
-                    <option value="1024x1792">1024x1792 (Portrait)</option>
-                    <option value="1792x1024">1792x1024 (Landscape)</option>
-                    <option value="512x512">512x512</option>
-                </select>
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Edit Model (Vision)</div>
+                    <div class="field-description">
+                        Vision-capable model for image editing (e.g., google/gemini-2.0-flash, openai/gpt-4o).
+                    </div>
+                </div>
+                <div class="field-control">
+                    <input type="text"
+                           x-model="$store.pluginSettings.settings.image_edit_model"
+                           placeholder="google/gemini-2.0-flash">
+                </div>
             </div>
 
-            <div class="settings-row">
-                <label for="ds-default-count">Default Generation Count</label>
-                <input type="number" id="ds-default-count" min="1" max="4"
-                       x-model.number="$store.pluginSettings.settings.default_count">
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Default Image Size</div>
+                    <div class="field-description">
+                        Default dimensions for generated images.
+                    </div>
+                </div>
+                <div class="field-control">
+                    <select x-model="$store.pluginSettings.settings.default_size">
+                        <option value="1024x1024">1024x1024</option>
+                        <option value="1024x1792">1024x1792 (Portrait)</option>
+                        <option value="1792x1024">1792x1024 (Landscape)</option>
+                        <option value="512x512">512x512</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="settings-row">
-                <label for="ds-gallery-path">Gallery Storage Path</label>
-                <input type="text" id="ds-gallery-path"
-                       x-model="$store.pluginSettings.settings.gallery_path"
-                       placeholder="images">
-                <small>Relative to agent workspace directory</small>
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Default Generation Count</div>
+                    <div class="field-description">
+                        Number of images to generate per request (1-4).
+                    </div>
+                </div>
+                <div class="field-control">
+                    <input type="number" min="1" max="4"
+                           x-model.number="$store.pluginSettings.settings.default_count">
+                </div>
             </div>
 
-            <div class="settings-row">
-                <button class="btn btn-primary"
-                        @click="openModal('/plugins/a0_design_studio/webui/main.html')">
-                    Open Design Studio
-                </button>
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Gallery Storage Path</div>
+                    <div class="field-description">
+                        Subdirectory for saved images, relative to the agent workspace directory.
+                    </div>
+                </div>
+                <div class="field-control">
+                    <input type="text"
+                           x-model="$store.pluginSettings.settings.gallery_path"
+                           placeholder="images">
+                </div>
             </div>
 
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Open Studio</div>
+                    <div class="field-description">
+                        Launch the Design Studio in a new modal window.
+                    </div>
+                </div>
+                <div class="field-control">
+                    <button class="btn btn-field"
+                            @click="openModal('/plugins/a0_design_studio/webui/main.html')">
+                        Open Design Studio
+                    </button>
+                </div>
+            </div>
         </div>
     </template>
 </div>
