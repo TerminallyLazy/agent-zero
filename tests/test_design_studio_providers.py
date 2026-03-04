@@ -57,7 +57,7 @@ async def test_generate_returns_image_list():
     mock_response.data = [mock_data_item]
 
     with patch("helpers.image_providers.litellm") as mock_litellm:
-        mock_litellm.image_generation = AsyncMock(return_value=mock_response)
+        mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
         result = await generate_image("a cat sitting on a mat")
 
     assert isinstance(result, list)
@@ -82,17 +82,18 @@ async def test_generate_passes_size_and_n():
     mock_response.data = [mock_data_item]
 
     with patch("helpers.image_providers.litellm") as mock_litellm:
-        mock_litellm.image_generation = AsyncMock(return_value=mock_response)
+        mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
         await generate_image(
             "a dog", model="openai/dall-e-3", size="512x512", n=4
         )
 
-        mock_litellm.image_generation.assert_called_once_with(
+        mock_litellm.aimage_generation.assert_called_once_with(
             model="openai/dall-e-3",
             prompt="a dog",
             size="512x512",
             n=4,
             response_format="b64_json",
+            drop_params=True,
         )
 
 
