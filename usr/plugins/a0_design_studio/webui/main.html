@@ -1,0 +1,130 @@
+<html>
+<head>
+    <title>A0 Design Studio</title>
+    <link rel="stylesheet" href="/plugins/a0_design_studio/webui/design-studio.css">
+    <script type="module">
+        import { store } from "/plugins/a0_design_studio/webui/design-studio-store.js";
+    </script>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.designStudioStore">
+            <div x-create="$store.designStudioStore.onOpen()"
+                 x-destroy="$store.designStudioStore.cleanup()"
+                 class="design-studio">
+
+                <!-- Top Bar: Prompt + Generate -->
+                <div class="ds-top-bar">
+                    <div class="ds-prompt-group">
+                        <input type="text"
+                               class="ds-prompt-input"
+                               placeholder="Describe the image you want to generate..."
+                               x-model="$store.designStudioStore.generation.prompt"
+                               @keydown.enter="$store.designStudioStore.generateImage()">
+                        <button class="ds-btn ds-btn-primary"
+                                @click="$store.designStudioStore.generateImage()"
+                                :disabled="$store.designStudioStore.generation.loading">
+                            <span x-show="!$store.designStudioStore.generation.loading">Generate</span>
+                            <span x-show="$store.designStudioStore.generation.loading" class="loading-sm"></span>
+                        </button>
+                    </div>
+                    <div class="ds-top-controls">
+                        <select class="ds-select"
+                                x-model="$store.designStudioStore.generation.size">
+                            <option value="1024x1024">1024x1024</option>
+                            <option value="1024x1792">1024x1792</option>
+                            <option value="1792x1024">1792x1024</option>
+                            <option value="512x512">512x512</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Main Content Area -->
+                <div class="ds-main">
+                    <!-- Left: Tool Palette -->
+                    <div class="ds-tools-panel">
+                        <div class="ds-tools-title">Tools</div>
+                        <template x-for="tool in ['brush','eraser','rect','circle','arrow','text','mask','pan']" :key="tool">
+                            <button class="ds-tool-btn"
+                                    :class="{'active': $store.designStudioStore.canvas.tool === tool}"
+                                    @click="$store.designStudioStore.setTool(tool)"
+                                    :title="tool">
+                                <span class="material-symbols-outlined" x-text="{
+                                    brush: 'brush',
+                                    eraser: 'ink_eraser',
+                                    rect: 'rectangle',
+                                    circle: 'circle',
+                                    arrow: 'north_east',
+                                    text: 'text_fields',
+                                    mask: 'gesture',
+                                    pan: 'pan_tool'
+                                }[tool]"></span>
+                            </button>
+                        </template>
+
+                        <div class="ds-tool-divider"></div>
+
+                        <!-- Color Picker -->
+                        <label class="ds-color-label">
+                            <input type="color"
+                                   x-model="$store.designStudioStore.canvas.color"
+                                   class="ds-color-input">
+                        </label>
+
+                        <!-- Brush Size -->
+                        <div class="ds-brush-size">
+                            <input type="range" min="1" max="50"
+                                   x-model="$store.designStudioStore.canvas.brushSize"
+                                   class="ds-range">
+                        </div>
+                    </div>
+
+                    <!-- Center: Canvas -->
+                    <div class="ds-canvas-viewport">
+                        <x-component path="/plugins/a0_design_studio/webui/canvas.html"></x-component>
+                    </div>
+
+                    <!-- Right: Gallery -->
+                    <div class="ds-gallery-panel">
+                        <x-component path="/plugins/a0_design_studio/webui/gallery.html"></x-component>
+                    </div>
+                </div>
+
+                <!-- Bottom Bar -->
+                <div class="ds-bottom-bar">
+                    <div class="ds-bottom-actions">
+                        <button class="ds-btn ds-btn-sm" @click="$store.designStudioStore.undo()" title="Undo">
+                            <span class="material-symbols-outlined">undo</span>
+                        </button>
+                        <button class="ds-btn ds-btn-sm" @click="$store.designStudioStore.redo()" title="Redo">
+                            <span class="material-symbols-outlined">redo</span>
+                        </button>
+                    </div>
+                    <div class="ds-zoom-control">
+                        <span>Zoom:</span>
+                        <input type="range" min="0.1" max="3" step="0.1"
+                               x-model="$store.designStudioStore.canvas.zoom"
+                               class="ds-range ds-zoom-range">
+                        <span x-text="Math.round($store.designStudioStore.canvas.zoom * 100) + '%'"></span>
+                    </div>
+                    <!-- Edit Mode -->
+                    <div class="ds-edit-group">
+                        <input type="text"
+                               class="ds-edit-input"
+                               placeholder="Edit instructions..."
+                               x-model="$store.designStudioStore.editing.editPrompt"
+                               @keydown.enter="$store.designStudioStore.editImage()">
+                        <button class="ds-btn ds-btn-secondary"
+                                @click="$store.designStudioStore.editImage()"
+                                :disabled="$store.designStudioStore.editing.loading">
+                            <span x-show="!$store.designStudioStore.editing.loading">Edit Image</span>
+                            <span x-show="$store.designStudioStore.editing.loading" class="loading-sm"></span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+    </div>
+</body>
+</html>

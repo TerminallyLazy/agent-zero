@@ -1,0 +1,45 @@
+<html>
+<body>
+<div x-data class="ds-gallery">
+    <div class="ds-gallery-title">Gallery</div>
+
+    <div x-show="$store.designStudioStore.gallery.loading" class="ds-gallery-loading">
+        <div class="loading-sm"></div>
+    </div>
+
+    <div x-show="!$store.designStudioStore.gallery.loading && $store.designStudioStore.gallery.images.length === 0"
+         class="ds-gallery-empty">
+        <span class="material-symbols-outlined">collections</span>
+        <p>No images yet</p>
+    </div>
+
+    <div class="ds-gallery-grid">
+        <template x-for="image in $store.designStudioStore.gallery.images" :key="image.filename">
+            <div class="ds-gallery-item"
+                 :class="{'selected': $store.designStudioStore.gallery.selectedImage?.filename === image.filename}"
+                 @click="$store.designStudioStore.loadGalleryImageToCanvas(image)">
+                <div class="ds-gallery-thumb">
+                    <span class="material-symbols-outlined ds-gallery-thumb-icon">image</span>
+                </div>
+                <div class="ds-gallery-meta">
+                    <span class="ds-gallery-prompt" x-text="image.prompt || 'No prompt'" :title="image.prompt"></span>
+                    <span class="ds-gallery-time" x-text="new Date(image.timestamp * 1000).toLocaleString()"></span>
+                </div>
+                <div class="ds-gallery-actions" @click.stop>
+                    <button class="ds-btn-icon" @click="$store.designStudioStore.deleteFromGallery(image.filename)"
+                            title="Delete">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <button class="ds-btn ds-btn-sm ds-gallery-refresh"
+            @click="$store.designStudioStore.loadGallery()">
+        <span class="material-symbols-outlined">refresh</span>
+        Refresh
+    </button>
+</div>
+</body>
+</html>

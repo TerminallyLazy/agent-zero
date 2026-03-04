@@ -1,0 +1,173 @@
+<html>
+<body>
+<div x-data="{
+    ctx: null,
+    bgCtx: null,
+    maskCtx: null,
+    isDrawing: false,
+    lastX: 0,
+    lastY: 0,
+    shapeStartX: 0,
+    shapeStartY: 0,
+
+    init() {
+        this.$nextTick(() => {
+            const canvas = this.$refs.drawCanvas;
+            const bgCanvas = this.$refs.bgCanvas;
+            const maskCanvas = this.$refs.maskCanvas;
+
+            if (!canvas || !bgCanvas || !maskCanvas) return;
+
+            this.ctx = canvas.getContext('2d');
+            this.bgCtx = bgCanvas.getContext('2d');
+            this.maskCtx = maskCanvas.getContext('2d');
+
+            this.resizeCanvases();
+
+            this.$watch('$store.designStudioStore.editing.sourceImage', (b64) => {
+                if (b64) this.drawBackgroundImage(b64);
+            });
+        });
+    },
+
+    resizeCanvases() {
+        const container = this.$refs.canvasContainer;
+        if (!container) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+
+        [this.$refs.bgCanvas, this.$refs.drawCanvas, this.$refs.maskCanvas].forEach(c => {
+            if (c) { c.width = w; c.height = h; }
+        });
+    },
+
+    drawBackgroundImage(b64) {
+        const img = new Image();
+        img.onload = () => {
+            this.bgCtx.clearRect(0, 0, this.$refs.bgCanvas.width, this.$refs.bgCanvas.height);
+            const scale = Math.min(
+                this.$refs.bgCanvas.width / img.width,
+                this.$refs.bgCanvas.height / img.height
+            );
+            const x = (this.$refs.bgCanvas.width - img.width * scale) / 2;
+            const y = (this.$refs.bgCanvas.height - img.height * scale) / 2;
+            this.bgCtx.drawImage(img, x, y, img.width * scale, img.height * scale);
+        };
+        img.src = 'data:image/png;base64,' + b64;
+    },
+
+    getPos(e) {
+        const rect = this.$refs.drawCanvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    },
+
+    onPointerDown(e) {
+        e.preventDefault();
+        const store = this.$store.designStudioStore;
+        if (store.canvas.tool === 'pan') return;
+
+        this.isDrawing = true;
+        const pos = this.getPos(e);
+        this.lastX = pos.x;
+        this.lastY = pos.y;
+        this.shapeStartX = pos.x;
+        this.shapeStartY = pos.y;
+
+        const targetCtx = store.canvas.tool === 'mask' ? this.maskCtx : this.ctx;
+        targetCtx.beginPath();
+        targetCtx.moveTo(pos.x, pos.y);
+    },
+
+    onPointerMove(e) {
+        if (!this.isDrawing) return;
+        e.preventDefault();
+        const store = this.$store.designStudioStore;
+        const tool = store.canvas.tool;
+        const pos = this.getPos(e);
+        const targetCtx = tool === 'mask' ? this.maskCtx : this.ctx;
+
+        if (tool === 'brush' || tool === 'mask') {
+            targetCtx.lineWidth = store.canvas.brushSize;
+            targetCtx.lineCap = 'round';
+            targetCtx.lineJoin = 'round';
+            targetCtx.strokeStyle = tool === 'mask' ? 'rgba(255, 0, 0, 0.4)' : store.canvas.color;
+            targetCtx.lineTo(pos.x, pos.y);
+            targetCtx.stroke();
+        } else if (tool === 'eraser') {
+            targetCtx.globalCompositeOperation = 'destination-out';
+            targetCtx.lineWidth = store.canvas.brushSize;
+            targetCtx.lineCap = 'round';
+            targetCtx.lineTo(pos.x, pos.y);
+            targetCtx.stroke();
+            targetCtx.globalCompositeOperation = 'source-over';
+        }
+
+        this.lastX = pos.x;
+        this.lastY = pos.y;
+    },
+
+    onPointerUp(e) {
+        if (!this.isDrawing) return;
+        this.isDrawing = false;
+        const store = this.$store.designStudioStore;
+        const tool = store.canvas.tool;
+        const targetCtx = tool === 'mask' ? this.maskCtx : this.ctx;
+        const pos = this.getPos(e);
+
+        if (tool === 'rect') {
+            targetCtx.strokeStyle = store.canvas.color;
+            targetCtx.lineWidth = store.canvas.brushSize;
+            targetCtx.strokeRect(
+                this.shapeStartX, this.shapeStartY,
+                pos.x - this.shapeStartX, pos.y - this.shapeStartY
+            );
+        } else if (tool === 'circle') {
+            const rx = Math.abs(pos.x - this.shapeStartX) / 2;
+            const ry = Math.abs(pos.y - this.shapeStartY) / 2;
+            const cx = this.shapeStartX + (pos.x - this.shapeStartX) / 2;
+            const cy = this.shapeStartY + (pos.y - this.shapeStartY) / 2;
+            targetCtx.strokeStyle = store.canvas.color;
+            targetCtx.lineWidth = store.canvas.brushSize;
+            targetCtx.beginPath();
+            targetCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+            targetCtx.stroke();
+        } else if (tool === 'arrow') {
+            this.drawArrow(targetCtx, this.shapeStartX, this.shapeStartY, pos.x, pos.y, store.canvas.color, store.canvas.brushSize);
+        }
+
+        store.saveCanvasState(this.$refs.drawCanvas.toDataURL());
+    },
+
+    drawArrow(ctx, fromX, fromY, toX, toY, color, width) {
+        const headLen = 15;
+        const angle = Math.atan2(toY - fromY, toX - fromX);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+    }
+}" class="ds-canvas-container" x-ref="canvasContainer">
+    <canvas x-ref="bgCanvas" class="ds-canvas ds-canvas-bg"></canvas>
+    <canvas x-ref="drawCanvas" class="ds-canvas ds-canvas-draw"
+            @pointerdown="onPointerDown($event)"
+            @pointermove="onPointerMove($event)"
+            @pointerup="onPointerUp($event)"
+            @pointerleave="onPointerUp($event)"></canvas>
+    <canvas x-ref="maskCanvas" class="ds-canvas ds-canvas-mask"
+            :class="{'ds-canvas-visible': $store.designStudioStore.canvas.tool === 'mask'}"></canvas>
+
+    <div class="ds-canvas-empty"
+         x-show="!$store.designStudioStore.editing.sourceImage">
+        <span class="material-symbols-outlined">image</span>
+        <p>Generate an image or load one from the gallery</p>
+    </div>
+</div>
+</body>
+</html>

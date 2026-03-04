@@ -1,0 +1,60 @@
+<html>
+<body>
+<div x-data>
+    <template x-if="$store.pluginSettings.settings">
+        <div class="plugin-settings-section">
+
+            <h3>Image Generation</h3>
+
+            <div class="settings-row">
+                <label for="ds-gen-model">Generation Model</label>
+                <input type="text" id="ds-gen-model"
+                       x-model="$store.pluginSettings.settings.image_generation_model"
+                       placeholder="openai/dall-e-3">
+                <small>LiteLLM model string (e.g., openai/dall-e-3, vertex_ai/imagen-3.0-generate-002)</small>
+            </div>
+
+            <div class="settings-row">
+                <label for="ds-edit-model">Edit Model (Vision)</label>
+                <input type="text" id="ds-edit-model"
+                       x-model="$store.pluginSettings.settings.image_edit_model"
+                       placeholder="google/gemini-2.0-flash">
+                <small>Vision-capable model for image editing (e.g., google/gemini-2.0-flash, openai/gpt-4o)</small>
+            </div>
+
+            <div class="settings-row">
+                <label for="ds-default-size">Default Image Size</label>
+                <select id="ds-default-size" x-model="$store.pluginSettings.settings.default_size">
+                    <option value="1024x1024">1024x1024</option>
+                    <option value="1024x1792">1024x1792 (Portrait)</option>
+                    <option value="1792x1024">1792x1024 (Landscape)</option>
+                    <option value="512x512">512x512</option>
+                </select>
+            </div>
+
+            <div class="settings-row">
+                <label for="ds-default-count">Default Generation Count</label>
+                <input type="number" id="ds-default-count" min="1" max="4"
+                       x-model.number="$store.pluginSettings.settings.default_count">
+            </div>
+
+            <div class="settings-row">
+                <label for="ds-gallery-path">Gallery Storage Path</label>
+                <input type="text" id="ds-gallery-path"
+                       x-model="$store.pluginSettings.settings.gallery_path"
+                       placeholder="images">
+                <small>Relative to agent workspace directory</small>
+            </div>
+
+            <div class="settings-row">
+                <button class="btn btn-primary"
+                        @click="openModal('/plugins/a0_design_studio/webui/main.html')">
+                    Open Design Studio
+                </button>
+            </div>
+
+        </div>
+    </template>
+</div>
+</body>
+</html>
