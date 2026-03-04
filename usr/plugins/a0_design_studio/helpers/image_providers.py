@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import litellm
 
+litellm.drop_params = True
 
 async def generate_image(
     prompt: str,
@@ -30,12 +31,13 @@ async def generate_image(
     Returns:
         List of dicts, each with keys: b64_json, url, revised_prompt.
     """
-    response = await litellm.image_generation(
+    response = await litellm.aimage_generation(
         model=model,
         prompt=prompt,
         size=size,
         n=n,
         response_format="b64_json",
+        drop_params=True,
         **kwargs,
     )
 
