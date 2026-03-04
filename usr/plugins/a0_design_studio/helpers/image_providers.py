@@ -7,7 +7,12 @@ Uses Agent Zero's API key management so keys configured in Settings work.
 
 from __future__ import annotations
 
+import base64
+import logging
 import os
+from urllib.request import urlopen
+
+log = logging.getLogger("a0_design_studio")
 
 
 def _get_litellm():
@@ -119,19 +124,40 @@ async def generate_image(
         prompt=prompt,
         size=size,
         n=n,
-        response_format="b64_json",
         drop_params=True,
         **kwargs,
     )
 
-    return [
-        {
-            "b64_json": getattr(item, "b64_json", None),
-            "url": getattr(item, "url", None),
+    log.info("aimage_generation response type: %s", type(response))
+    log.info("aimage_generation response: %s", response)
+
+    data = getattr(response, "data", None) or []
+    if not data:
+        raise RuntimeError(
+            f"Image generation returned no results. "
+            f"Raw response: {response}"
+        )
+
+    results = []
+    for item in data:
+        b64 = getattr(item, "b64_json", None)
+        url = getattr(item, "url", None)
+
+        # If provider returned a URL but no b64, download and convert
+        if not b64 and url:
+            try:
+                with urlopen(url) as resp:
+                    b64 = base64.b64encode(resp.read()).decode("ascii")
+            except Exception as e:
+                log.warning("Failed to download image from URL %s: %s", url, e)
+
+        results.append({
+            "b64_json": b64,
+            "url": url,
             "revised_prompt": getattr(item, "revised_prompt", None),
-        }
-        for item in response.data
-    ]
+        })
+
+    return results
 
 
 async def edit_image(

@@ -104,7 +104,6 @@ async def test_generate_passes_size_and_n():
             prompt="a dog",
             size="512x512",
             n=4,
-            response_format="b64_json",
             drop_params=True,
             api_key=FAKE_API_KEY,
         )

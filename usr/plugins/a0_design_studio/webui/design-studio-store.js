@@ -127,12 +127,22 @@ const designStudioStore = {
             this.generation.results = response.images || [];
 
             if (this.generation.results.length > 0) {
-                toast(`Generated ${this.generation.results.length} image(s)`, "success");
-                this.loadImageToCanvas(this.generation.results[0].b64_json);
-                await this.saveToGallery(
-                    this.generation.results[0].b64_json,
-                    { prompt, model: response.model }
-                );
+                const img = this.generation.results[0];
+                const imageData = img.b64_json || img.url;
+                if (imageData) {
+                    toast(`Generated ${this.generation.results.length} image(s)`, "success");
+                    this.loadImageToCanvas(img.b64_json);
+                    await this.saveToGallery(
+                        img.b64_json,
+                        { prompt, model: response.model }
+                    );
+                } else {
+                    toast("Image generated but no image data returned", "warning");
+                }
+            } else if (response.error) {
+                toast(response.error, "error");
+            } else {
+                toast("No images were generated. Check server logs for details.", "warning");
             }
         } catch (err) {
             toast("Generation failed: " + err.message, "error");
