@@ -2,11 +2,19 @@ import { createStore } from "/js/AlpineStore.js";
 import * as API from "/js/api.js";
 import { store as notificationStore } from "/components/notifications/notification-store.js";
 
+/**
+ * @typedef {{ id: string, name: string, provider: string, key_set: boolean }} ImageModel
+ * @typedef {{ b64_json: string|null, url: string|null, revised_prompt: string|null }} ImageResult
+ * @typedef {{ content: string, revised_prompt: string }} EditResult
+ * @typedef {{ filename: string, path: string, timestamp: number, prompt: string, model: string, thumbnail_b64: string|null }} GalleryImage
+ */
+
 const GENERATE_API = "/plugins/a0_design_studio/image_generate";
 const EDIT_API = "/plugins/a0_design_studio/image_edit";
 const GALLERY_API = "/plugins/a0_design_studio/image_gallery";
 const MODELS_API = "/plugins/a0_design_studio/image_models";
 
+/** @param {string} text @param {string} [type] @param {number} [timeout] */
 function toast(text, type = "info", timeout = 5000) {
     notificationStore.addFrontendToastOnly(type, text, "", timeout / 1000);
 }
@@ -20,12 +28,15 @@ const designStudioStore = {
         zoom: 1,
         panX: 0,
         panY: 0,
+        /** @type {string[]} */
         history: [],
+        /** @type {string[]} */
         redoStack: [],
     },
 
     // --- Model Selection ---
     models: {
+        /** @type {ImageModel[]} */
         available: [],
         selected: "",
         loaded: false,
@@ -37,21 +48,27 @@ const designStudioStore = {
         size: "1024x1024",
         count: 1,
         loading: false,
+        /** @type {ImageResult[]} */
         results: [],
     },
 
     // --- Editing State ---
     editing: {
+        /** @type {string|null} */
         sourceImage: null,
+        /** @type {string|null} */
         mask: null,
         editPrompt: "",
         loading: false,
+        /** @type {EditResult[]} */
         results: [],
     },
 
     // --- Gallery State ---
     gallery: {
+        /** @type {GalleryImage[]} */
         images: [],
+        /** @type {GalleryImage|null} */
         selectedImage: null,
         loading: false,
     },
@@ -81,7 +98,7 @@ const designStudioStore = {
                 this.models.selected = this.models.available[0].id;
             }
             this.models.loaded = true;
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             console.error("Failed to load models:", err);
         }
     },
@@ -132,21 +149,18 @@ const designStudioStore = {
 
             if (this.generation.results.length > 0) {
                 const img = this.generation.results[0];
-                const imageData = img.b64_json || img.url;
-                if (imageData) {
+                const b64 = img.b64_json;
+                if (b64) {
                     toast(`Generated ${this.generation.results.length} image(s)`, "success");
-                    this.loadImageToCanvas(img.b64_json);
-                    await this.saveToGallery(
-                        img.b64_json,
-                        { prompt, model: response.model }
-                    );
+                    this.loadImageToCanvas(b64);
+                    await this.saveToGallery(b64, { prompt, model: response.model });
                 } else {
                     toast("Image generated but no image data returned", "warning");
                 }
             } else {
                 toast("No images were generated. Check server logs for details.", "warning");
             }
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             toast("Generation failed: " + err.message, "error");
         } finally {
             this.generation.loading = false;
@@ -180,7 +194,7 @@ const designStudioStore = {
 
             this.editing.results = response.images || [];
             toast("Edit analysis complete", "success");
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             toast("Edit failed: " + err.message, "error");
         } finally {
             this.editing.loading = false;
@@ -193,12 +207,12 @@ const designStudioStore = {
         this._thumbGen++;
         try {
             const response = await API.callJsonApi(GALLERY_API, { action: "list" });
-            this.gallery.images = (response.images || []).map((img) => ({
+            this.gallery.images = (response.images || []).map((/** @type {any} */ img) => ({
                 ...img,
                 thumbnail_b64: null,
             }));
             this._loadThumbnails();
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             console.error("Failed to load gallery:", err);
         } finally {
             this.gallery.loading = false;
@@ -220,12 +234,13 @@ const designStudioStore = {
                 if (res.image_b64) {
                     this.gallery.images[i].thumbnail_b64 = res.image_b64;
                 }
-            } catch (err) {
+            } catch (/** @type {any} */ _err) {
                 // Skip failed thumbnails silently
             }
         }
     },
 
+    /** @param {string} imageB64 @param {Record<string,string>} [metadata] */
     async saveToGallery(imageB64, metadata = {}) {
         const filename = `generated_${Date.now()}.png`;
         try {
@@ -236,26 +251,29 @@ const designStudioStore = {
                 metadata,
             });
             await this.loadGallery();
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             console.error("Failed to save to gallery:", err);
         }
     },
 
+    /** @param {string} filename */
     async deleteFromGallery(filename) {
         try {
             await API.callJsonApi(GALLERY_API, { action: "delete", filename });
             await this.loadGallery();
             toast("Image deleted", "info");
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             toast("Delete failed: " + err.message, "error");
         }
     },
 
     // --- Canvas Operations ---
+    /** @param {string|null} b64 */
     loadImageToCanvas(b64) {
         this.editing.sourceImage = b64;
     },
 
+    /** @param {GalleryImage} image */
     async loadGalleryImageToCanvas(image) {
         this.gallery.selectedImage = image;
         try {
@@ -266,11 +284,12 @@ const designStudioStore = {
             if (res.image_b64) {
                 this.loadImageToCanvas(res.image_b64);
             }
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
             toast("Failed to load image: " + err.message, "error");
         }
     },
 
+    /** @param {string} toolName */
     setTool(toolName) {
         this.canvas.tool = toolName;
     },
@@ -278,17 +297,18 @@ const designStudioStore = {
     undo() {
         if (this.canvas.history.length > 0) {
             const state = this.canvas.history.pop();
-            this.canvas.redoStack.push(state);
+            if (state) this.canvas.redoStack.push(state);
         }
     },
 
     redo() {
         if (this.canvas.redoStack.length > 0) {
             const state = this.canvas.redoStack.pop();
-            this.canvas.history.push(state);
+            if (state) this.canvas.history.push(state);
         }
     },
 
+    /** @param {string} dataUrl */
     saveCanvasState(dataUrl) {
         this.canvas.history.push(dataUrl);
         this.canvas.redoStack = [];
