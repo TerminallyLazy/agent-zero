@@ -1,5 +1,5 @@
 image_generation_model: "gemini/imagen-4.0-generate-001"
-image_edit_model: "google/gemini-2.0-flash"
+image_edit_model: "gemini/gemini-2.0-flash"
 default_size: "1024x1024"
 default_count: 1
 gallery_path: "images"

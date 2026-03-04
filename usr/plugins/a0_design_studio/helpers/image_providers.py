@@ -115,7 +115,7 @@ async def edit_image(
     image_b64: str,
     prompt: str,
     mask_b64: str | None = None,
-    model: str = "google/gemini-2.0-flash",
+    model: str = "gemini/gemini-2.0-flash",
     **kwargs,
 ) -> list[dict]:
     """Edit an image using a vision-capable chat model.
@@ -216,7 +216,7 @@ def get_plugin_config() -> dict:
 
     return {
         "image_generation_model": "gemini/imagen-4.0-generate-001",
-        "image_edit_model": "google/gemini-2.0-flash",
+        "image_edit_model": "gemini/gemini-2.0-flash",
         "default_size": "1024x1024",
         "default_count": 1,
         "gallery_path": "images",
