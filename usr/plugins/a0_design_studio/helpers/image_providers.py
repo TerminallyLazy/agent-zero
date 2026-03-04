@@ -2,6 +2,7 @@
 
 Routes image generation and editing requests through LiteLLM,
 which already handles multi-provider routing (OpenAI, Google, etc.).
+Uses Agent Zero's API key management so keys configured in Settings work.
 """
 
 from __future__ import annotations
@@ -9,6 +10,22 @@ from __future__ import annotations
 import litellm
 
 litellm.drop_params = True
+
+
+def _resolve_api_key(model: str) -> str | None:
+    """Extract provider from model string and look up the API key
+    using Agent Zero's key management (env vars: API_KEY_<PROVIDER>,
+    <PROVIDER>_API_KEY, <PROVIDER>_API_TOKEN)."""
+    provider = model.split("/")[0] if "/" in model else model
+    try:
+        from models import get_api_key
+        key = get_api_key(provider)
+        if key and key not in ("None", "NA"):
+            return key
+    except (ImportError, Exception):
+        pass
+    return None
+
 
 async def generate_image(
     prompt: str,
@@ -19,18 +36,20 @@ async def generate_image(
 ) -> list[dict]:
     """Generate images from a text prompt via LiteLLM.
 
-    Calls litellm.image_generation and returns a normalised list of dicts.
-
     Args:
         prompt: Text description of the desired image.
         model: LiteLLM model identifier (e.g. "openai/dall-e-3").
         size: Image dimensions as "WxH" string.
         n: Number of images to generate.
-        **kwargs: Extra arguments forwarded to litellm.image_generation.
+        **kwargs: Extra arguments forwarded to litellm.aimage_generation.
 
     Returns:
         List of dicts, each with keys: b64_json, url, revised_prompt.
     """
+    api_key = _resolve_api_key(model)
+    if api_key:
+        kwargs.setdefault("api_key", api_key)
+
     response = await litellm.aimage_generation(
         model=model,
         prompt=prompt,
@@ -73,6 +92,10 @@ async def edit_image(
     Returns:
         List of dicts, each with keys: content, revised_prompt.
     """
+    api_key = _resolve_api_key(model)
+    if api_key:
+        kwargs.setdefault("api_key", api_key)
+
     content_parts: list[dict] = [
         {
             "type": "image_url",
