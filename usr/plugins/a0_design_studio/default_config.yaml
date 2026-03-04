@@ -1,0 +1,5 @@
+image_generation_model: "openai/dall-e-3"
+image_edit_model: "google/gemini-2.0-flash"
+default_size: "1024x1024"
+default_count: 1
+gallery_path: "images"
