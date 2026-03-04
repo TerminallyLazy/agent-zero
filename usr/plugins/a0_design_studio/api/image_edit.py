@@ -29,7 +29,7 @@ class ImageEdit(ApiHandler):
             return {"error": "prompt is required", "images": []}
 
         config = get_plugin_config()
-        model = input.get("model") or config.get("image_edit_model", "google/gemini-2.0-flash")
+        model = input.get("model") or config.get("image_edit_model", "gemini/gemini-2.0-flash")
         mask_b64 = input.get("mask_b64")
 
         try:

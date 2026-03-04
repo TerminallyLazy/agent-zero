@@ -51,6 +51,24 @@ _COMPLETION_IMAGE_MODELS: set[str] = {
 }
 
 
+def _extract_provider(model: str) -> str:
+    """Extract the provider name from a model string for key lookup.
+
+    Handles: "gemini/model" -> "gemini", "dall-e-3" -> "dall-e-3",
+    and bare names like "gemini-2.0-flash" -> "gemini".
+    """
+    if "/" in model:
+        return model.split("/")[0]
+    # Check static map first (dall-e-3, etc.)
+    if model in _PROVIDER_TO_KEY_NAME:
+        return model
+    # Bare model names starting with a known prefix
+    for prefix in ("gemini", "gpt", "claude"):
+        if model.startswith(prefix):
+            return prefix
+    return model
+
+
 def _resolve_api_key(provider: str) -> str | None:
     """Look up the API key for a provider using Agent Zero's key management
     (env vars: API_KEY_<PROVIDER>, <PROVIDER>_API_KEY, <PROVIDER>_API_TOKEN)."""
@@ -110,7 +128,7 @@ async def generate_image(
     """
     litellm = _get_litellm()
 
-    provider = model.split("/")[0] if "/" in model else model
+    provider = _extract_provider(model)
     api_key = _resolve_api_key(provider)
     if not api_key:
         key_name = _PROVIDER_TO_KEY_NAME.get(provider, provider).upper()
@@ -226,7 +244,7 @@ async def edit_image(
         List of dicts, each with keys: content, revised_prompt.
     """
     litellm = _get_litellm()
-    provider = model.split("/")[0] if "/" in model else model
+    provider = _extract_provider(model)
     api_key = _resolve_api_key(provider)
     if not api_key:
         key_name = _PROVIDER_TO_KEY_NAME.get(provider, provider).upper()
