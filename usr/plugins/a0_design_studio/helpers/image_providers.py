@@ -7,6 +7,8 @@ Uses Agent Zero's API key management so keys configured in Settings work.
 
 from __future__ import annotations
 
+import os
+
 
 def _get_litellm():
     """Lazy-import litellm to avoid Vertex credential probes at startup."""
@@ -51,6 +53,26 @@ def _resolve_api_key(provider: str) -> str | None:
     return None
 
 
+# LiteLLM checks specific env vars per provider internally, often ignoring
+# the api_key kwarg. This maps providers to the env var LiteLLM expects.
+_PROVIDER_ENV_VAR: dict[str, str] = {
+    "gemini": "GEMINI_API_KEY",
+    "google": "GEMINI_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
+
+
+def _inject_env_key(provider: str, api_key: str) -> None:
+    """Set the env var that LiteLLM actually reads for this provider.
+
+    LiteLLM's Gemini handler checks GEMINI_API_KEY directly rather than
+    using the api_key kwarg. This bridges Agent Zero's API_KEY_GOOGLE
+    to what LiteLLM expects."""
+    env_var = _PROVIDER_ENV_VAR.get(provider)
+    if env_var and not os.environ.get(env_var):
+        os.environ[env_var] = api_key
+
+
 def check_api_key(provider: str) -> bool:
     """Return True if the API key for the given provider is configured."""
     return _resolve_api_key(provider) is not None
@@ -89,6 +111,7 @@ async def generate_image(
             f"API key for {key_name} is not configured. "
             f"Please add your API_KEY_{key_name} in Settings."
         )
+    _inject_env_key(provider, api_key)
     kwargs.setdefault("api_key", api_key)
 
     response = await litellm.aimage_generation(
@@ -136,8 +159,14 @@ async def edit_image(
     litellm = _get_litellm()
     provider = model.split("/")[0] if "/" in model else model
     api_key = _resolve_api_key(provider)
-    if api_key:
-        kwargs.setdefault("api_key", api_key)
+    if not api_key:
+        key_name = _PROVIDER_TO_KEY_NAME.get(provider, provider).upper()
+        raise ValueError(
+            f"API key for {key_name} is not configured. "
+            f"Please add your API_KEY_{key_name} in Settings."
+        )
+    _inject_env_key(provider, api_key)
+    kwargs.setdefault("api_key", api_key)
 
     content_parts: list[dict] = [
         {
