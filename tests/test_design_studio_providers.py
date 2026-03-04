@@ -56,8 +56,10 @@ async def test_generate_returns_image_list():
     mock_response = MagicMock()
     mock_response.data = [mock_data_item]
 
-    with patch("helpers.image_providers.litellm") as mock_litellm:
-        mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
+    mock_litellm = MagicMock()
+    mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
+
+    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
         result = await generate_image("a cat sitting on a mat")
 
     assert isinstance(result, list)
@@ -70,7 +72,7 @@ async def test_generate_returns_image_list():
 
 @pytest.mark.asyncio
 async def test_generate_passes_size_and_n():
-    """generate_image forwards size and n to litellm.image_generation."""
+    """generate_image forwards size and n to litellm.aimage_generation."""
     from helpers.image_providers import generate_image
 
     mock_data_item = MagicMock()
@@ -81,8 +83,10 @@ async def test_generate_passes_size_and_n():
     mock_response = MagicMock()
     mock_response.data = [mock_data_item]
 
-    with patch("helpers.image_providers.litellm") as mock_litellm:
-        mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
+    mock_litellm = MagicMock()
+    mock_litellm.aimage_generation = AsyncMock(return_value=mock_response)
+
+    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
         await generate_image(
             "a dog", model="openai/dall-e-3", size="512x512", n=4
         )
@@ -113,8 +117,10 @@ async def test_edit_returns_image_list():
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
 
-    with patch("helpers.image_providers.litellm") as mock_litellm:
-        mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+    mock_litellm = MagicMock()
+    mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+
+    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
         result = await edit_image(
             image_b64="imagedata", prompt="make the sky blue"
         )
@@ -137,8 +143,10 @@ async def test_edit_includes_mask_when_provided():
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
 
-    with patch("helpers.image_providers.litellm") as mock_litellm:
-        mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+    mock_litellm = MagicMock()
+    mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+
+    with patch("helpers.image_providers._get_litellm", return_value=mock_litellm):
         await edit_image(
             image_b64="imagedata",
             prompt="remove the background",

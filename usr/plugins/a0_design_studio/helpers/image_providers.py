@@ -7,9 +7,12 @@ Uses Agent Zero's API key management so keys configured in Settings work.
 
 from __future__ import annotations
 
-import litellm
 
-litellm.drop_params = True
+def _get_litellm():
+    """Lazy-import litellm to avoid Vertex credential probes at startup."""
+    import litellm
+    litellm.drop_params = True
+    return litellm
 
 
 def _resolve_api_key(model: str) -> str | None:
@@ -46,6 +49,7 @@ async def generate_image(
     Returns:
         List of dicts, each with keys: b64_json, url, revised_prompt.
     """
+    litellm = _get_litellm()
     api_key = _resolve_api_key(model)
     if api_key:
         kwargs.setdefault("api_key", api_key)
@@ -92,6 +96,7 @@ async def edit_image(
     Returns:
         List of dicts, each with keys: content, revised_prompt.
     """
+    litellm = _get_litellm()
     api_key = _resolve_api_key(model)
     if api_key:
         kwargs.setdefault("api_key", api_key)
