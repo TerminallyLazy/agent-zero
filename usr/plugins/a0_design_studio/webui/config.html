@@ -27,15 +27,15 @@
 
             <div class="field">
                 <div class="field-label">
-                    <div class="field-title">Edit Model (Vision)</div>
+                    <div class="field-title">Edit Model</div>
                     <div class="field-description">
-                        Vision-capable model for image editing (e.g., gemini/gemini-2.0-flash, openai/gpt-4o).
+                        Image-capable model for editing (e.g., gemini/gemini-3.1-flash-image-preview). Must support image output.
                     </div>
                 </div>
                 <div class="field-control">
                     <input type="text"
                            x-model="$store.pluginSettings.settings.image_edit_model"
-                           placeholder="gemini/gemini-2.0-flash">
+                           placeholder="gemini/gemini-3.1-flash-image-preview">
                 </div>
             </div>
 

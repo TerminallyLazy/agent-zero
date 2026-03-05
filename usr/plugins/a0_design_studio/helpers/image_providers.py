@@ -1,29 +1,26 @@
 """Image provider layer for A0 Design Studio.
 
-Routes image generation and editing requests through LiteLLM,
-which already handles multi-provider routing (OpenAI, Google, etc.).
+Gemini models call the Google AI Studio REST API directly (no LiteLLM) to
+avoid Vertex AI credential probing.  OpenAI/DALL-E models still use LiteLLM.
 Uses Agent Zero's API key management so keys configured in Settings work.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
 import logging
 import os
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 log = logging.getLogger("a0_design_studio")
 
-
-def _get_litellm():
-    """Lazy-import litellm to avoid Vertex credential probes at startup."""
-    import litellm
-    litellm.drop_params = True
-    return litellm
-
+# ---------------------------------------------------------------------------
+# Provider / key helpers
+# ---------------------------------------------------------------------------
 
 # Map LiteLLM provider prefixes to Agent Zero API_KEY_<NAME> identifiers.
-# Agent Zero stores keys as API_KEY_GOOGLE, API_KEY_OPENAI, etc.
 _PROVIDER_TO_KEY_NAME: dict[str, str] = {
     "gemini": "google",
     "google": "google",
@@ -36,8 +33,6 @@ _PROVIDER_TO_KEY_NAME: dict[str, str] = {
 }
 
 # Available image generation models shown in the UI dropdown.
-# "method" indicates whether the model uses the chat completion endpoint
-# (with modalities=["image","text"]) or the dedicated image_generation endpoint.
 IMAGE_MODELS: list[dict] = [
     {"id": "gemini/gemini-3.1-flash-image-preview", "name": "Gemini 3.1 Flash Image", "provider": "google", "method": "completion"},
     {"id": "gemini/gemini-3-pro-image-preview", "name": "Gemini 3 Pro Image", "provider": "google", "method": "completion"},
@@ -46,38 +41,33 @@ IMAGE_MODELS: list[dict] = [
     {"id": "openai/gpt-image-1", "name": "GPT Image 1", "provider": "openai", "method": "image_generation"},
 ]
 
-
-def _uses_completion_api(model: str) -> bool:
-    """Return True if this model generates images via acompletion + modalities.
-
-    All Gemini models use the completion endpoint for image generation.
-    OpenAI/DALL-E models use the dedicated image_generation endpoint.
-    """
-    provider = _extract_provider(model)
-    return provider in ("gemini", "google")
+_GOOGLE_AI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 def _extract_provider(model: str) -> str:
-    """Extract the provider name from a model string for key lookup.
-
-    Handles: "gemini/model" -> "gemini", "dall-e-3" -> "dall-e-3",
-    and bare names like "gemini-2.0-flash" -> "gemini".
-    """
+    """Extract the provider name from a model string for key lookup."""
     if "/" in model:
         return model.split("/")[0]
-    # Check static map first (dall-e-3, etc.)
     if model in _PROVIDER_TO_KEY_NAME:
         return model
-    # Bare model names starting with a known prefix
     for prefix in ("gemini", "gpt", "claude"):
         if model.startswith(prefix):
             return prefix
     return model
 
 
+def _is_gemini(model: str) -> bool:
+    """True if this model should be routed to Google AI Studio directly."""
+    return _extract_provider(model) in ("gemini", "google")
+
+
+def _bare_model(model: str) -> str:
+    """Strip the provider prefix: 'gemini/gemini-3.1-flash-image-preview' -> 'gemini-3.1-flash-image-preview'."""
+    return model.split("/", 1)[1] if "/" in model else model
+
+
 def _resolve_api_key(provider: str) -> str | None:
-    """Look up the API key for a provider using Agent Zero's key management
-    (env vars: API_KEY_<PROVIDER>, <PROVIDER>_API_KEY, <PROVIDER>_API_TOKEN)."""
+    """Look up the API key for a provider using Agent Zero's key management."""
     key_name = _PROVIDER_TO_KEY_NAME.get(provider, provider)
     try:
         from models import get_api_key
@@ -89,51 +79,92 @@ def _resolve_api_key(provider: str) -> str | None:
     return None
 
 
-# LiteLLM checks specific env vars per provider internally, often ignoring
-# the api_key kwarg. This maps providers to the env var LiteLLM expects.
-_PROVIDER_ENV_VAR: dict[str, str] = {
-    "gemini": "GEMINI_API_KEY",
-    "google": "GEMINI_API_KEY",
-    "openai": "OPENAI_API_KEY",
-}
-
-
-def _inject_env_key(provider: str, api_key: str) -> None:
-    """Set the env var that LiteLLM actually reads for this provider.
-
-    LiteLLM's Gemini handler checks GEMINI_API_KEY directly rather than
-    using the api_key kwarg. This bridges Agent Zero's API_KEY_GOOGLE
-    to what LiteLLM expects."""
-    env_var = _PROVIDER_ENV_VAR.get(provider)
-    if env_var and not os.environ.get(env_var):
-        os.environ[env_var] = api_key
-
-
 def check_api_key(provider: str) -> bool:
     """Return True if the API key for the given provider is configured."""
     return _resolve_api_key(provider) is not None
 
 
-async def generate_image(
-    prompt: str,
-    model: str = "gemini/gemini-3.1-flash-image-preview",
-    size: str = "1024x1024",
-    n: int = 1,
-    **kwargs,
-) -> list[dict]:
-    """Generate images from a text prompt via LiteLLM.
+def _get_litellm():
+    """Lazy-import litellm (only needed for OpenAI/DALL-E models)."""
+    # Inject GEMINI_API_KEY before import to suppress Vertex credential probes.
+    key = _resolve_api_key("gemini")
+    if key and not os.environ.get("GEMINI_API_KEY"):
+        os.environ["GEMINI_API_KEY"] = key
+    import litellm
+    litellm.drop_params = True
+    return litellm
 
-    Gemini models use acompletion with modalities=["image","text"].
-    OpenAI/DALL-E models use aimage_generation.
+
+# ---------------------------------------------------------------------------
+# Google AI Studio direct REST API
+# ---------------------------------------------------------------------------
+
+def _gemini_generate_content(
+    model_name: str,
+    parts: list[dict],
+    api_key: str,
+) -> dict:
+    """Call Google AI Studio generateContent REST API directly.
+
+    This bypasses LiteLLM entirely, avoiding all Vertex AI credential
+    probing issues.  Uses stdlib urllib so no extra dependencies needed.
+
+    Args:
+        model_name: Bare model name (e.g. 'gemini-3.1-flash-image-preview').
+        parts: List of content parts (text and/or inline_data).
+        api_key: Google AI Studio API key.
 
     Returns:
-        List of dicts, each with keys: b64_json, url, revised_prompt.
-
-    Raises:
-        ValueError: If the required API key is not configured.
+        Parsed JSON response dict.
     """
-    litellm = _get_litellm()
+    url = f"{_GOOGLE_AI_BASE}/models/{model_name}:generateContent"
+    body = json.dumps({
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+        },
+    }).encode("utf-8")
 
+    req = Request(
+        url,
+        data=body,
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    with urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read())
+
+
+def _extract_images_from_gemini_response(response: dict) -> list[dict]:
+    """Extract b64_json images from a Gemini generateContent response."""
+    results = []
+    text_parts = []
+
+    for candidate in response.get("candidates", []):
+        for part in candidate.get("content", {}).get("parts", []):
+            if "inlineData" in part:
+                b64 = part["inlineData"].get("data")
+                results.append({
+                    "b64_json": b64,
+                    "url": None,
+                    "revised_prompt": None,
+                })
+            elif "text" in part:
+                text_parts.append(part["text"])
+
+    # Attach any text to the first result as revised_prompt
+    if results and text_parts:
+        results[0]["revised_prompt"] = " ".join(text_parts)
+
+    return results
+
+
+def _require_api_key(model: str) -> tuple[str, str]:
+    """Resolve API key or raise ValueError.  Returns (provider, api_key)."""
     provider = _extract_provider(model)
     api_key = _resolve_api_key(provider)
     if not api_key:
@@ -142,56 +173,60 @@ async def generate_image(
             f"API key for {key_name} is not configured. "
             f"Please add your API_KEY_{key_name} in Settings."
         )
-    _inject_env_key(provider, api_key)
-    kwargs.setdefault("api_key", api_key)
+    return provider, api_key
 
-    if _uses_completion_api(model):
-        return await _generate_via_completion(litellm, prompt, model, **kwargs)
+
+# ---------------------------------------------------------------------------
+# Generation
+# ---------------------------------------------------------------------------
+
+async def generate_image(
+    prompt: str,
+    model: str = "gemini/gemini-3.1-flash-image-preview",
+    size: str = "1024x1024",
+    n: int = 1,
+    **kwargs,
+) -> list[dict]:
+    """Generate images from a text prompt.
+
+    Gemini models call Google AI Studio REST API directly.
+    OpenAI/DALL-E models use LiteLLM's aimage_generation.
+
+    Returns:
+        List of dicts with keys: b64_json, url, revised_prompt.
+    """
+    provider, api_key = _require_api_key(model)
+
+    if _is_gemini(model):
+        return await _generate_gemini(prompt, model, api_key)
     else:
-        return await _generate_via_image_api(litellm, prompt, model, size, n, **kwargs)
+        return await _generate_openai(prompt, model, size, n, api_key, **kwargs)
 
 
-async def _generate_via_completion(litellm, prompt, model, **kwargs):
-    """Generate image using acompletion + modalities (Gemini models)."""
-    response = await litellm.acompletion(
-        model=model,
-        messages=[{"role": "user", "content": f"Generate an image: {prompt}"}],
-        modalities=["image", "text"],
-        drop_params=True,
-        **kwargs,
+async def _generate_gemini(prompt: str, model: str, api_key: str) -> list[dict]:
+    """Generate image via Google AI Studio REST API."""
+    parts = [{"text": f"Generate an image: {prompt}"}]
+    response = await asyncio.to_thread(
+        _gemini_generate_content, _bare_model(model), parts, api_key,
     )
 
-    log.info("completion image response: %s", response)
+    log.info("Gemini generate response keys: %s", list(response.keys()))
 
-    results = []
-    for choice in response.choices:
-        images = getattr(choice.message, "images", None) or []
-        for img in images:
-            # images are like {"image_url": {"url": "data:image/png;base64,..."}}
-            data_url = img.get("image_url", {}).get("url", "")
-            b64 = None
-            if data_url.startswith("data:"):
-                # Strip the data:image/png;base64, prefix
-                b64 = data_url.split(",", 1)[1] if "," in data_url else None
-            results.append({
-                "b64_json": b64,
-                "url": data_url if not b64 else None,
-                "revised_prompt": getattr(choice.message, "content", None),
-            })
-
+    results = _extract_images_from_gemini_response(response)
     if not results:
-        # Check if there's text content that might explain the refusal
-        text = getattr(response.choices[0].message, "content", "") if response.choices else ""
+        # Check for error or text-only response
+        error = response.get("error", {})
+        if error:
+            raise RuntimeError(f"Gemini API error: {error.get('message', error)}")
         raise RuntimeError(
-            f"Image generation returned no images. "
-            f"Model response: {text or response}"
+            f"Image generation returned no images. Response: {json.dumps(response)[:500]}"
         )
-
     return results
 
 
-async def _generate_via_image_api(litellm, prompt, model, size, n, **kwargs):
-    """Generate image using aimage_generation (OpenAI/DALL-E models)."""
+async def _generate_openai(prompt, model, size, n, api_key, **kwargs):
+    """Generate image using LiteLLM aimage_generation (OpenAI/DALL-E)."""
+    litellm = _get_litellm()
     response = await litellm.aimage_generation(
         model=model,
         prompt=prompt,
@@ -199,6 +234,7 @@ async def _generate_via_image_api(litellm, prompt, model, size, n, **kwargs):
         n=n,
         response_format="b64_json",
         drop_params=True,
+        api_key=api_key,
         **kwargs,
     )
 
@@ -227,109 +263,141 @@ async def _generate_via_image_api(litellm, prompt, model, size, n, **kwargs):
     return results
 
 
+# ---------------------------------------------------------------------------
+# Editing
+# ---------------------------------------------------------------------------
+
 async def edit_image(
     image_b64: str,
     prompt: str,
     mask_b64: str | None = None,
-    model: str = "gemini/gemini-3.1-flash-lite-preview",
+    model: str = "gemini/gemini-3.1-flash-image-preview",
     **kwargs,
 ) -> list[dict]:
-    """Edit an image using a vision-capable chat model.
+    """Edit an image.
 
-    Sends the source image (and optional mask) alongside editing instructions
-    to a vision model via litellm.acompletion().
+    For Gemini: calls Google AI Studio REST API with the source image +
+    edit instructions.  Gemini uses semantic masking (describe what to
+    change in words) — no pixel mask needed.
 
-    Args:
-        image_b64: Base64-encoded source image (PNG).
-        prompt: Editing instructions in natural language.
-        mask_b64: Optional base64-encoded mask image highlighting edit regions.
-        model: LiteLLM model identifier for a vision-capable model.
-        **kwargs: Extra arguments forwarded to litellm.acompletion.
+    For non-Gemini: falls back to LiteLLM acompletion with image + mask
+    as content parts (text-only response).
 
     Returns:
-        List of dicts, each with keys: content, revised_prompt.
+        List of dicts with keys: b64_json, url, revised_prompt.
     """
-    litellm = _get_litellm()
-    provider = _extract_provider(model)
-    api_key = _resolve_api_key(provider)
-    if not api_key:
-        key_name = _PROVIDER_TO_KEY_NAME.get(provider, provider).upper()
-        raise ValueError(
-            f"API key for {key_name} is not configured. "
-            f"Please add your API_KEY_{key_name} in Settings."
-        )
-    _inject_env_key(provider, api_key)
-    kwargs.setdefault("api_key", api_key)
+    provider, api_key = _require_api_key(model)
 
+    if _is_gemini(model):
+        return await _edit_gemini(image_b64, prompt, model, api_key, mask_b64)
+    else:
+        return await _edit_fallback(image_b64, prompt, mask_b64, model, api_key, **kwargs)
+
+
+async def _edit_gemini(
+    image_b64: str, prompt: str, model: str, api_key: str,
+    mask_b64: str | None = None,
+) -> list[dict]:
+    """Edit image via Google AI Studio REST API.
+
+    If mask_b64 is provided, it is sent as a second image with instructions
+    telling Gemini to focus edits on the masked (red-highlighted) areas.
+    This leverages Gemini's multimodal understanding of visual masks.
+    """
+    parts = [
+        {
+            "inlineData": {
+                "mimeType": "image/png",
+                "data": image_b64,
+            },
+        },
+    ]
+
+    if mask_b64:
+        parts.append({
+            "inlineData": {
+                "mimeType": "image/png",
+                "data": mask_b64,
+            },
+        })
+        parts.append({
+            "text": (
+                "The first image is the source image. The second image is a mask "
+                "where red-highlighted areas indicate the regions to edit. "
+                "Only modify the masked areas according to these instructions, "
+                "keeping everything else unchanged: " + prompt
+            ),
+        })
+    else:
+        parts.append({"text": prompt})
+
+    response = await asyncio.to_thread(
+        _gemini_generate_content, _bare_model(model), parts, api_key,
+    )
+
+    log.info("Gemini edit response keys: %s", list(response.keys()))
+
+    results = _extract_images_from_gemini_response(response)
+    if not results:
+        error = response.get("error", {})
+        if error:
+            raise RuntimeError(f"Gemini API error: {error.get('message', error)}")
+        raise RuntimeError(
+            f"Image editing returned no images. Response: {json.dumps(response)[:500]}"
+        )
+    return results
+
+
+async def _edit_fallback(image_b64, prompt, mask_b64, model, api_key, **kwargs):
+    """Fallback edit for non-Gemini models (text-only response)."""
+    litellm = _get_litellm()
     content_parts: list[dict] = [
         {
             "type": "image_url",
             "image_url": {"url": f"data:image/png;base64,{image_b64}"},
         },
     ]
-
     if mask_b64:
-        content_parts.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{mask_b64}"},
-            }
-        )
-
-    content_parts.append(
-        {
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{mask_b64}"},
+        })
+        content_parts.append({
+            "type": "text",
+            "text": f"The second image is a mask highlighting areas to edit. Instructions: {prompt}",
+        })
+    else:
+        content_parts.append({
             "type": "text",
             "text": f"Edit this image according to these instructions: {prompt}",
-        }
-    )
-
-    if mask_b64:
-        content_parts.append(
-            {
-                "type": "text",
-                "text": "The second image is a mask where highlighted regions indicate areas to edit.",
-            }
-        )
-
-    messages = [
-        {
-            "role": "system",
-            "content": "You are an image editing assistant. Follow the user's editing instructions precisely.",
-        },
-        {
-            "role": "user",
-            "content": content_parts,
-        },
-    ]
+        })
 
     response = await litellm.acompletion(
         model=model,
-        messages=messages,
+        messages=[{"role": "user", "content": content_parts}],
+        drop_params=True,
+        api_key=api_key,
         **kwargs,
     )
 
     return [
         {
-            "content": choice.message.content,
-            "revised_prompt": prompt,
+            "b64_json": None,
+            "url": None,
+            "revised_prompt": choice.message.content,
         }
         for choice in response.choices
     ]
 
 
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
 def get_plugin_config() -> dict:
-    """Load the Design Studio plugin configuration.
-
-    Attempts to use the Agent Zero plugin system. Falls back to a default
-    configuration dict if the plugin system is unavailable.
-
-    Returns:
-        Configuration dict with keys like image_generation_model,
-        image_edit_model, default_size, default_count, gallery_path.
-    """
+    """Load the Design Studio plugin configuration."""
     try:
         from python.helpers import plugins
-
         config = plugins.get_plugin_config("a0_design_studio")
         if config:
             return config
@@ -338,7 +406,7 @@ def get_plugin_config() -> dict:
 
     return {
         "image_generation_model": "gemini/gemini-3.1-flash-image-preview",
-        "image_edit_model": "gemini/gemini-2.0-flash",
+        "image_edit_model": "gemini/gemini-3.1-flash-image-preview",
         "default_size": "1024x1024",
         "default_count": 1,
         "gallery_path": "images",

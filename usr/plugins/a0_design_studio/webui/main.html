@@ -130,11 +130,19 @@
                                class="ds-range ds-zoom-range">
                         <span x-text="Math.round($store.designStudioStore.canvas.zoom * 100) + '%'"></span>
                     </div>
+                    <!-- Mask indicator + clear -->
+                    <button class="ds-btn ds-btn-sm"
+                            x-show="$store.designStudioStore.editing.mask"
+                            @click="$store.designStudioStore.clearMask()"
+                            title="Clear mask overlay">
+                        <span class="material-symbols-outlined" style="font-size:14px">delete</span>
+                        <span style="font-size:11px">Mask</span>
+                    </button>
                     <!-- Edit Mode -->
                     <div class="ds-edit-group">
                         <input type="text"
                                class="ds-edit-input"
-                               placeholder="Edit instructions..."
+                               :placeholder="$store.designStudioStore.editing.mask ? 'Edit masked area...' : 'Edit instructions...'"
                                x-model="$store.designStudioStore.editing.editPrompt"
                                @keydown.enter="$store.designStudioStore.editImage()">
                         <button class="ds-btn ds-btn-secondary"

@@ -5,7 +5,7 @@ import { store as notificationStore } from "/components/notifications/notificati
 /**
  * @typedef {{ id: string, name: string, provider: string, key_set: boolean }} ImageModel
  * @typedef {{ b64_json: string|null, url: string|null, revised_prompt: string|null }} ImageResult
- * @typedef {{ content: string, revised_prompt: string }} EditResult
+ * @typedef {{ b64_json: string|null, url: string|null, revised_prompt: string|null }} EditResult
  * @typedef {{ filename: string, path: string, timestamp: number, prompt: string, model: string, thumbnail_b64: string|null }} GalleryImage
  */
 
@@ -32,6 +32,10 @@ const designStudioStore = {
         history: [],
         /** @type {string[]} */
         redoStack: [],
+        /** Reactive signal: set to a data URL to restore drawCanvas, or "" to clear. */
+        _restore: "",
+        /** Monotonic counter bumped on each _restore change to ensure reactivity. */
+        _restoreGen: 0,
     },
 
     // --- Model Selection ---
@@ -179,11 +183,22 @@ const designStudioStore = {
             return;
         }
 
+        const selectedModel = this.getSelectedModel();
+        if (selectedModel && !selectedModel.key_set) {
+            toast(
+                `API key for ${selectedModel.provider.toUpperCase()} is not configured. Please add it in Settings.`,
+                "error",
+                8000,
+            );
+            return;
+        }
+
         this.editing.loading = true;
         try {
             const response = await API.callJsonApi(EDIT_API, {
                 image_b64: this.editing.sourceImage,
                 prompt,
+                model: this.models.selected || undefined,
                 mask_b64: this.editing.mask || undefined,
             });
 
@@ -193,7 +208,23 @@ const designStudioStore = {
             }
 
             this.editing.results = response.images || [];
-            toast("Edit analysis complete", "success");
+
+            if (this.editing.results.length > 0) {
+                const img = this.editing.results[0];
+                const b64 = img.b64_json;
+                if (b64) {
+                    toast("Image edited successfully", "success");
+                    this.loadImageToCanvas(b64);
+                    await this.saveToGallery(b64, { prompt, model: response.model });
+                } else if (img.revised_prompt) {
+                    // Text-only fallback (non-image models)
+                    toast("Edit suggestions received (text only)", "info");
+                } else {
+                    toast("Edit completed but no image returned", "warning");
+                }
+            } else {
+                toast("No edit results returned", "warning");
+            }
         } catch (/** @type {any} */ err) {
             toast("Edit failed: " + err.message, "error");
         } finally {
@@ -298,13 +329,21 @@ const designStudioStore = {
         if (this.canvas.history.length > 0) {
             const state = this.canvas.history.pop();
             if (state) this.canvas.redoStack.push(state);
+            this.canvas._restore = this.canvas.history.length > 0
+                ? this.canvas.history[this.canvas.history.length - 1]
+                : "";
+            this.canvas._restoreGen++;
         }
     },
 
     redo() {
         if (this.canvas.redoStack.length > 0) {
             const state = this.canvas.redoStack.pop();
-            if (state) this.canvas.history.push(state);
+            if (state) {
+                this.canvas.history.push(state);
+                this.canvas._restore = state;
+                this.canvas._restoreGen++;
+            }
         }
     },
 
@@ -312,6 +351,12 @@ const designStudioStore = {
     saveCanvasState(dataUrl) {
         this.canvas.history.push(dataUrl);
         this.canvas.redoStack = [];
+    },
+
+    /** Clear the mask overlay and stored mask data. Bumps _clearMaskGen for canvas to react. */
+    clearMask() {
+        this.editing.mask = null;
+        this.canvas._clearMaskGen = (this.canvas._clearMaskGen || 0) + 1;
     },
 };
 

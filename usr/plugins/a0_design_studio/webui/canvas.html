@@ -5,6 +5,11 @@
     bgCtx: null,
     maskCtx: null,
     isDrawing: false,
+    isPanning: false,
+    panStartX: 0,
+    panStartY: 0,
+    panScrollStartX: 0,
+    panScrollStartY: 0,
     lastX: 0,
     lastY: 0,
     shapeStartX: 0,
@@ -26,6 +31,18 @@
 
             this.$watch('$store.designStudioStore.editing.sourceImage', (b64) => {
                 if (b64) this.drawBackgroundImage(b64);
+            });
+
+            // Watch undo/redo restore signals
+            this.$watch('$store.designStudioStore.canvas._restoreGen', () => {
+                this.restoreDrawCanvas();
+            });
+
+            // Watch mask clear signal
+            this.$watch('$store.designStudioStore.canvas._clearMaskGen', () => {
+                if (this.maskCtx && this.$refs.maskCanvas) {
+                    this.maskCtx.clearRect(0, 0, this.$refs.maskCanvas.width, this.$refs.maskCanvas.height);
+                }
             });
         });
     },
@@ -56,17 +73,61 @@
         img.src = 'data:image/png;base64,' + b64;
     },
 
+    restoreDrawCanvas() {
+        const dataUrl = this.$store.designStudioStore.canvas._restore;
+        const canvas = this.$refs.drawCanvas;
+        if (!canvas || !this.ctx) return;
+
+        this.ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (dataUrl) {
+            const img = new Image();
+            img.onload = () => {
+                this.ctx.drawImage(img, 0, 0);
+            };
+            img.src = dataUrl;
+        }
+    },
+
     getPos(e) {
         const rect = this.$refs.drawCanvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: clientX - rect.left, y: clientY - rect.top };
+        const zoom = this.$store.designStudioStore.canvas.zoom || 1;
+        return {
+            x: (clientX - rect.left) / zoom,
+            y: (clientY - rect.top) / zoom,
+        };
+    },
+
+    getRawClientPos(e) {
+        return {
+            x: e.touches ? e.touches[0].clientX : e.clientX,
+            y: e.touches ? e.touches[0].clientY : e.clientY,
+        };
     },
 
     onPointerDown(e) {
         e.preventDefault();
         const store = this.$store.designStudioStore;
-        if (store.canvas.tool === 'pan') return;
+        const tool = store.canvas.tool;
+
+        // Pan: track viewport scroll drag
+        if (tool === 'pan') {
+            this.isPanning = true;
+            const raw = this.getRawClientPos(e);
+            this.panStartX = raw.x;
+            this.panStartY = raw.y;
+            const viewport = this.$refs.canvasContainer.closest('.ds-canvas-viewport');
+            if (viewport) {
+                this.panScrollStartX = viewport.scrollLeft;
+                this.panScrollStartY = viewport.scrollTop;
+            }
+            return;
+        }
+
+        // Text: handled entirely on pointerUp (click-to-place)
+        if (tool === 'text') return;
 
         this.isDrawing = true;
         const pos = this.getPos(e);
@@ -75,16 +136,31 @@
         this.shapeStartX = pos.x;
         this.shapeStartY = pos.y;
 
-        const targetCtx = store.canvas.tool === 'mask' ? this.maskCtx : this.ctx;
+        const targetCtx = tool === 'mask' ? this.maskCtx : this.ctx;
         targetCtx.beginPath();
         targetCtx.moveTo(pos.x, pos.y);
     },
 
     onPointerMove(e) {
-        if (!this.isDrawing) return;
-        e.preventDefault();
         const store = this.$store.designStudioStore;
         const tool = store.canvas.tool;
+
+        // Pan: scroll the viewport
+        if (this.isPanning && tool === 'pan') {
+            e.preventDefault();
+            const raw = this.getRawClientPos(e);
+            const dx = raw.x - this.panStartX;
+            const dy = raw.y - this.panStartY;
+            const viewport = this.$refs.canvasContainer.closest('.ds-canvas-viewport');
+            if (viewport) {
+                viewport.scrollLeft = this.panScrollStartX - dx;
+                viewport.scrollTop = this.panScrollStartY - dy;
+            }
+            return;
+        }
+
+        if (!this.isDrawing) return;
+        e.preventDefault();
         const pos = this.getPos(e);
         const targetCtx = tool === 'mask' ? this.maskCtx : this.ctx;
 
@@ -92,7 +168,7 @@
             targetCtx.lineWidth = store.canvas.brushSize;
             targetCtx.lineCap = 'round';
             targetCtx.lineJoin = 'round';
-            targetCtx.strokeStyle = tool === 'mask' ? 'rgba(255, 0, 0, 0.4)' : store.canvas.color;
+            targetCtx.strokeStyle = tool === 'mask' ? 'rgba(255, 0, 0, 0.5)' : store.canvas.color;
             targetCtx.lineTo(pos.x, pos.y);
             targetCtx.stroke();
         } else if (tool === 'eraser') {
@@ -109,10 +185,32 @@
     },
 
     onPointerUp(e) {
-        if (!this.isDrawing) return;
-        this.isDrawing = false;
         const store = this.$store.designStudioStore;
         const tool = store.canvas.tool;
+
+        // Pan: stop panning
+        if (this.isPanning) {
+            this.isPanning = false;
+            return;
+        }
+
+        // Text: place text at click position
+        if (tool === 'text') {
+            const pos = this.getPos(e);
+            const text = prompt('Enter text:');
+            if (text) {
+                const fontSize = Math.max(store.canvas.brushSize * 3, 14);
+                this.ctx.font = `${fontSize}px sans-serif`;
+                this.ctx.fillStyle = store.canvas.color;
+                this.ctx.textBaseline = 'top';
+                this.ctx.fillText(text, pos.x, pos.y);
+                store.saveCanvasState(this.$refs.drawCanvas.toDataURL());
+            }
+            return;
+        }
+
+        if (!this.isDrawing) return;
+        this.isDrawing = false;
         const targetCtx = tool === 'mask' ? this.maskCtx : this.ctx;
         const pos = this.getPos(e);
 
@@ -137,7 +235,17 @@
             this.drawArrow(targetCtx, this.shapeStartX, this.shapeStartY, pos.x, pos.y, store.canvas.color, store.canvas.brushSize);
         }
 
-        store.saveCanvasState(this.$refs.drawCanvas.toDataURL());
+        // Save draw canvas state for undo/redo
+        if (tool !== 'mask') {
+            store.saveCanvasState(this.$refs.drawCanvas.toDataURL());
+        }
+
+        // Export mask canvas to store when mask tool is used
+        if (tool === 'mask') {
+            const maskDataUrl = this.$refs.maskCanvas.toDataURL('image/png');
+            // Strip data URL prefix to get raw base64
+            store.editing.mask = maskDataUrl.replace(/^data:image\/png;base64,/, '');
+        }
     },
 
     drawArrow(ctx, fromX, fromY, toX, toY, color, width) {
@@ -153,9 +261,11 @@
         ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
         ctx.stroke();
     }
-}" class="ds-canvas-container" x-ref="canvasContainer">
+}" class="ds-canvas-container" x-ref="canvasContainer"
+   :style="`transform: scale(${$store.designStudioStore.canvas.zoom}); transform-origin: top left;`">
     <canvas x-ref="bgCanvas" class="ds-canvas ds-canvas-bg"></canvas>
     <canvas x-ref="drawCanvas" class="ds-canvas ds-canvas-draw"
+            :class="{'ds-cursor-pan': $store.designStudioStore.canvas.tool === 'pan', 'ds-cursor-text': $store.designStudioStore.canvas.tool === 'text'}"
             @pointerdown="onPointerDown($event)"
             @pointermove="onPointerMove($event)"
             @pointerup="onPointerUp($event)"
