@@ -1,16 +1,19 @@
 """API handler for image editing via vision models."""
 from __future__ import annotations
 
-import sys
+import importlib.util
 from pathlib import Path
 
-from python.helpers.api import ApiHandler, Input, Request
+from helpers.api import ApiHandler, Input, Request
 
-_plugin_root = Path(__file__).parent.parent
-if str(_plugin_root) not in sys.path:
-    sys.path.insert(0, str(_plugin_root))
+# Load plugin helpers by file path to avoid name collision with framework helpers/
+_providers_path = Path(__file__).parent.parent / "helpers" / "image_providers.py"
+_spec = importlib.util.spec_from_file_location("ds_image_providers", str(_providers_path))
+_providers = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_providers)
 
-from helpers.image_providers import edit_image, get_plugin_config
+edit_image = _providers.edit_image
+get_plugin_config = _providers.get_plugin_config
 
 
 class ImageEdit(ApiHandler):
@@ -29,7 +32,9 @@ class ImageEdit(ApiHandler):
             return {"error": "prompt is required", "images": []}
 
         config = get_plugin_config()
-        model = input.get("model") or config.get("image_edit_model", "gemini/gemini-3.1-flash-image-preview")
+        # Use the model sent by the frontend (the same dropdown as generation).
+        # Gemini uses the same generateContent endpoint for both generate & edit.
+        model = input.get("model") or config.get("image_generation_model", "gemini/gemini-3.1-flash-image-preview")
         mask_b64 = input.get("mask_b64")
 
         try:

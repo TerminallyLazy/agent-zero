@@ -8,10 +8,10 @@
         <div>
             <div class="section-title">Design Studio</div>
             <div class="section-description">
-                AI-powered image generation and visual editing studio with multi-provider support via LiteLLM.
+                AI-powered image generation and visual editing studio with multi-provider support via LiteLLM and FAL.ai.
             </div>
 
-            <div class="field">
+            <!-- <div class="field">
                 <div class="field-label">
                     <div class="field-title">Generation Model</div>
                     <div class="field-description">
@@ -23,21 +23,7 @@
                            x-model="$store.pluginSettings.settings.image_generation_model"
                            placeholder="gemini/gemini-3.1-flash-image-preview">
                 </div>
-            </div>
-
-            <div class="field">
-                <div class="field-label">
-                    <div class="field-title">Edit Model</div>
-                    <div class="field-description">
-                        Image-capable model for editing (e.g., gemini/gemini-3.1-flash-image-preview). Must support image output.
-                    </div>
-                </div>
-                <div class="field-control">
-                    <input type="text"
-                           x-model="$store.pluginSettings.settings.image_edit_model"
-                           placeholder="gemini/gemini-3.1-flash-image-preview">
-                </div>
-            </div>
+            </div> -->
 
             <div class="field">
                 <div class="field-label">
@@ -66,6 +52,22 @@
                 <div class="field-control">
                     <input type="number" min="1" max="4"
                            x-model.number="$store.pluginSettings.settings.default_count">
+                </div>
+            </div>
+
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">FAL API Key</div>
+                    <div class="field-description">
+                        API key for FAL.ai image generation (FLUX models). Get one at
+                        <a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai/dashboard/keys</a>.
+                    </div>
+                </div>
+                <div class="field-control">
+                    <input type="password"
+                           x-model="$store.pluginSettings.settings.fal_api_key"
+                           autocomplete="off"
+                           placeholder="Enter your FAL API key">
                 </div>
             </div>
 

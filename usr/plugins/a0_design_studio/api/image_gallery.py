@@ -2,19 +2,21 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import json
 import os
 import time
-import sys
 from pathlib import Path
 
-from python.helpers.api import ApiHandler, Input, Request
+from helpers.api import ApiHandler, Input, Request
 
-_plugin_root = Path(__file__).parent.parent
-if str(_plugin_root) not in sys.path:
-    sys.path.insert(0, str(_plugin_root))
+# Load plugin helpers by file path to avoid name collision with framework helpers/
+_providers_path = Path(__file__).parent.parent / "helpers" / "image_providers.py"
+_spec = importlib.util.spec_from_file_location("ds_image_providers", str(_providers_path))
+_providers = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_providers)
 
-from helpers.image_providers import get_plugin_config
+get_plugin_config = _providers.get_plugin_config
 
 
 class ImageGallery(ApiHandler):

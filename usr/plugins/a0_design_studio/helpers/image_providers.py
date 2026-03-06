@@ -30,6 +30,7 @@ _PROVIDER_TO_KEY_NAME: dict[str, str] = {
     "openrouter": "openrouter",
     "azure": "azure",
     "bedrock": "bedrock",
+    "fal": "fal",
 }
 
 # Available image generation models shown in the UI dropdown.
@@ -39,6 +40,9 @@ IMAGE_MODELS: list[dict] = [
     {"id": "gemini/gemini-2.5-flash-image", "name": "Gemini 2.5 Flash Image", "provider": "google", "method": "completion"},
     {"id": "dall-e-3", "name": "DALL-E 3", "provider": "openai", "method": "image_generation"},
     {"id": "openai/gpt-image-1", "name": "GPT Image 1", "provider": "openai", "method": "image_generation"},
+    {"id": "fal/fal-ai/flux/schnell",        "name": "FLUX.1 Schnell (FAL)", "provider": "fal", "method": "image_generation"},
+    {"id": "fal/fal-ai/flux/dev",            "name": "FLUX.1 Dev (FAL)",     "provider": "fal", "method": "image_generation"},
+    {"id": "fal/fal-ai/flux-pro/v1.1-ultra", "name": "FLUX Pro Ultra (FAL)", "provider": "fal", "method": "image_generation"},
 ]
 
 _GOOGLE_AI_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -61,6 +65,11 @@ def _is_gemini(model: str) -> bool:
     return _extract_provider(model) in ("gemini", "google")
 
 
+def _is_fal(model: str) -> bool:
+    """True if this model should be routed to FAL.ai REST API."""
+    return _extract_provider(model) == "fal"
+
+
 def _bare_model(model: str) -> str:
     """Strip the provider prefix: 'gemini/gemini-3.1-flash-image-preview' -> 'gemini-3.1-flash-image-preview'."""
     return model.split("/", 1)[1] if "/" in model else model
@@ -76,6 +85,16 @@ def _resolve_api_key(provider: str) -> str | None:
             return key
     except (ImportError, Exception):
         pass
+    # FAL: check plugin config, then native FAL_KEY env var as fallbacks.
+    if provider == "fal":
+        try:
+            cfg = get_plugin_config()
+            fal_key = cfg.get("fal_api_key", "")
+            if fal_key:
+                return fal_key
+        except Exception:
+            pass
+        return os.environ.get("FAL_KEY")
     return None
 
 
@@ -177,6 +196,132 @@ def _require_api_key(model: str) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# FAL.ai direct REST API
+# ---------------------------------------------------------------------------
+
+_FAL_SIZE_MAP: dict[str, str] = {
+    "1024x1024": "square_hd",
+    "1024x1792": "portrait_16_9",
+    "1792x1024": "landscape_16_9",
+    "512x512": "square",
+}
+
+_FAL_API_BASE = "https://fal.run"
+_FAL_MODELS_API = "https://api.fal.ai/v1/models"
+
+# Categories of FAL models relevant for image generation.
+_FAL_IMAGE_CATEGORIES = ("text-to-image",)
+
+
+def fetch_fal_models(api_key: str | None = None) -> list[dict]:
+    """Fetch available image generation models from FAL.ai's model discovery API.
+
+    Calls GET https://api.fal.ai/v1/models?category=text-to-image and returns
+    them in the same format as IMAGE_MODELS entries.
+
+    Args:
+        api_key: Optional FAL API key (gives higher rate limits).
+
+    Returns:
+        List of model dicts with keys: id, name, provider, method.
+    """
+    models: list[dict] = []
+
+    for category in _FAL_IMAGE_CATEGORIES:
+        cursor: str | None = None
+        while True:
+            url = f"{_FAL_MODELS_API}?category={category}&limit=100"
+            if cursor:
+                url += f"&cursor={cursor}"
+
+            headers: dict[str, str] = {}
+            if api_key:
+                headers["Authorization"] = f"Key {api_key}"
+
+            req = Request(url, headers=headers, method="GET")
+            try:
+                with urlopen(req, timeout=30) as resp:
+                    data = json.loads(resp.read())
+            except Exception as e:
+                log.warning("Failed to fetch FAL models: %s", e)
+                break
+
+            for m in data.get("models", []):
+                endpoint_id = m.get("endpoint_id", "")
+                meta = m.get("metadata", {})
+                display_name = meta.get("display_name", endpoint_id)
+                status = meta.get("status", "active")
+
+                if status != "active" or not endpoint_id:
+                    continue
+
+                models.append({
+                    "id": f"fal/{endpoint_id}",
+                    "name": f"{display_name} (FAL)",
+                    "provider": "fal",
+                    "method": "image_generation",
+                })
+
+            if data.get("has_more") and data.get("next_cursor"):
+                cursor = data["next_cursor"]
+            else:
+                break
+
+    return models
+
+
+def _fal_model_endpoint(model: str) -> str:
+    """Extract the FAL model endpoint from a prefixed model string.
+
+    'fal/fal-ai/flux/dev' -> 'fal-ai/flux/dev'
+    """
+    return model.split("/", 1)[1] if "/" in model else model
+
+
+def _fal_request(endpoint: str, body: dict, api_key: str) -> dict:
+    """Call a FAL.ai endpoint synchronously. Returns parsed JSON response."""
+    url = f"{_FAL_API_BASE}/{endpoint}"
+    data = json.dumps(body).encode("utf-8")
+
+    req = Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Key {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    with urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read())
+
+
+def _download_to_b64(url: str) -> str | None:
+    """Download a URL and return its content as base64."""
+    try:
+        with urlopen(url, timeout=60) as resp:
+            return base64.b64encode(resp.read()).decode("ascii")
+    except Exception as e:
+        log.warning("Failed to download FAL image from %s: %s", url, e)
+        return None
+
+
+def _extract_images_from_fal_response(response: dict) -> list[dict]:
+    """Extract images from a FAL response, downloading URLs to b64."""
+    results = []
+    for img in response.get("images", []):
+        img_url = img.get("url", "")
+        b64 = _download_to_b64(img_url) if img_url else None
+        results.append({
+            "b64_json": b64,
+            "url": img_url,
+            "revised_prompt": None,
+        })
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
 
@@ -199,6 +344,8 @@ async def generate_image(
 
     if _is_gemini(model):
         return await _generate_gemini(prompt, model, api_key)
+    elif _is_fal(model):
+        return await _generate_fal(prompt, model, size, n, api_key)
     else:
         return await _generate_openai(prompt, model, size, n, api_key, **kwargs)
 
@@ -220,6 +367,28 @@ async def _generate_gemini(prompt: str, model: str, api_key: str) -> list[dict]:
             raise RuntimeError(f"Gemini API error: {error.get('message', error)}")
         raise RuntimeError(
             f"Image generation returned no images. Response: {json.dumps(response)[:500]}"
+        )
+    return results
+
+
+async def _generate_fal(
+    prompt: str, model: str, size: str, n: int, api_key: str,
+) -> list[dict]:
+    """Generate image via FAL.ai REST API."""
+    endpoint = _fal_model_endpoint(model)
+    body: dict = {
+        "prompt": prompt,
+        "image_size": _FAL_SIZE_MAP.get(size, "square_hd"),
+        "num_images": n,
+    }
+
+    response = await asyncio.to_thread(_fal_request, endpoint, body, api_key)
+    log.info("FAL generate response keys: %s", list(response.keys()))
+
+    results = _extract_images_from_fal_response(response)
+    if not results:
+        raise RuntimeError(
+            f"FAL image generation returned no images. Response: {json.dumps(response)[:500]}"
         )
     return results
 
@@ -290,6 +459,8 @@ async def edit_image(
 
     if _is_gemini(model):
         return await _edit_gemini(image_b64, prompt, model, api_key, mask_b64)
+    elif _is_fal(model):
+        return await _edit_fal(image_b64, prompt, model, api_key)
     else:
         return await _edit_fallback(image_b64, prompt, mask_b64, model, api_key, **kwargs)
 
@@ -348,6 +519,34 @@ async def _edit_gemini(
     return results
 
 
+async def _edit_fal(
+    image_b64: str, prompt: str, model: str, api_key: str,
+) -> list[dict]:
+    """Edit image via FAL.ai image-to-image endpoint.
+
+    Uses fal-ai/flux/dev/image-to-image regardless of which FAL model was
+    selected, since FLUX image-to-image is the only FAL editing endpoint.
+    Mask is not supported (FLUX doesn't do inpainting), so we rely on the
+    prompt to describe what to change.
+    """
+    endpoint = "fal-ai/flux/dev/image-to-image"
+    body: dict = {
+        "image_url": f"data:image/png;base64,{image_b64}",
+        "prompt": prompt,
+        "strength": 0.75,
+    }
+
+    response = await asyncio.to_thread(_fal_request, endpoint, body, api_key)
+    log.info("FAL edit response keys: %s", list(response.keys()))
+
+    results = _extract_images_from_fal_response(response)
+    if not results:
+        raise RuntimeError(
+            f"FAL image editing returned no images. Response: {json.dumps(response)[:500]}"
+        )
+    return results
+
+
 async def _edit_fallback(image_b64, prompt, mask_b64, model, api_key, **kwargs):
     """Fallback edit for non-Gemini models (text-only response)."""
     litellm = _get_litellm()
@@ -397,7 +596,7 @@ async def _edit_fallback(image_b64, prompt, mask_b64, model, api_key, **kwargs):
 def get_plugin_config() -> dict:
     """Load the Design Studio plugin configuration."""
     try:
-        from python.helpers import plugins
+        from helpers import plugins
         config = plugins.get_plugin_config("a0_design_studio")
         if config:
             return config

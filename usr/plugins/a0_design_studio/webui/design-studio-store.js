@@ -358,6 +358,38 @@ const designStudioStore = {
         this.editing.mask = null;
         this.canvas._clearMaskGen = (this.canvas._clearMaskGen || 0) + 1;
     },
+
+    /** Download the current canvas (bg + drawings composited) as a PNG file. */
+    downloadImage() {
+        if (!this.editing.sourceImage) {
+            toast("No image to download", "warning");
+            return;
+        }
+        // Signal the canvas component to composite and trigger download.
+        this.canvas._downloadGen = (this.canvas._downloadGen || 0) + 1;
+    },
+
+    /** Upload a local image file onto the canvas for editing. */
+    uploadImage() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.onchange = () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                const dataUrl = /** @type {string} */ (reader.result);
+                // Strip "data:image/...;base64," prefix
+                const b64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, "");
+                this.loadImageToCanvas(b64);
+                this.saveToGallery(b64, { prompt: file.name });
+                toast("Image loaded", "success");
+            };
+            reader.readAsDataURL(file);
+        };
+        input.click();
+    },
 };
 
 createStore("designStudioStore", designStudioStore);

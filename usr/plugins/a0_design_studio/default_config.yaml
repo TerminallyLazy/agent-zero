@@ -1,5 +1,5 @@
 image_generation_model: "gemini/gemini-3.1-flash-image-preview"
-image_edit_model: "gemini/gemini-3.1-flash-image-preview"
 default_size: "1024x1024"
 default_count: 1
 gallery_path: "images"
+fal_api_key: ""

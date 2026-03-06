@@ -116,6 +116,12 @@
                 <!-- Bottom Bar -->
                 <div class="ds-bottom-bar">
                     <div class="ds-bottom-actions">
+                        <button class="ds-btn ds-btn-sm" @click="$store.designStudioStore.uploadImage()" title="Upload image">
+                            <span class="material-symbols-outlined">upload</span>
+                        </button>
+                        <button class="ds-btn ds-btn-sm" @click="$store.designStudioStore.downloadImage()" title="Download image">
+                            <span class="material-symbols-outlined">download</span>
+                        </button>
                         <button class="ds-btn ds-btn-sm" @click="$store.designStudioStore.undo()" title="Undo">
                             <span class="material-symbols-outlined">undo</span>
                         </button>

@@ -44,6 +44,11 @@
                     this.maskCtx.clearRect(0, 0, this.$refs.maskCanvas.width, this.$refs.maskCanvas.height);
                 }
             });
+
+            // Watch download signal — composite all layers and trigger file download
+            this.$watch('$store.designStudioStore.canvas._downloadGen', () => {
+                this.compositeAndDownload();
+            });
         });
     },
 
@@ -246,6 +251,28 @@
             // Strip data URL prefix to get raw base64
             store.editing.mask = maskDataUrl.replace(/^data:image\/png;base64,/, '');
         }
+    },
+
+    compositeAndDownload() {
+        const bg = this.$refs.bgCanvas;
+        const draw = this.$refs.drawCanvas;
+        if (!bg || !draw) return;
+
+        // Create offscreen canvas at same resolution
+        const out = document.createElement('canvas');
+        out.width = bg.width;
+        out.height = bg.height;
+        const outCtx = out.getContext('2d');
+
+        // Composite: background first, then drawings on top
+        outCtx.drawImage(bg, 0, 0);
+        outCtx.drawImage(draw, 0, 0);
+
+        // Trigger download
+        const a = document.createElement('a');
+        a.download = 'design-studio-' + Date.now() + '.png';
+        a.href = out.toDataURL('image/png');
+        a.click();
     },
 
     drawArrow(ctx, fromX, fromY, toX, toY, color, width) {

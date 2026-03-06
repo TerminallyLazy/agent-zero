@@ -7,7 +7,7 @@ import time
 import sys
 from pathlib import Path
 
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 
 _plugin_root = Path(__file__).parent.parent
 if str(_plugin_root) not in sys.path:

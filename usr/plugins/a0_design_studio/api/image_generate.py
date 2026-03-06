@@ -1,17 +1,19 @@
 """API handler for image generation."""
 from __future__ import annotations
 
-import sys
+import importlib.util
 from pathlib import Path
 
-from python.helpers.api import ApiHandler, Input, Request
+from helpers.api import ApiHandler, Input, Request
 
-# Ensure plugin helpers are importable
-_plugin_root = Path(__file__).parent.parent
-if str(_plugin_root) not in sys.path:
-    sys.path.insert(0, str(_plugin_root))
+# Load plugin helpers by file path to avoid name collision with framework helpers/
+_providers_path = Path(__file__).parent.parent / "helpers" / "image_providers.py"
+_spec = importlib.util.spec_from_file_location("ds_image_providers", str(_providers_path))
+_providers = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_providers)
 
-from helpers.image_providers import generate_image, get_plugin_config
+generate_image = _providers.generate_image
+get_plugin_config = _providers.get_plugin_config
 
 
 class ImageGenerate(ApiHandler):
