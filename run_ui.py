@@ -15,7 +15,7 @@ from helpers import files, git, mcp_server, fasta2a_server, settings as settings
 from helpers.files import get_abs_path
 from helpers import runtime, dotenv, process
 from helpers.websocket import WebSocketHandler, validate_ws_origin
-from helpers.api import register_api_route, requires_auth
+from helpers.api import register_api_route, requires_auth, csrf_protect
 from helpers.print_style import PrintStyle
 from helpers import login
 import socketio  # type: ignore[import-untyped]

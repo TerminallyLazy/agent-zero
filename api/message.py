@@ -58,7 +58,7 @@ class Message(ApiHandler):
 
         # call extension point, alow it to modify data
         data = { "message": message, "attachment_paths": attachment_paths }
-        await extension.call_extensions("user_message_ui", agent=context.get_agent(), data=data)
+        await extension.call_extensions_async("user_message_ui", agent=context.get_agent(), data=data)
         message = data.get("message", "")
         attachment_paths = data.get("attachment_paths", [])
 

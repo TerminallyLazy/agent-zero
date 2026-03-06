@@ -1,5 +1,5 @@
 from helpers.api import ApiHandler, Request, Response
-from helpers.extension import call_extensions
+from helpers.extension import call_extensions_async
 
 
 class GetBanners(ApiHandler):
@@ -13,7 +13,7 @@ class GetBanners(ApiHandler):
         frontend_context = input.get("context", {})
         
         # Banners array passed by reference - extensions append directly to it
-        await call_extensions("banners", agent=None, banners=banners, frontend_context=frontend_context)
+        await call_extensions_async("banners", agent=None, banners=banners, frontend_context=frontend_context)
         
         return {"banners": banners}
 

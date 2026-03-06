@@ -600,10 +600,10 @@ def _apply_settings(previous: Settings | None):
             or _settings["embed_model_provider"] != previous["embed_model_provider"]
             or _settings["embed_model_kwargs"] != previous["embed_model_kwargs"]
         ):
-            from helpers.extension import call_extensions
+            from helpers.extension import call_extensions_async
 
             defer.DeferredTask().start_task(
-                call_extensions, "embedding_model_changed"
+                call_extensions_async, "embedding_model_changed"
             )
 
         # update mcp settings if necessary

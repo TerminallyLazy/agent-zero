@@ -4,7 +4,7 @@ from helpers.secrets import get_secrets_manager
 
 class MaskHistoryContent(Extension):
 
-    async def execute(self, **kwargs):
+    def execute(self, **kwargs):
         if not self.agent:
             return
 

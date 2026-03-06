@@ -5,7 +5,7 @@ from helpers.extension import Extension
 
 class InitialMessage(Extension):
 
-    async def execute(self, **kwargs):
+    def execute(self, **kwargs):
         """
         Add an initial greeting message when first user message is processed.
         Called only once per session via _process_chain method.

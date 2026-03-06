@@ -1,10 +1,9 @@
 from abc import abstractmethod
-from typing import Any
+from typing import Any, Awaitable, Type, cast
 from helpers import extract_tools, files
 from helpers import cache, plugins, subagents
 from typing import TYPE_CHECKING
 from functools import wraps
-import asyncio
 import inspect
 
 if TYPE_CHECKING:
@@ -15,7 +14,7 @@ DEFAULT_EXTENSIONS_FOLDER = "python/extensions"
 USER_EXTENSIONS_FOLDER = "usr/extensions"
 
 _CACHE_AREA = "extension_folder_classes(extensions)(plugins)"
-cache.toggle_area(_CACHE_AREA, True)  # cache off for now
+cache.toggle_area(_CACHE_AREA, False)  # cache off for now
 
 
 class _Unset:
@@ -35,62 +34,54 @@ def extensible(func):
     - ``{func.__module__}_{func.__qualname__}_end`` with `.` replaced by `_`
 
     When the wrapped function is called, the decorator builds a mutable ``data``
-    payload and passes it to both extension points via ``call_extensions``:
+    payload and passes it to both extension points:
 
-    - ``data["args"]``: the original positional arguments tuple
-    - ``data["kwargs"]``: the original keyword arguments dict
-    - ``data["result"]``: initialized to an internal sentinel; extensions may
-      set this to short-circuit the wrapped function
+    - ``data["args"]``: positional args (extensions may replace/mutate)
+    - ``data["kwargs"]``: keyword args (extensions may replace/mutate)
+    - ``data["result"]``: initialized to an internal sentinel; extensions may set
+      this to short-circuit the wrapped function
     - ``data["exception"]``: initialized to an internal sentinel; extensions may
       set this to a ``BaseException`` instance to force-raise
 
+    Sync functions call ``call_extensions_sync``. Async functions call
+    ``call_extensions_async``.
+
     Behavior:
 
-    - ``-start`` extensions run first and may mutate ``data["args"]`` /
-      ``data["kwargs"]``, set ``data["result"]`` to skip calling ``func``, or set
-      ``data["exception"]`` to abort by raising.
-    - If ``data["result"]`` is still unset, the decorator calls ``func`` (awaiting
-      it if it is async) and stores either the return value into ``data["result"]``
-      or the raised error into ``data["exception"]``.
-    - ``-end`` extensions run last and may further transform the outcome by
-      rewriting ``data["result"]`` or replacing/clearing ``data["exception"]``.
+    - ``-start`` extensions run first and may mutate inputs or set
+      ``data["result"]`` / ``data["exception"]``.
+    - If ``data["result"]`` is still unset, the decorator calls the wrapped
+      function using the possibly modified ``data["args"]`` / ``data["kwargs"]``.
+    - ``-end`` extensions run last and may rewrite ``data["result"]`` or replace /
+      clear ``data["exception"]``.
 
     Finally, if ``data["exception"]`` contains an exception it is raised;
     otherwise ``data["result"]`` is returned.
     """
 
-    @wraps(func)
-    async def _inner_async(*args, **kwargs):
+    def _get_agent(args, kwargs):
         from agent import Agent
 
-        # prepare extension points data
+        candidate = kwargs.get("agent")
+        if isinstance(candidate, Agent) and bool(getattr(candidate, "__dict__", None)):
+            return candidate
+
+        for a in args:
+            if isinstance(a, Agent) and bool(getattr(a, "__dict__", None)):
+                return a
+
+        return None
+
+    def _prepare_inputs(args, kwargs):
         module_name = getattr(func, "__module__", "").replace(".", "_")
         qual_name = getattr(func, "__qualname__", "").replace(".", "_")
-
-        # skip if extension point cannot be determined
         if not module_name or not qual_name:
-            return await func(*args, **kwargs)
+            return None
 
         start_point = f"{module_name}_{qual_name}_start"
         end_point = f"{module_name}_{qual_name}_end"
+        agent = _get_agent(args, kwargs)
 
-        def _get_agent() -> "Agent|None":
-            candidate = kwargs.get("agent")
-            if isinstance(candidate, Agent) and bool(
-                getattr(candidate, "__dict__", None)
-            ):
-                return candidate
-
-            for a in args:
-                if isinstance(a, Agent) and bool(getattr(a, "__dict__", None)):
-                    return a
-
-            return None
-
-        # try to find agent instance for better extension determination
-        agent = _get_agent()
-
-        # build extension data object - func input/output
         data = {
             "args": args,
             "kwargs": kwargs,
@@ -98,44 +89,78 @@ def extensible(func):
             "exception": None,
         }
 
-        # call start extensions, these can modify inputs, produce output or exception
-        await call_extensions(start_point, agent=agent, data=data)
+        return start_point, end_point, agent, data
 
-        # if there is an explicit exception set, raise it
+    def _process_result(data):
         exc = data.get("exception")
         if isinstance(exc, BaseException):
             raise exc
 
-        # if there is no result set, call the original function
-        if data.get("result") is _UNSET:
+        return data.get("result")
+
+    def _call_original(data):
+        call_args = data.get("args")
+        call_kwargs = data.get("kwargs")
+
+        if not isinstance(call_args, tuple):
+            call_args = (call_args,)
+        if not isinstance(call_kwargs, dict):
+            call_kwargs = {}
+
+        try:
+            data["result"] = func(*call_args, **call_kwargs)
+        except Exception as e:
+            data["exception"] = e
+            return _UNSET
+
+    async def _run_async(*args, **kwargs):
+        prepared = _prepare_inputs(args, kwargs)
+        if prepared is None:
+            return await func(*args, **kwargs)
+
+        start_point, end_point, agent, data = prepared
+
+        # call pre-extensions
+        await call_extensions_async(start_point, agent=agent, data=data)
+
+        # call the original if pre-extensions don't return a result
+        if (result := _process_result(data)) is _UNSET:
+            _call_original(data)
             try:
-                if inspect.iscoroutinefunction(func):
-                    data["result"] = await func(*args, **kwargs)
-                else:
-                    data["result"] = func(*args, **kwargs)
+                data["result"] = await data["result"]
             except Exception as e:
                 data["exception"] = e
 
-        # call end extensions, these can modify outputs or exception
-        await call_extensions(end_point, agent=agent, data=data)
+        # call post-extensions
+        await call_extensions_async(end_point, agent=agent, data=data)
 
-        # if there's an exception, raise it
-        exc = data.get("exception")
-        if isinstance(exc, BaseException):
-            raise exc
+        result = _process_result(data)
+        return None if result is _UNSET else result
 
-        # if there's a result, return it
-        result = data.get("result")
+    def _run_sync(*args, **kwargs):
+        prepared = _prepare_inputs(args, kwargs)
+        if prepared is None:
+            return func(*args, **kwargs)
+
+        start_point, end_point, agent, data = prepared
+
+        # call pre-extensions
+        call_extensions_sync(start_point, agent=agent, data=data)
+
+        # call the original if pre-extensions don't return a result
+        if (result := _process_result(data)) is _UNSET:
+            _call_original(data)
+
+        # call post-extensions
+        call_extensions_sync(end_point, agent=agent, data=data)
+
+        result = _process_result(data)
         return None if result is _UNSET else result
 
     if inspect.iscoroutinefunction(func):
-        return _inner_async
+        return wraps(func)(_run_async)
 
-    @wraps(func)
-    def _inner_sync(*args, **kwargs):
-        return asyncio.run(_inner_async(*args, **kwargs))
-
-    return _inner_sync
+    return wraps(func)(_run_sync)
 
 
 class Extension:
@@ -145,37 +170,34 @@ class Extension:
         self.kwargs = kwargs
 
     @abstractmethod
-    async def execute(self, **kwargs) -> Any:
+    def execute(self, **kwargs) -> None | Awaitable[None]:
         pass
 
 
-async def call_extensions(
+async def call_extensions_async(
     extension_point: str, agent: "Agent|None" = None, **kwargs
-) -> Any:
-    # search for extension folders in all agent's paths
-    paths = subagents.get_paths(agent, "extensions/python", extension_point)
-
-    # # Add plugin backend extension paths (plugins/*/extensions/python/{extension_point})
-    # plugin_paths = plugins.get_enabled_plugin_paths(
-    #     agent, "extensions", "python", extension_point
-    # )
-    # paths.extend(p for p in plugin_paths if p not in paths)
-
-    all_exts = [cls for path in paths for cls in _get_extensions(path)]
-
-    # merge: first ocurrence of file name is the override
-    unique = {}
-    for cls in all_exts:
-        file = _get_file_from_module(cls.__module__)
-        if file not in unique:
-            unique[file] = cls
-    classes = sorted(
-        unique.values(), key=lambda cls: _get_file_from_module(cls.__module__)
-    )
+):
+    # fetch classes for this extension point and agent
+    classes = _get_extension_classes(extension_point, agent=agent, **kwargs)
 
     # execute unique extensions
     for cls in classes:
-        await cls(agent=agent).execute(**kwargs)
+        result = cls(agent=agent).execute(**kwargs)
+        if isinstance(result, Awaitable):
+            await result
+
+
+def call_extensions_sync(extension_point: str, agent: "Agent|None" = None, **kwargs):
+    # fetch classes for this extension point and agent
+    classes = _get_extension_classes(extension_point, agent=agent, **kwargs)
+
+    # execute unique extensions
+    for cls in classes:
+        result = cls(agent=agent).execute(**kwargs)
+        if isinstance(result, Awaitable):
+            raise ValueError(
+                f"Extension {cls.__name__} returned awaitable in sync mode"
+            )
 
 
 def get_webui_extensions(
@@ -203,6 +225,26 @@ def get_webui_extensions(
         entries.append(rel_path)
 
     return entries
+
+
+def _get_extension_classes(
+    extension_point: str, agent: "Agent|None" = None, **kwargs
+) -> list[Type[Extension]]:
+    # search for extension folders in all agent's paths
+    paths = subagents.get_paths(agent, "extensions/python", extension_point)
+
+    all_exts = [cls for path in paths for cls in _get_extensions(path)]
+
+    # merge: first ocurrence of file name is the override
+    unique = {}
+    for cls in all_exts:
+        file = _get_file_from_module(cls.__module__)
+        if file not in unique:
+            unique[file] = cls
+    classes = sorted(
+        unique.values(), key=lambda cls: _get_file_from_module(cls.__module__)
+    )
+    return classes
 
 
 def _get_file_from_module(module_name: str) -> str:

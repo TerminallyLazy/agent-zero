@@ -3,7 +3,7 @@ from flask import Flask, request
 from helpers import runtime, dotenv, process
 from helpers.print_style import PrintStyle
 
-from api.tunnel import Tunnel
+from api.tunnel import Tunnel, stop
 
 # initialize the internal Flask server
 app = Flask("app")
@@ -50,7 +50,7 @@ def run():
     finally:
         # Clean up tunnel if it was started
         if tunnel:
-            tunnel.stop()
+            stop()
 
 
 # run the internal server

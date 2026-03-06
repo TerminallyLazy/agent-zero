@@ -126,10 +126,10 @@ const CSRF_SLOW_WARN_MS = 1500;
 export function getRuntimeId() {
   if (runtimeIdCache) return runtimeIdCache;
   const injected =
-    window.runtimeInfo &&
-    typeof window.runtimeInfo.id === "string" &&
-    window.runtimeInfo.id.length > 0
-      ? window.runtimeInfo.id
+    globalThis.runtimeInfo &&
+    typeof globalThis.runtimeInfo.id === "string" &&
+    globalThis.runtimeInfo.id.length > 0
+      ? globalThis.runtimeInfo.id
       : null;
   return injected;
 }
@@ -167,6 +167,7 @@ export async function getCsrfToken() {
         });
       }
 
+      /** @type {RequestInit} */
       const fetchOptions = { credentials: "same-origin" };
       if (controller) {
         fetchOptions.signal = controller.signal;
@@ -177,7 +178,7 @@ export async function getCsrfToken() {
         ? await Promise.race([fetchPromise, timeoutPromise])
         : await fetchPromise;
     } catch (error) {
-      if (error && error.name === "AbortError") {
+      if (error && error["name"] === "AbortError") {
         throw new Error("CSRF token request timed out");
       }
       throw error;
@@ -204,10 +205,10 @@ export async function getCsrfToken() {
         runtimeIdCache = runtimeId;
       }
       const injectedRuntimeId =
-        window.runtimeInfo &&
-        typeof window.runtimeInfo.id === "string" &&
-        window.runtimeInfo.id.length > 0
-          ? window.runtimeInfo.id
+        globalThis.runtimeInfo &&
+        typeof globalThis.runtimeInfo.id === "string" &&
+        globalThis.runtimeInfo.id.length > 0
+          ? globalThis.runtimeInfo.id
           : null;
       const cookieRuntimeId = runtimeId || injectedRuntimeId;
       if (cookieRuntimeId) {
@@ -216,7 +217,7 @@ export async function getCsrfToken() {
         console.warn("CSRF runtime id missing; skipping cookie name binding.");
       }
       const elapsedMs = Date.now() - startedAt;
-      if (elapsedMs > CSRF_SLOW_WARN_MS && window.runtimeInfo?.isDevelopment) {
+      if (elapsedMs > CSRF_SLOW_WARN_MS && globalThis.runtimeInfo?.isDevelopment) {
         console.warn(`CSRF token request took ${elapsedMs}ms`);
       }
       return csrfToken;

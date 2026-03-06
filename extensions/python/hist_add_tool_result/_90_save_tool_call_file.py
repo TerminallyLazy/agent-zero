@@ -6,7 +6,7 @@ import os, re
 LEN_MIN = 500
 
 class SaveToolCallFile(Extension):
-    async def execute(self, data: dict[str, Any] | None = None, **kwargs):
+    def execute(self, data: dict[str, Any] | None = None, **kwargs):
         if not self.agent:
             return
             

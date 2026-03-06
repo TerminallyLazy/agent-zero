@@ -1,5 +1,5 @@
 from helpers.tool import Tool, Response
-from helpers.extension import call_extensions
+from helpers.extension import call_extensions_async
 from helpers import plugins, runtime
 from plugins.text_editor.helpers.file_ops import (
     FileInfo,
@@ -63,7 +63,7 @@ class TextEditor(Tool):
             "content": result["content"],
             "warnings": result["warnings"],
         }
-        await call_extensions(
+        await call_extensions_async(
             "text_editor_read_after", agent=self.agent, data=ext_data
         )
 
@@ -87,7 +87,7 @@ class TextEditor(Tool):
 
         # Extension point
         ext_data = {"path": path, "content": content}
-        await call_extensions(
+        await call_extensions_async(
             "text_editor_write_before", agent=self.agent, data=ext_data
         )
 
@@ -99,7 +99,7 @@ class TextEditor(Tool):
             return self._error("write", path, result["error"])
 
         # Extension point
-        await call_extensions(
+        await call_extensions_async(
             "text_editor_write_after", agent=self.agent,
             data={"path": path, "total_lines": result["total_lines"]},
         )
@@ -148,7 +148,7 @@ class TextEditor(Tool):
 
         # Extension point
         ext_data = {"path": expanded, "edits": parsed}
-        await call_extensions(
+        await call_extensions_async(
             "text_editor_patch_before", agent=self.agent, data=ext_data
         )
 
@@ -160,7 +160,7 @@ class TextEditor(Tool):
             return self._error("patch", path, str(exc))
 
         # Extension point
-        await call_extensions(
+        await call_extensions_async(
             "text_editor_patch_after", agent=self.agent,
             data={"path": expanded, "total_lines": total_lines},
         )
