@@ -105,6 +105,11 @@
                 :disabled="$store.pluginSettings?.isSaving || $store.pluginSettings?.isLoading">
             Save
         </button>
+        <button class="btn"
+                @click="$store.pluginSettings.resetToDefault()"
+                :disabled="$store.pluginSettings?.isSaving || $store.pluginSettings?.isLoading">
+            Default
+        </button>
         <button class="btn btn-cancel"
                 @click="window.closeModal?.()">
             Cancel

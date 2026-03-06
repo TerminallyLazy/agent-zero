@@ -39,6 +39,12 @@
                 </ul>
 
                 <div class="plugins-toolbar">
+                    <div class="plugins-toolbar-search">
+                        <input type="text"
+                            class="plugins-search-input"
+                            placeholder="Search plugins by name or description..."
+                            x-model="$store.pluginListStore.searchQuery">
+                    </div>
                     <div class="plugins-toolbar-actions">
                         <button type="button"
                             class="button confirm"
@@ -57,7 +63,13 @@
                 </div>
 
                 <div class="plugins-list">
-                    <template x-for="plugin in ($store.pluginListStore.plugins || [])" :key="plugin.path || plugin.name">
+                    <template x-for="plugin in (($store.pluginListStore.plugins || []).filter((plugin) => {
+                        const q = (($store.pluginListStore.searchQuery || '').trim().toLowerCase());
+                        if (!q) return true;
+                        const name = (plugin.display_name || plugin.name || '').toLowerCase();
+                        const description = (plugin.description || '').toLowerCase();
+                        return name.includes(q) || description.includes(q);
+                    }))" :key="plugin.path || plugin.name">
                         <div class="plugin-card">
                             <div class="plugin-header">
                                 <div class="plugin-heading">
@@ -95,6 +107,14 @@
                                             title="LICENSE"
                                             @click="$store.pluginListStore.openPluginDoc(plugin, 'license')">
                                             <span class="icon material-symbols-outlined">gavel</span> License
+                                        </button>
+                                    </template>
+                                    <template x-if="plugin.has_init_script">
+                                        <button type="button"
+                                            class="button"
+                                            title="Run initializer script"
+                                            @click="$store.pluginInitStore.open(plugin)">
+                                            <span class="icon material-symbols-outlined">terminal</span> Init
                                         </button>
                                     </template>
                                     <button type="button"
@@ -179,6 +199,27 @@
             flex-wrap: wrap;
             margin-top: 0.5rem;
             margin-bottom: 0.75rem;
+        }
+
+        .plugins-toolbar-search {
+            flex: 1 1 22rem;
+            min-width: 14rem;
+        }
+
+        .plugins-search-input {
+            width: 100%;
+            padding: 0.4rem 0.7rem;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-background);
+            color: var(--color-text-primary);
+            font-family: "Rubik", Arial, Helvetica, sans-serif;
+            font-size: 0.95rem;
+        }
+
+        .plugins-search-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
         }
 
         .plugins-toolbar-actions {
@@ -314,7 +355,7 @@
             color: var(--color-secondary);
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
             .plugin-header {
                 flex-direction: column;
                 align-items: stretch;

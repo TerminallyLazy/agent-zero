@@ -2,13 +2,13 @@ from datetime import datetime
 from typing import Any, List, Sequence
 from langchain.storage import InMemoryByteStore, LocalFileStore
 from langchain.embeddings import CacheBackedEmbeddings
-from python.helpers import guids
+from helpers import guids
 
 # from langchain_chroma import Chroma
 from langchain_community.vectorstores import FAISS
 
 # faiss needs to be patched for python 3.12 on arm #TODO remove once not needed
-from python.helpers import faiss_monkey_patch
+from helpers import faiss_monkey_patch
 import faiss
 
 
@@ -22,11 +22,11 @@ import os, json
 
 import numpy as np
 
-from python.helpers.print_style import PrintStyle
-from python.helpers import files, plugins, projects
+from helpers.print_style import PrintStyle
+from helpers import files, plugins, projects
 from langchain_core.documents import Document
 from . import knowledge_import
-from python.helpers.log import Log, LogItem
+from helpers.log import Log, LogItem
 from enum import Enum
 from agent import Agent, AgentContext
 import models
@@ -486,7 +486,7 @@ def reload():
 def abs_db_dir(memory_subdir: str) -> str:
     # patch for projects, this way we don't need to re-work the structure of memory subdirs
     if memory_subdir.startswith("projects/"):
-        from python.helpers.projects import get_project_meta
+        from helpers.projects import get_project_meta
 
         return files.get_abs_path(get_project_meta(memory_subdir[9:]), "memory")
     # standard subdirs
@@ -496,7 +496,7 @@ def abs_db_dir(memory_subdir: str) -> str:
 def abs_knowledge_dir(knowledge_subdir: str, *sub_dirs: str) -> str:
     # patch for projects, this way we don't need to re-work the structure of knowledge subdirs
     if knowledge_subdir.startswith("projects/"):
-        from python.helpers.projects import get_project_meta
+        from helpers.projects import get_project_meta
 
         return files.get_abs_path(
             get_project_meta(knowledge_subdir[9:]), "knowledge", *sub_dirs
@@ -537,7 +537,7 @@ def get_context_memory_subdir(context: AgentContext) -> str:
 
 def get_existing_memory_subdirs() -> list[str]:
     try:
-        from python.helpers.projects import (
+        from helpers.projects import (
             get_project_meta,
             get_projects_parent_folder,
         )
@@ -566,7 +566,7 @@ def get_knowledge_subdirs_by_memory_subdir(
     memory_subdir: str, default: list[str]
 ) -> list[str]:
     if memory_subdir.startswith("projects/"):
-        from python.helpers.projects import get_project_meta
+        from helpers.projects import get_project_meta
 
         default.append(get_project_meta(memory_subdir[9:], "knowledge"))
     return default

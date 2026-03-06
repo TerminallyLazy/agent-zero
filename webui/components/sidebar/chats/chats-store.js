@@ -98,8 +98,6 @@ const model = {
       return;
     }
 
-    console.log("Deleting chat with ID:", id);
-
     try {
       // Switch to another context if deleting current
       if (this.selected === id) {
@@ -111,11 +109,6 @@ const model = {
 
       // Update the UI - remove from contexts
       const updatedContexts = this.contexts.filter((ctx) => ctx.id !== id);
-      console.log(
-        "Updated contexts after deletion:",
-        JSON.stringify(updatedContexts.map((c) => ({ id: c.id, name: c.name })))
-      );
-
       // Force UI update by creating a new array
       this.contexts = [...updatedContexts];
 

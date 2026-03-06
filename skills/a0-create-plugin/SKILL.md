@@ -12,7 +12,7 @@ Primary references:
 - /a0/AGENTS.md (Full-stack architecture & AgentContext)
 - /a0/docs/agents/AGENTS.components.md (Component system deep dive)
 - /a0/docs/agents/AGENTS.modals.md (Modal system & CSS conventions)
-- /a0/AGENTS.plugins.md (Extension points, plugin.yaml, settings system, Plugin Index)
+- /a0/docs/agents/AGENTS.plugins.md (Extension points, plugin.yaml, settings system, Plugin Index)
 
 ---
 
@@ -139,7 +139,7 @@ If your plugin exposes existing core settings rather than plugin-specific ones, 
 ### Sending Messages Proactively
 ```python
 from agent import AgentContext
-from python.helpers.messages import UserMessage
+from helpers.messages import UserMessage
 
 context = AgentContext.use(context_id)
 task = context.communicate(UserMessage("Message text"))
@@ -148,7 +148,7 @@ response = await task.result()
 
 ### Reading Plugin Settings (backend)
 ```python
-from python.helpers.plugins import get_plugin_config, save_plugin_config
+from helpers.plugins import get_plugin_config, save_plugin_config
 
 # Runtime (with running agent - resolves project/profile from context)
 settings = get_plugin_config("my-plugin", agent=agent) or {}
@@ -168,6 +168,7 @@ save_plugin_config(
 ```
 /a0/usr/plugins/<name>/
   plugin.yaml           # Required manifest
+  initialize.py         # Optional one-time setup script
   default_config.yaml   # Optional default settings fallback
   README.md             # Optional, shown in Plugin List UI
   LICENSE               # Optional, shown in Plugin List UI
@@ -183,6 +184,32 @@ save_plugin_config(
     my-modal.html       # Full plugin pages
     my-store.js         # Alpine stores
 ```
+
+## Plugin Initialization Script (`initialize.py`)
+
+If your plugin requires one-time setup (e.g., installing dependencies, downloading models), add an `initialize.py` at the plugin root:
+
+```python
+import subprocess
+import sys
+
+def main():
+    print("Installing plugin dependencies...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "requests==2.31.0"],
+        text=True,
+    )
+    if result.returncode != 0:
+        print("ERROR: Installation failed")
+        return result.returncode
+    print("Done.")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+Users trigger it via the **Init** button in the Plugin List UI. Return `0` on success, non-zero on failure.
 
 ---
 

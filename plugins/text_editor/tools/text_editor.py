@@ -1,6 +1,6 @@
-from python.helpers.tool import Tool, Response
-from python.helpers.extension import call_extensions
-from python.helpers import plugins, runtime
+from helpers.tool import Tool, Response
+from helpers.extension import call_extensions
+from helpers import plugins, runtime
 from plugins.text_editor.helpers.file_ops import (
     FileInfo,
     read_file,

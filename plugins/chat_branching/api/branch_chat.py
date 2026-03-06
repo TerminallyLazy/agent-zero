@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from python.helpers.api import ApiHandler, Input, Output, Request, Response
-from python.helpers.persist_chat import (
+from helpers.api import ApiHandler, Input, Output, Request, Response
+from helpers.persist_chat import (
     _serialize_context,
     _deserialize_context,
     save_tmp_chat,
@@ -65,7 +65,7 @@ class BranchChat(ApiHandler):
         save_tmp_chat(new_context)
 
         # Notify all tabs
-        from python.helpers.state_monitor_integration import mark_dirty_all
+        from helpers.state_monitor_integration import mark_dirty_all
         mark_dirty_all(reason="plugins.chat_branching.BranchChat")
 
         return {

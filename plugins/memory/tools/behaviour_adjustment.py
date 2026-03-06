@@ -1,7 +1,7 @@
-from python.helpers import files
-from python.helpers.tool import Tool, Response
+from helpers import files
+from helpers.tool import Tool, Response
 from agent import Agent
-from python.helpers.log import LogItem
+from helpers.log import LogItem
 from plugins.memory.helpers import memory
 
 

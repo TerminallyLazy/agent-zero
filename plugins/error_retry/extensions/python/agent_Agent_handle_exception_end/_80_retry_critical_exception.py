@@ -1,11 +1,11 @@
 import asyncio
 from datetime import datetime, timezone
-from python.helpers.extension import Extension
+from helpers.extension import Extension
 from agent import LoopData
-from python.helpers.localization import Localization
-from python.helpers.errors import RepairableException, HandledException
-from python.helpers import errors
-from python.helpers.print_style import PrintStyle
+from helpers.localization import Localization
+from helpers.errors import RepairableException, HandledException
+from helpers import errors
+from helpers.print_style import PrintStyle
 
 from plugins.error_retry.extensions.python.agent_Agent_monologue_start._10_reset_critical_exception_counter import DATA_NAME_COUNTER
 

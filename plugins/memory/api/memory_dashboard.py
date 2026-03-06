@@ -1,16 +1,10 @@
-from python.helpers.api import ApiHandler, Request, Response
-from python.helpers import files
+from helpers.api import ApiHandler, Request, Response
+from helpers import files
 from models import ModelConfig, ModelType
 from langchain_core.documents import Document
 from agent import AgentContext
 
-# Import Memory functions from plugin
-import sys
-from pathlib import Path
-_plugin_root = Path(__file__).parent.parent
-if str(_plugin_root) not in sys.path:
-    sys.path.insert(0, str(_plugin_root))
-from helpers.memory import Memory, get_existing_memory_subdirs, get_context_memory_subdir
+from plugins.memory.helpers.memory import Memory, get_existing_memory_subdirs, get_context_memory_subdir
 
 
 class MemoryDashboard(ApiHandler):

@@ -1,5 +1,5 @@
-from python.helpers.extension import Extension
-from python.helpers import plugins
+from helpers.extension import Extension
+from helpers import plugins
 from agent import Agent, LoopData
 
 

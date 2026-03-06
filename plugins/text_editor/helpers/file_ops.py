@@ -9,7 +9,7 @@ import shutil
 import tempfile
 from typing import TypedDict
 
-from python.helpers import tokens
+from helpers import tokens
 
 _BINARY_PEEK = 8192
 

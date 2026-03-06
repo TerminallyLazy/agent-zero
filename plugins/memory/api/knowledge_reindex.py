@@ -1,4 +1,4 @@
-from python.helpers.api import ApiHandler, Request, Response
+from helpers.api import ApiHandler, Request, Response
 from plugins.memory.helpers.memory import Memory
 
 

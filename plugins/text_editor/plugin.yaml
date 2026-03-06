@@ -3,5 +3,5 @@ description: Native tool to read, write, and patch text files in an LLM-friendly
 version: 1.0.0
 settings_sections:
   - agent
-per_project_config: false
-per_agent_config: false
+per_project_config: true
+per_agent_config: true

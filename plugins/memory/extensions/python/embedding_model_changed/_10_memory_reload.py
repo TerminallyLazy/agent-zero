@@ -1,4 +1,4 @@
-from python.helpers.extension import Extension
+from helpers.extension import Extension
 
 # Direct import - this extension lives inside the memory plugin
 from plugins.memory.helpers.memory import reload as memory_reload

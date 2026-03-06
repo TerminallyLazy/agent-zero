@@ -2,6 +2,7 @@ import { createStore } from "/js/AlpineStore.js";
 import * as api from "/js/api.js";
 import "/components/plugins/plugin-settings-store.js";
 import "/components/plugins/toggle/plugin-toggle-store.js";
+import "/components/plugins/list/plugin-init-store.js";
 import "/components/modals/markdown/markdown-store.js";
 import {
   store as notificationStore,
@@ -151,7 +152,7 @@ const model = {
   },
 
   async deletePlugin(plugin) {
-    if (!plugin?.path) return;
+    if (!plugin?.name) return;
 
     if (!plugin.is_custom) {
       showErrorNotification(
@@ -162,9 +163,9 @@ const model = {
     }
 
     try {
-      const response = await api.callJsonApi("delete_work_dir_file", {
-        path: plugin.path,
-        currentPath: "/",
+      const response = await api.callJsonApi("plugins", {
+        action: "delete_plugin",
+        plugin_name: plugin.name,
       });
       if (response?.error) {
         throw new Error(response.error);

@@ -1,6 +1,6 @@
 from agent import AgentContext
-from python.helpers.api import ApiHandler, Input, Output, Request, Response
-from python.helpers import message_queue as mq
+from helpers.api import ApiHandler, Input, Output, Request, Response
+from helpers import message_queue as mq
 
 
 class PluginScanQueue(ApiHandler):

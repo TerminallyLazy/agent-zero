@@ -1,6 +1,8 @@
 import { createStore } from "/js/AlpineStore.js";
+import { showConfirmDialog } from "/js/confirmDialog.js";
 
 const fetchApi = globalThis.fetchApi;
+const justToast = globalThis.justToast;
 
 const model = {
     // which plugin this modal is showing
@@ -261,6 +263,27 @@ const model = {
             this.previousProjectName = this.projectName || "";
             this.previousAgentProfileKey = this.agentProfileKey || "";
             this.isLoading = false;
+        }
+    },
+
+    async resetToDefault() {
+        if (!this.pluginName) return;
+        const confirmed = await showConfirmDialog({
+            title: "Reset to Default",
+            message: "This will replace the current settings with the plugin defaults. Any unsaved changes will be lost.",
+            confirmText: "Reset",
+            type: "warning",
+        });
+        if (!confirmed) return;
+        const response = await fetchApi("/plugins", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "get_default_config", plugin_name: this.pluginName }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (result.ok) {
+            this.settings = result.data || {};
+            justToast("Settings reset to default.", "info");
         }
     },
 

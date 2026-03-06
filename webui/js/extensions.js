@@ -1,4 +1,5 @@
 import * as api from "./api.js";
+import * as cache from "./cache.js";
 
 /**
  * @typedef {string} WebuiExtension
@@ -14,29 +15,30 @@ import * as api from "./api.js";
 /**
  * @typedef {Object} JsExtensionImport
  * @property {string} path
- * @property {{ default: (data: any) => (void|Promise<void>) }} module
+ * @property {{ default: (...data: any[]) => (void|Promise<void>) }} module
  */
 
-/** @type {Map<string, JsExtensionImport[]>} */
-const jsExtensionsCache = new Map();
+const JS_CACHE_AREA = "frontend_extensions_js(extensions)(plugins)";
+const HTML_CACHE_AREA = "frontend_extensions_html(extensions)(plugins)";
 
-/** @type {Map<string, string>} */
-const htmlExtensionsCache = new Map();
+export const API_EXTENSION_EXCLUDED_ENDPOINTS = new Set([
+  "/api/load_webui_extensions",
+]);
 
 export function invalidateCache() {
-  jsExtensionsCache.clear();
-  htmlExtensionsCache.clear();
+  cache.clear(JS_CACHE_AREA);
+  cache.clear(HTML_CACHE_AREA);
 }
 
 /**
  * Call all JS extensions for a given extension point.
  *
  * @param {string} extensionPoint
- * @param {any} data
+ * @param {...any} data
  * @returns {Promise<void>}
  */
 export async function callJsExtensions(extensionPoint, ...data){
-  const extensions = jsExtensionsCache.get(extensionPoint) || await loadJsExtensions(extensionPoint);
+  const extensions = cache.get(JS_CACHE_AREA, extensionPoint, null) || await loadJsExtensions(extensionPoint);
   for(const extension of extensions){
     try{
       await extension.module.default(...data);
@@ -54,6 +56,9 @@ export async function callJsExtensions(extensionPoint, ...data){
  */
 export async function loadJsExtensions(extensionPoint) {
   try {
+    const cached = cache.get(JS_CACHE_AREA, extensionPoint, null);
+    if (cached != null) return cached;
+
     /** @type {LoadWebuiExtensionsResponse} */
     const response = await api.callJsonApi(`/api/load_webui_extensions`, {
       extension_point: extensionPoint,
@@ -66,7 +71,7 @@ export async function loadJsExtensions(extensionPoint) {
         module: await import(normalizePath(path))
       }))
     );
-    jsExtensionsCache.set(extensionPoint, imports);
+    cache.add(JS_CACHE_AREA, extensionPoint, imports);
     return imports;
   } catch (error) {
     console.error("Error loading JS extensions:", error);
@@ -120,7 +125,7 @@ export async function loadHtmlExtensions(roots = [document.documentElement]) {
  */
 export async function importHtmlExtensions(extensionPoint, targetElement) {
   try {
-    const cachedHtml = htmlExtensionsCache.get(extensionPoint);
+    const cachedHtml = cache.get(HTML_CACHE_AREA, extensionPoint, null);
     if (cachedHtml != null) {
       targetElement.innerHTML = cachedHtml;
       return;
@@ -136,11 +141,11 @@ export async function importHtmlExtensions(extensionPoint, targetElement) {
       const path = normalizePath(extension);
       combinedHTML += `<x-component path="${path}"></x-component>`;
     }
-    htmlExtensionsCache.set(extensionPoint, combinedHTML);
+    cache.add(HTML_CACHE_AREA, extensionPoint, combinedHTML);
     targetElement.innerHTML = combinedHTML;
   } catch (error) {
     console.error("Error importing HTML extensions:", error);
-    return [];
+    return;
   }
 }
 
@@ -154,7 +159,7 @@ function normalizePath(path) {
 
 // Watch for DOM changes to dynamically load x-extensions
 /** @type {MutationCallback} */
-const extensionObserver = new MutationObserver((mutations) => {
+const extensionObserverCallback = (mutations) => {
   for (const mutation of mutations) {
     for (const node of mutation.addedNodes) {
       if (node.nodeType === 1) {
@@ -164,11 +169,14 @@ const extensionObserver = new MutationObserver((mutations) => {
         if (el.matches?.("x-extension")) {
           const id = el.getAttribute("id");
           if (id) importHtmlExtensions(id, /** @type {HTMLElement} */ (el));
-        } else if (node.querySelectorAll) {
-          loadHtmlExtensions([node]);
+        } else if (/** @type {any} */ (el)["querySelectorAll"]) {
+          loadHtmlExtensions([el]);
         }
       }
     }
   }
-});
+};
+
+/** @type {MutationObserver} */
+const extensionObserver = new MutationObserver(extensionObserverCallback);
 extensionObserver.observe(document.body, { childList: true, subtree: true });

@@ -1,5 +1,5 @@
 from agent import AgentContext, UserMessage
-from python.helpers.api import ApiHandler, Input, Output, Request, Response
+from helpers.api import ApiHandler, Input, Output, Request, Response
 
 
 class PluginScanStart(ApiHandler):

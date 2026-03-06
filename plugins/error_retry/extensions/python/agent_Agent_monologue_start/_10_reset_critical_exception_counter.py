@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from python.helpers.extension import Extension
+from helpers.extension import Extension
 from agent import LoopData
-from python.helpers.localization import Localization
-from python.helpers.errors import RepairableException
-from python.helpers import errors
-from python.helpers.print_style import PrintStyle
+from helpers.localization import Localization
+from helpers.errors import RepairableException
+from helpers import errors
+from helpers.print_style import PrintStyle
 
 DATA_NAME_COUNTER = "_plugin.error_retry.critical_exception_counter"
 

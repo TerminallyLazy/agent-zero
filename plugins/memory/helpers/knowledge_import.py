@@ -8,8 +8,8 @@ from langchain_community.document_loaders import (
     TextLoader,
     UnstructuredHTMLLoader,
 )
-from python.helpers.log import LogItem
-from python.helpers.print_style import PrintStyle
+from helpers.log import LogItem
+from helpers.print_style import PrintStyle
 
 text_loader_kwargs = {"autodetect_encoding": True}
 

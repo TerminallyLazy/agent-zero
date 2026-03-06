@@ -52,7 +52,7 @@ let _scrollOnNextProcessGroup = null;
  */
 
 /**
- * @typedef {(args: MessageHandlerArgs & Record<string, any>) => MessageHandlerResult} MessageHandler
+ * @typedef {(args: MessageHandlerArgs & Record<string, any>) => (MessageHandlerResult|Promise<MessageHandlerResult>)} MessageHandler
  */
 
 /**
@@ -82,9 +82,9 @@ export function scrollOnNextProcessGroup() {
  * and may return a rich object `{ element, actionButtons?, ...additional }`.
  *
  * @param {string} type
- * @returns {MessageHandler}
+ * @returns {Promise<MessageHandler>}
  */
-export function getMessageHandler(type) {
+export async function getMessageHandler(type) {
   switch (type) {
     case "user":
       return drawMessageUser;
@@ -117,9 +117,19 @@ export function getMessageHandler(type) {
     case "hint":
       return drawMessageHint;
     default:
-      return drawMessageDefault;
+      return await getHandlerFromExtensions(type);
+  }
+
+  async function getHandlerFromExtensions(type){
+    const extData = { type: type, handler: undefined }
+    await callJsExtensions("get_message_handler", extData);
+    // return handler from extensions
+    if(typeof extData.handler == "function") return extData.handler;
+    //not set by extensions, return default
+    return drawMessageDefault;
   }
 }
+
 
 // entrypoint called from poll/WS communication, this is how all messages are rendered and updated
 // input is raw log format
@@ -157,7 +167,7 @@ export async function setMessages(messages) {
   // process messages
   for (let i = 0; i < context.messages.length; i++) {
     _massRender = context.historyEmpty || (context.isLargeAppend && i < context.cutoff);
-    context.results.push(setMessage(context.messages[i]));
+    context.results.push(await setMessage(context.messages[i]));
   }
 
   await callJsExtensions("set_messages_after_loop", context);
@@ -181,9 +191,9 @@ export async function setMessages(messages) {
 // input is raw log format
 /**
  * @param {MessageHandlerArgs & Record<string, any>} param0
- * @returns {SetMessageResult}
+ * @returns {Promise<SetMessageResult>}
  */
-export function setMessage({
+export async function setMessage({
   no,
   id,
   type,
@@ -194,9 +204,9 @@ export function setMessage({
   agentno,
   ...additional
 }) {
-  const handler = getMessageHandler(type);
+  const handler = await getMessageHandler(type);
   // prefer log ID if set to match user message created on frontend with backend updates
-  const handlerResult = handler({
+  const handlerResult = await handler({
     no,
     id: id || String(no) || "",
     type,

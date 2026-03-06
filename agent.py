@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Coroutine, Dict, Literal
 from enum import Enum
 import models
 
-from python.helpers import (
+from helpers import (
     extract_tools,
     files,
     errors,
@@ -17,22 +17,21 @@ from python.helpers import (
     dirty_json,
     subagents,
 )
-from python.helpers import extension
-from python.helpers.print_style import PrintStyle
+from helpers import extension
+from helpers.print_style import PrintStyle
 
 from langchain_core.prompts import (
     ChatPromptTemplate,
 )
 from langchain_core.messages import SystemMessage, BaseMessage
 
-import python.helpers.log as Log
-from python.helpers.dirty_json import DirtyJson
-from python.helpers.defer import DeferredTask
+import helpers.log as Log
+from helpers.dirty_json import DirtyJson
+from helpers.defer import DeferredTask
 from typing import Callable
-from python.helpers.localization import Localization
-from python.helpers.extension import call_extensions, extensible
-from python.helpers.errors import RepairableException, InterventionException, HandledException
-
+from helpers.localization import Localization
+from helpers.extension import call_extensions, extensible
+from helpers.errors import RepairableException, InterventionException, HandledException
 
 class AgentContextType(Enum):
     USER = "user"
@@ -147,7 +146,7 @@ class AgentContext:
     @classmethod
     def get_notification_manager(cls):
         if cls._notification_manager is None:
-            from python.helpers.notification import NotificationManager  # type: ignore
+            from helpers.notification import NotificationManager  # type: ignore
 
             cls._notification_manager = NotificationManager()
         return cls._notification_manager
@@ -177,7 +176,7 @@ class AgentContext:
         # recursive is not used now, prepared for context hierarchy
         self.output_data[key] = value
 
-    @extensible
+    # @extensible
     def output(self):
         return {
             "id": self.id,
@@ -859,7 +858,7 @@ class Agent:
 
             # Try getting tool from MCP first
             try:
-                import python.helpers.mcp_handler as mcp_helper
+                import helpers.mcp_handler as mcp_helper
 
                 mcp_tool_candidate = mcp_helper.MCPConfig.get_instance().get_tool(
                     self, tool_name
@@ -969,13 +968,13 @@ class Agent:
         loop_data: LoopData | None,
         **kwargs,
     ):
-        from python.tools.unknown import Unknown
-        from python.helpers.tool import Tool
+        from tools.unknown import Unknown
+        from helpers.tool import Tool
 
         classes = []
 
         # search for tools in agent's folder hierarchy
-        paths = subagents.get_paths(self, "tools", name + ".py", default_root="python")
+        paths = subagents.get_paths(self, "tools", name + ".py")
 
         for path in paths:
             try:

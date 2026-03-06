@@ -19,13 +19,13 @@ import litellm
 import openai
 from litellm.types.utils import ModelResponse
 
-from python.helpers import dotenv
-from python.helpers import settings, dirty_json
-from python.helpers.dotenv import load_dotenv
-from python.helpers.providers import ModelType as ProviderModelType, get_provider_config
-from python.helpers.rate_limiter import RateLimiter
-from python.helpers.tokens import approximate_tokens
-from python.helpers import dirty_json, browser_use_monkeypatch
+from helpers import dotenv
+from helpers import settings, dirty_json
+from helpers.dotenv import load_dotenv
+from helpers.providers import ModelType as ProviderModelType, get_provider_config
+from helpers.rate_limiter import RateLimiter
+from helpers.tokens import approximate_tokens
+from helpers import dirty_json, browser_use_monkeypatch
 
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.outputs.chat_generation import ChatGenerationChunk

@@ -31,6 +31,25 @@ export async function callJsonApi(endpoint, data) {
  * @returns {Promise<Response>} The fetch response
  */
 export async function fetchApi(url, request) {
+  async function _getExtensions() {
+    try {
+      return await import("./extensions.js");
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * @param {string} apiUrl
+   * @returns {Promise<boolean>}
+   */
+  async function _shouldCallApiExtensions(apiUrl) {
+    const extensions = await _getExtensions();
+    if (!extensions) return false;
+    const excluded = extensions.API_EXTENSION_EXCLUDED_ENDPOINTS;
+    return !(excluded instanceof Set && excluded.has(apiUrl));
+  }
+
   async function _wrap(retry) {
     // get the CSRF token
     const token = await getCsrfToken();
@@ -46,21 +65,48 @@ export async function fetchApi(url, request) {
 
     // perform the fetch with the updated request
     const apiUrl = url.startsWith('/api/') || url.startsWith('api/') ? `/${url.replace(/^\/+/, '')}` : `/api/${url.replace(/^\/+/, '')}`;
-    const response = await fetch(apiUrl, finalRequest);
+
+    /** @type {{ url: string, apiUrl: string, request: any, response: Response | null, retry: boolean }} */
+    const ctx = {
+      url,
+      apiUrl,
+      request: finalRequest,
+      response: null,
+      retry,
+    };
+
+    if (await _shouldCallApiExtensions(apiUrl)) {
+      const extensions = await _getExtensions();
+      if (extensions) {
+        await extensions.callJsExtensions("api_call_before", ctx);
+      }
+    }
+
+    const response = ctx.response || await fetch(ctx.apiUrl, ctx.request);
+    ctx.response = response;
+
+    if (await _shouldCallApiExtensions(apiUrl)) {
+      const extensions = await _getExtensions();
+      if (extensions) {
+        await extensions.callJsExtensions("api_call_after", ctx);
+      }
+    }
+
+    const finalResponse = ctx.response;
 
     // check if there was an CSRF error
-    if (response.status === 403 && retry) {
+    if (finalResponse.status === 403 && retry) {
       // retry the request with new token
       csrfToken = null;
       return await _wrap(false);
-    } else if (response.redirected && response.url.endsWith("/login")) {
+    } else if (finalResponse.redirected && finalResponse.url.endsWith("/login")) {
       // redirect to login
-      window.location.href = response.url;
+      window.location.href = finalResponse.url;
       return;
     }
 
     // return the response
-    return response;
+    return finalResponse;
   }
 
   // perform the request

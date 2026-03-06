@@ -7,19 +7,12 @@ from enum import Enum
 
 from langchain_core.documents import Document
 
-from .memory import Memory
-from python.helpers.dirty_json import DirtyJson
-from python.helpers.log import LogItem
-from python.helpers.print_style import PrintStyle
+from plugins.memory.helpers.memory import Memory
+from helpers.dirty_json import DirtyJson
+from helpers.log import LogItem
+from helpers.print_style import PrintStyle
 from agent import Agent
-
-# Import from tools within plugin
-import sys
-from pathlib import Path
-_plugin_root = Path(__file__).parent.parent
-if str(_plugin_root) not in sys.path:
-    sys.path.insert(0, str(_plugin_root))
-from tools.memory_load import DEFAULT_THRESHOLD as DEFAULT_MEMORY_THRESHOLD
+from plugins.memory.tools.memory_load import DEFAULT_THRESHOLD as DEFAULT_MEMORY_THRESHOLD
 
 
 class ConsolidationAction(Enum):

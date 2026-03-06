@@ -11,7 +11,7 @@ This directory contains the system-level plugins bundled with Agent Zero.
 
 For detailed guides on how to create, extend, or configure plugins, refer to:
 
-- [`AGENTS.plugins.md`](../AGENTS.plugins.md): Full-stack plugin architecture, manifest format, extension points, and Plugin Index submission.
+- [`docs/agents/AGENTS.plugins.md`](../AGENTS.plugins.md): Full-stack plugin architecture, manifest format, extension points, and Plugin Index submission.
 - [`docs/developer/plugins.md`](../docs/developer/plugins.md): Human-facing developer guide covering the full plugin lifecycle.
 - [`AGENTS.md`](../AGENTS.md): Main framework guide and backend context.
 - [`skills/a0-create-plugin/SKILL.md`](../skills/a0-create-plugin/SKILL.md): Agent-facing authoring workflow (local and community plugins).
@@ -40,6 +40,10 @@ per_project_config: false
 per_agent_config: false
 always_enabled: false
 ```
+
+## Plugin Initialization (`initialize.py`)
+
+Plugins can include an optional `initialize.py` at the plugin root for one-time setup such as installing dependencies or downloading models. Users trigger it via the **Init** button in the Plugin List UI. The script should return `0` on success and print progress messages for user feedback.
 
 ## Plugin Index & Community Sharing
 

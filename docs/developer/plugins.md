@@ -49,6 +49,7 @@ Field reference:
 ```text
 usr/plugins/<plugin_name>/
 ├── plugin.yaml
+├── initialize.py                    # optional one-time setup script
 ├── default_config.yaml              # optional defaults
 ├── README.md                        # optional, shown in Plugin List UI
 ├── LICENSE                          # optional, shown in Plugin List UI
@@ -65,6 +66,36 @@ usr/plugins/<plugin_name>/
     ├── config.html                  # optional settings UI
     └── ...
 ```
+
+## Plugin Initialization (`initialize.py`)
+
+Plugins can include an optional `initialize.py` at the plugin root for one-time setup such as installing dependencies, downloading models, or preparing databases.
+
+- Triggered manually via the **Init** button in the Plugin List UI — never runs automatically
+- Execution is tracked in `usr/plugins/<plugin_name>/init_exec.json` (timestamp + exit code)
+- The modal streams output in real time and shows success/failure on completion
+
+```python
+import subprocess
+import sys
+
+def main():
+    print("Installing dependencies...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "requests==2.31.0"],
+        text=True,
+    )
+    if result.returncode != 0:
+        print("ERROR: Installation failed")
+        return result.returncode
+    print("Done.")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+Return `0` on success, non-zero on failure. Print progress for user feedback. Use `sys.executable` for pip commands.
 
 ## Settings Resolution
 
@@ -191,6 +222,6 @@ A built-in **Plugin Marketplace** (always-active plugin) will allow users to bro
 
 ## See Also
 
-- `AGENTS.plugins.md` for full architecture details
+- `docs/agents/AGENTS.plugins.md` for full architecture details
 - `skills/a0-create-plugin/SKILL.md` for plugin authoring workflow (agent-facing)
 - `plugins/README.md` for core plugin directory overview

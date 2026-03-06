@@ -1,7 +1,7 @@
 import asyncio
-from python.helpers.extension import Extension
+from helpers.extension import Extension
 from agent import LoopData
-from python.helpers import dirty_json, errors, log, plugins
+from helpers import dirty_json, errors, log, plugins
 
 # Direct import - this extension lives inside the memory plugin
 from plugins.memory.helpers.memory import Memory

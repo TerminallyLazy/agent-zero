@@ -1,5 +1,5 @@
-from python.helpers.api import ApiHandler, Request, Response
-from python.helpers import files, projects
+from helpers.api import ApiHandler, Request, Response
+from helpers import files, projects
 from plugins.memory.helpers.memory import get_custom_knowledge_subdir_abs
 
 

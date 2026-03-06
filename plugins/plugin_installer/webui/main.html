@@ -1,0 +1,526 @@
+<html>
+<head>
+    <title>Install Plugin</title>
+    <script type="module">
+        import { store } from "/plugins/plugin_installer/webui/pluginInstallStore.js";
+    </script>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.pluginInstallStore">
+            <div x-init="$store.pluginInstallStore.setTab('store')">
+
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link"
+                            :class="{ active: $store.pluginInstallStore.activeTab === 'store' }"
+                            type="button" role="tab"
+                            @click="$store.pluginInstallStore.setTab('store')">
+                            <span class="material-symbols-outlined pi-tab-icon">store</span> Browse
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link"
+                            :class="{ active: $store.pluginInstallStore.activeTab === 'git' }"
+                            type="button" role="tab"
+                            @click="$store.pluginInstallStore.setTab('git')">
+                            <span class="material-symbols-outlined pi-tab-icon">terminal</span> Git
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link"
+                            :class="{ active: $store.pluginInstallStore.activeTab === 'zip' }"
+                            type="button" role="tab"
+                            @click="$store.pluginInstallStore.setTab('zip')">
+                            <span class="material-symbols-outlined pi-tab-icon">upload_file</span> ZIP
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- ═══ Store Tab ═══ -->
+                <div x-show="$store.pluginInstallStore.activeTab === 'store'"
+                     x-init="$store.pluginInstallStore.resetIndex(); $store.pluginInstallStore.fetchIndex()">
+
+                    <div class="pi-index-toolbar">
+                        <input type="text" class="pi-search-input"
+                            x-model="$store.pluginInstallStore.search"
+                            @input="$store.pluginInstallStore.page = 1"
+                            placeholder="Search plugins...">
+                        <select class="pi-sort-select"
+                            x-model="$store.pluginInstallStore.sortBy">
+                            <option value="stars">Stars</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.loading" class="pi-loading">
+                        <span x-text="$store.pluginInstallStore.loadingMessage || 'Loading...'"></span>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.error && !$store.pluginInstallStore.loading" class="pi-error">
+                        <span x-text="$store.pluginInstallStore.error"></span>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.index && !$store.pluginInstallStore.loading" class="pi-grid">
+                        <template x-for="plugin in $store.pluginInstallStore.paginatedPlugins" :key="plugin.key">
+                            <div class="pi-card" @click="$store.pluginInstallStore.openDetail(plugin)">
+                                <div class="pi-card-thumb">
+                                    <template x-if="plugin.thumbnail">
+                                        <img :src="plugin.thumbnail" :alt="plugin.title" loading="lazy">
+                                    </template>
+                                    <template x-if="!plugin.thumbnail">
+                                        <span class="material-symbols-outlined pi-card-placeholder">extension</span>
+                                    </template>
+                                    <div class="pi-card-thumb-overlay">
+                                        <span class="pi-card-thumb-title" x-text="plugin.title || plugin.key"></span>
+                                        <template x-if="plugin.installed">
+                                            <span class="pi-badge-installed">Installed</span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div class="pi-card-body">
+                                    <div class="pi-card-desc" x-text="$store.pluginInstallStore.truncate(plugin.description, 100)"></div>
+                                </div>
+                                <div class="pi-card-footer">
+                                    <span class="pi-stars">
+                                        <span class="material-symbols-outlined" style="font-size:0.9rem">star</span>
+                                        <span x-text="plugin.stars || 0"></span>
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.index && !$store.pluginInstallStore.loading && $store.pluginInstallStore.filteredPlugins.length === 0"
+                        class="pi-empty">
+                        No plugins found matching your search.
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.totalPages > 1" class="pi-pagination">
+                        <button class="button"
+                            :disabled="$store.pluginInstallStore.page <= 1"
+                            @click="$store.pluginInstallStore.setPage($store.pluginInstallStore.page - 1)">
+                            <span class="material-symbols-outlined">chevron_left</span>
+                        </button>
+                        <span class="pi-page-info"
+                            x-text="$store.pluginInstallStore.page + ' / ' + $store.pluginInstallStore.totalPages">
+                        </span>
+                        <button class="button"
+                            :disabled="$store.pluginInstallStore.page >= $store.pluginInstallStore.totalPages"
+                            @click="$store.pluginInstallStore.setPage($store.pluginInstallStore.page + 1)">
+                            <span class="material-symbols-outlined">chevron_right</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ═══ Git Tab ═══ -->
+                <div x-show="$store.pluginInstallStore.activeTab === 'git'"
+                     x-init="$store.pluginInstallStore.resetGit()">
+
+                    <div class="pi-form-group">
+                        <label class="pi-label">Git Repository URL</label>
+                        <input type="text" class="pi-input"
+                            x-model="$store.pluginInstallStore.gitUrl"
+                            :disabled="$store.pluginInstallStore.loading"
+                            placeholder="https://github.com/user/my-plugin.git">
+                    </div>
+
+                    <div class="pi-form-group">
+                        <label class="pi-label">Access Token <span class="pi-optional">(optional, for private repos)</span></label>
+                        <input type="password" class="pi-input"
+                            x-model="$store.pluginInstallStore.gitToken"
+                            :disabled="$store.pluginInstallStore.loading"
+                            placeholder="ghp_xxxx or glpat-xxxx">
+                        <div class="pi-hint">Token is used only for cloning and is not stored.</div>
+                    </div>
+
+                    <div class="pi-actions">
+                        <button class="button confirm"
+                            @click="$store.pluginInstallStore.installGit()"
+                            :disabled="$store.pluginInstallStore.loading || !$store.pluginInstallStore.gitUrl.trim()">
+                            <template x-if="$store.pluginInstallStore.loading">
+                                <span class="pi-button-loading">
+                                    <span class="spinner"></span>
+                                    <span x-text="$store.pluginInstallStore.loadingMessage || 'Cloning...'"></span>
+                                </span>
+                            </template>
+                            <template x-if="!$store.pluginInstallStore.loading">
+                                <span>
+                                    <span class="icon material-symbols-outlined">terminal</span> Clone & Install
+                                </span>
+                            </template>
+                        </button>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.error" class="pi-error">
+                        <span x-text="$store.pluginInstallStore.error"></span>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.result" class="pi-result">
+                        <div class="pi-result-icon">
+                            <span class="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <div class="pi-result-text">
+                            <strong x-text="'Plugin installed: ' + ($store.pluginInstallStore.result?.title || $store.pluginInstallStore.result?.plugin_name || '')"></strong>
+                            <div class="pi-result-path" x-text="$store.pluginInstallStore.result?.path || ''"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ ZIP Tab ═══ -->
+                <div x-show="$store.pluginInstallStore.activeTab === 'zip'"
+                     x-init="$store.pluginInstallStore.resetZip()">
+
+                    <div class="pi-upload-section">
+                        <label for="plugin-zip-file" class="pi-upload-btn button confirm"
+                            :class="{ 'pi-has-file': $store.pluginInstallStore.zipFile }">
+                            <span class="icon material-symbols-outlined">upload_file</span>
+                            <span x-text="$store.pluginInstallStore.zipFileName || 'Select Plugin ZIP File'"></span>
+                        </label>
+                        <input type="file" id="plugin-zip-file" accept=".zip" style="display:none"
+                            @change="$store.pluginInstallStore.handleFileUpload($event)">
+                        <div class="pi-hint">
+                            The ZIP should contain a folder with a plugin.yaml file.
+                        </div>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.zipFile" class="pi-actions-center">
+                        <button class="button confirm"
+                            @click="$store.pluginInstallStore.installZip()"
+                            :disabled="$store.pluginInstallStore.loading">
+                            <span class="icon material-symbols-outlined">download</span> Install Plugin
+                        </button>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.loading" class="pi-loading">
+                        <span x-text="$store.pluginInstallStore.loadingMessage || 'Processing...'"></span>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.error" class="pi-error">
+                        <span x-text="$store.pluginInstallStore.error"></span>
+                    </div>
+
+                    <div x-show="$store.pluginInstallStore.result" class="pi-result">
+                        <div class="pi-result-icon">
+                            <span class="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <div class="pi-result-text">
+                            <strong x-text="'Plugin installed: ' + ($store.pluginInstallStore.result?.title || $store.pluginInstallStore.result?.plugin_name || '')"></strong>
+                            <div class="pi-result-path" x-text="$store.pluginInstallStore.result?.path || ''"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+    </div>
+
+    <style>
+        /* ── Tabs ─────────────────────────────── */
+        .nav {
+            display: flex;
+            padding-left: 0;
+            margin: 0 0 1rem 0;
+            list-style: none;
+            border-bottom: 1px solid var(--color-border);
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            font-family: "Rubik", Arial, Helvetica, sans-serif;
+            border: 1px solid transparent;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            padding: 0.4rem 0.7rem;
+            background: transparent;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .nav-link.active {
+            color: var(--color-text-primary);
+            border-color: var(--color-border);
+            border-bottom-color: transparent;
+            background: var(--color-background);
+        }
+
+        .pi-tab-icon {
+            font-size: 1.1rem;
+        }
+
+        /* ── Store Tab: Toolbar ──────────────── */
+        .pi-index-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .pi-search-input {
+            flex: 1;
+            min-width: 0;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            font-size: 0.95rem;
+        }
+
+        .pi-sort-select {
+            padding: 0.5rem;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            font-size: 0.9rem;
+            max-width: 140px;
+            flex-shrink: 0;
+        }
+
+        /* ── Store Tab: Grid ─────────────────── */
+        .pi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .pi-card {
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            background: var(--color-background);
+            cursor: pointer;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .pi-card:hover {
+            border-color: var(--color-highlight);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .pi-card-thumb {
+            width: 100%;
+            height: 140px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-panel);
+            position: relative;
+        }
+
+        .pi-card-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 0.5rem;
+        }
+
+        .pi-card-placeholder {
+            font-size: 4.5rem;
+            color: var(--color-text-muted);
+        }
+
+        .pi-card-thumb-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 0.4rem 0.6rem;
+            background: rgba(0, 0, 0, 0.55);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .pi-card-thumb-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .pi-badge-installed {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            background: rgba(34,197,94,0.3);
+            color: #4ade80;
+            flex-shrink: 0;
+        }
+
+        .pi-card-body {
+            padding: 0.5rem 0.75rem;
+            flex: 1;
+        }
+
+        .pi-card-desc {
+            font-size: 0.8rem;
+            color: var(--color-text-secondary);
+            line-height: 1.3;
+        }
+
+        .pi-card-footer {
+            padding: 0.4rem 0.75rem;
+            border-top: 1px solid var(--color-border);
+            font-size: 0.8rem;
+            color: var(--color-text-secondary);
+        }
+
+        .pi-stars {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+        }
+
+        .pi-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            padding: 0.5rem 0;
+        }
+
+        .pi-page-info {
+            font-size: 0.9rem;
+            color: var(--color-text-secondary);
+        }
+
+        /* ── Git Tab ─────────────────────────── */
+        .pi-form-group {
+            margin-bottom: 1rem;
+        }
+
+        .pi-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+
+        .pi-optional {
+            font-weight: 400;
+            color: var(--color-text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .pi-input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            background: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        }
+
+        .pi-hint {
+            margin-top: 0.35rem;
+            font-size: 0.8rem;
+            color: var(--color-text-secondary);
+        }
+
+        .pi-actions {
+            display: flex;
+            justify-content: flex-start;
+            margin: 1rem 0;
+        }
+
+        /* ── ZIP Tab ─────────────────────────── */
+        .pi-upload-section {
+            text-align: center;
+            padding: 2rem 1rem;
+            border: 2px dashed var(--color-border);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .pi-upload-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .pi-upload-btn.pi-has-file {
+            background: var(--color-panel);
+            border-color: var(--color-highlight);
+        }
+
+        .pi-actions-center {
+            display: flex;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+
+        /* ── Shared ──────────────────────────── */
+        .pi-loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--color-text-secondary);
+        }
+
+        .pi-error {
+            color: var(--color-error);
+            padding: 0.75rem;
+            background: var(--color-error-bg, rgba(239,68,68,0.1));
+            border-radius: 4px;
+            margin-top: 0.75rem;
+        }
+
+        .pi-empty {
+            text-align: center;
+            padding: 2rem;
+            color: var(--color-text-secondary);
+        }
+
+        .pi-button-loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .pi-result {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(34,197,94,0.1);
+            border: 1px solid rgba(34,197,94,0.3);
+            border-radius: 4px;
+            margin-top: 0.75rem;
+        }
+
+        .pi-result-icon .material-symbols-outlined {
+            font-size: 2rem;
+            color: #22c55e;
+        }
+
+        .pi-result-path {
+            font-size: 0.85rem;
+            color: var(--color-text-secondary);
+            margin-top: 0.25rem;
+            font-family: var(--font-family-code);
+        }
+
+        @media (max-width: 500px) {
+            .pi-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>
