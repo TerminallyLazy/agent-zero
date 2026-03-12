@@ -36,16 +36,18 @@ class QMDManage(Tool):
             params["path"] = self.args.get("path", "")
             params["name"] = self.args.get("name", "")
             if self.args.get("mask"):
-                params["mask"] = self.args["mask"]
+                params["pattern"] = self.args["mask"]
 
         elif action == "collection_remove":
             params["name"] = self.args.get("name", "")
 
         elif action == "context_add":
+            params["collection"] = self.args.get("collection", "")
             params["path"] = self.args.get("path", "")
-            params["text"] = self.args.get("text", "")
+            params["context"] = self.args.get("text", "")
 
         elif action == "context_remove":
+            params["collection"] = self.args.get("collection", "")
             params["path"] = self.args.get("path", "")
 
         elif action == "update":

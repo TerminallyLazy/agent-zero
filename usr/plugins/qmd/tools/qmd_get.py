@@ -44,8 +44,9 @@ class QMDGet(Tool):
 
             # Format response
             if path:
-                content = result.get("content", "")
-                doc_path = result.get("path", path)
+                doc = result.get("doc", {})
+                content = doc.get("content", "") if isinstance(doc, dict) else ""
+                doc_path = doc.get("path", path) if isinstance(doc, dict) else path
                 return Response(
                     message=f"**{doc_path}**\n\n{content}",
                     break_loop=False,

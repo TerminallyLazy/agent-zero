@@ -25,7 +25,7 @@ class QMDSearch(Tool):
         # Map mode to bridge method
         method = mode if mode in ("query", "search", "vsearch") else "query"
 
-        params: dict = {"q": q, "limit": limit, "minScore": min_score}
+        params: dict = {"query": q, "limit": limit, "minScore": min_score}
         if collections:
             params["collections"] = collections if isinstance(collections, list) else [collections]
         if intent:
@@ -40,7 +40,7 @@ class QMDSearch(Tool):
             if "error" in result:
                 return Response(message=f"QMD error: {result['error']}", break_loop=False)
 
-            items = result.get("items", [])
+            items = result.get("results", [])
             if not items:
                 return Response(message="No results found.", break_loop=False)
 

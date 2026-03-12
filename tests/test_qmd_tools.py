@@ -114,7 +114,7 @@ async def test_search_tool_returns_results():
     agent = _make_agent()
     mock_client = AsyncMock()
     mock_client.call.return_value = {
-        "items": [
+        "results": [
             {
                 "title": "Authentication Guide",
                 "path": "/notes/auth.md",
@@ -142,7 +142,7 @@ async def test_search_tool_no_results():
 
     agent = _make_agent()
     mock_client = AsyncMock()
-    mock_client.call.return_value = {"items": []}
+    mock_client.call.return_value = {"results": []}
 
     with patch("usr.plugins.qmd.tools.qmd_search.get_or_create_client", new=AsyncMock(return_value=mock_client)):
         tool = _make_tool(QMDSearch, agent, args={"q": "nothing"})
@@ -159,8 +159,10 @@ async def test_get_tool_single():
     agent = _make_agent()
     mock_client = AsyncMock()
     mock_client.call.return_value = {
-        "path": "/notes/auth.md",
-        "content": "# Authentication\n\nThis document covers auth.",
+        "doc": {
+            "path": "/notes/auth.md",
+            "content": "# Authentication\n\nThis document covers auth.",
+        }
     }
 
     with patch("usr.plugins.qmd.tools.qmd_get.get_or_create_client", new=AsyncMock(return_value=mock_client)):
