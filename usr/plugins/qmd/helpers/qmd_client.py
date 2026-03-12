@@ -25,9 +25,9 @@ import json
 import os
 from pathlib import Path
 
-TIMEOUT_SEARCH = 60   # query, vsearch, embed
+TIMEOUT_SEARCH = 120  # query, search, vsearch, embed — GGUF model loading can be slow
 TIMEOUT_DEFAULT = 10  # get, status, ping, management, etc.
-_LONG_METHODS = {"query", "vsearch", "embed"}
+_LONG_METHODS = {"query", "search", "vsearch", "embed"}
 
 BRIDGE_JS = Path(__file__).parent.parent / "bridge" / "bridge.js"
 
@@ -122,6 +122,14 @@ class QMDClient:
                 )
             except asyncio.TimeoutError:
                 raise RuntimeError(f"QMD bridge timeout on method '{method}'")
+
+            if not line:
+                self._proc = None  # reset so next call auto-respawns
+                raise RuntimeError(
+                    "QMD bridge process exited unexpectedly. "
+                    "This can happen on first search while GGUF models load (~3 GB). "
+                    "Try again — the bridge will restart automatically."
+                )
 
             resp = json.loads(line)
             if "error" in resp:
