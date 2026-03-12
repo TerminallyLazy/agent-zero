@@ -194,3 +194,40 @@ async def test_get_tool_multi():
     assert "Content A" in response.message
     assert "/notes/b.md" in response.message
     assert "---" in response.message
+
+
+@pytest.mark.asyncio
+async def test_manage_blocked_when_disabled():
+    """Manage tool returns disabled message when management_enabled=False."""
+    from usr.plugins.qmd.tools.qmd_manage import QMDManage
+
+    agent = _make_agent()
+
+    with patch("usr.plugins.qmd.tools.qmd_manage.is_management_enabled", return_value=False):
+        tool = _make_tool(QMDManage, agent, args={"action": "collection_add", "path": "/notes", "name": "notes"})
+        response = await tool.execute()
+
+    assert "disabled" in response.message.lower()
+    assert response.break_loop is False
+
+
+@pytest.mark.asyncio
+async def test_manage_collection_add():
+    """Manage tool calls collection_add when management is enabled."""
+    from usr.plugins.qmd.tools.qmd_manage import QMDManage
+
+    agent = _make_agent()
+    mock_client = AsyncMock()
+    mock_client.call.return_value = {"message": "collection added"}
+
+    with patch("usr.plugins.qmd.tools.qmd_manage.is_management_enabled", return_value=True), \
+         patch("usr.plugins.qmd.tools.qmd_manage.get_or_create_client", new=AsyncMock(return_value=mock_client)):
+        tool = _make_tool(QMDManage, agent, args={"action": "collection_add", "path": "/notes", "name": "notes"})
+        response = await tool.execute()
+
+    assert "collection_add" in response.message
+    assert response.break_loop is False
+    # Verify bridge was called with gated=True and management_enabled=True
+    mock_client.call.assert_called_once()
+    call_kwargs = mock_client.call.call_args
+    assert call_kwargs.kwargs.get("gated") is True or call_kwargs.args[2] is True
