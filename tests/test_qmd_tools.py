@@ -149,3 +149,47 @@ async def test_search_tool_no_results():
         response = await tool.execute()
 
     assert "No results found." in response.message
+
+
+@pytest.mark.asyncio
+async def test_get_tool_single():
+    """Get tool retrieves a single document by path."""
+    from usr.plugins.qmd.tools.qmd_get import QMDGet
+
+    agent = _make_agent()
+    mock_client = AsyncMock()
+    mock_client.call.return_value = {
+        "path": "/notes/auth.md",
+        "content": "# Authentication\n\nThis document covers auth.",
+    }
+
+    with patch("usr.plugins.qmd.tools.qmd_get.get_or_create_client", new=AsyncMock(return_value=mock_client)):
+        tool = _make_tool(QMDGet, agent, args={"path": "/notes/auth.md"})
+        response = await tool.execute()
+
+    assert "/notes/auth.md" in response.message
+    assert "Authentication" in response.message
+    assert response.break_loop is False
+
+
+@pytest.mark.asyncio
+async def test_get_tool_multi():
+    """Get tool retrieves multiple documents by pattern."""
+    from usr.plugins.qmd.tools.qmd_get import QMDGet
+
+    agent = _make_agent()
+    mock_client = AsyncMock()
+    mock_client.call.return_value = {
+        "docs": [
+            {"path": "/notes/a.md", "content": "Content A"},
+            {"path": "/notes/b.md", "content": "Content B"},
+        ]
+    }
+
+    with patch("usr.plugins.qmd.tools.qmd_get.get_or_create_client", new=AsyncMock(return_value=mock_client)):
+        tool = _make_tool(QMDGet, agent, args={"pattern": "/notes/*.md"})
+        response = await tool.execute()
+
+    assert "/notes/a.md" in response.message
+    assert "Content A" in response.message
+    assert "/notes/b.md" in response.message
