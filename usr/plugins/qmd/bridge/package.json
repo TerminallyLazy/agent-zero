@@ -1,0 +1,7 @@
+{
+  "name": "agent-zero-qmd-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": { "@tobilu/qmd": "latest" },
+  "engines": { "node": ">=22" }
+}
