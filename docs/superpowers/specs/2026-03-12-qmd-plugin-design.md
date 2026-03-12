@@ -162,14 +162,15 @@ Response: formatted results — title, path, docid, score, snippet, context. Sni
 Retrieve document content.
 
 Parameters:
-- `path`: file path or `#docid` — or a glob/comma list for multi-get
+- `path`: file path or `#docid` (for single get)
+- `pattern`: glob or comma-separated list (for multi-get; explicit, not auto-detected)
 - `full`: return full content (default false)
 - `line_numbers`: add line numbers (default false)
 - `from_line`: start line
 - `max_lines`: cap (default 200)
 - `max_bytes`: for multi-get, skip files over this size (default 10240)
 
-Single vs. multi-get is auto-detected: if `path` contains `*` or `,` → `multi_get`.
+The agent provides either `path` (single get) or `pattern` (multi-get) — explicit parameters rather than auto-detection from string contents. This avoids misclassifying file paths that legitimately contain commas.
 
 #### `qmd_status.py`
 No parameters. Returns collection names, document counts, embedding coverage, index health, subprocess state.
@@ -195,8 +196,16 @@ Appends `prompts/qmd_tools.md` to the agent's system prompt. The template is ren
 Fires once per agent context. If `auto_index_project` is enabled:
 1. Check if a collection for `agent.get_data("cwd")` exists
 2. If not → `collection_add` that path
-3. If embeddings are stale → fire `embed()` as a `DeferredTask` (non-blocking)
+3. If embeddings are stale → fire `embed()` as a `DeferredTask` (non-blocking):
+   ```python
+   from helpers.defer import DeferredTask
+   async def run_embed():
+       await client.call("embed", {})
+   DeferredTask().start_task(run_embed())
+   ```
 4. Set `agent.set_data("qmd_auto_indexed", True)` to skip on re-init
+
+Guard: skip for sub-agents (`if self.agent.number != 0: return`) — auto-indexing is a root-agent concern only.
 
 Skipped entirely if `management_enabled` is false.
 
@@ -216,15 +225,16 @@ request_timeout_default: 10
 
 #### `plugin.yaml`
 ```yaml
-name: qmd
-label: QMD Knowledge Search
+title: QMD Knowledge Search
 description: Local hybrid search for markdown notes, docs, and knowledge bases. BM25 + vector + LLM reranking, fully on-device.
 version: 1.0.0
-author: agent-zero-qmd
-license: MIT
-requires:
-  - node >= 22
+settings_sections:
+  - agent
+per_project_config: false
+always_enabled: false
 ```
+
+Note: Node.js >= 22 is a runtime requirement enforced in `initialize.py` (not a plugin.yaml field — no such field exists in the A0 manifest schema).
 
 #### `webui/config.html`
 Settings panel fields:
@@ -233,20 +243,56 @@ Settings panel fields:
 - Database path text field (placeholder: `~/.cache/qmd/index.sqlite`)
 - Status card: subprocess state + collection count (via `api/qmd_status_api.py`)
 
-#### `api/qmd_status_api.py`
-Endpoint: `GET /api/plugins/qmd/status`
+#### `api/status.py`
+Route: `GET /api/plugins/qmd/status` (file must be named `status.py` to produce this URL)
+
+The handler must override `get_methods()` to accept GET requests (default is POST):
+```python
+@classmethod
+def get_methods(cls) -> list[str]:
+    return ["GET"]
+```
+
+To access the `QMDClient` from a stateless Flask handler, use the `use_context(ctxid)` pattern:
+```python
+async def process(self, input: dict, request: Request):
+    ctxid = input.get("ctxid", "")
+    context = self.use_context(ctxid) if ctxid else None
+    agent = context.streaming_agent if context else None
+    client = agent.get_data("qmd_client") if agent else None
+    running = client.is_running() if client else False
+    # ... return status
+```
+
+The config UI passes `ctxid` in the request body identifying the current agent session.
 Returns: `{running: bool, collections: [...], subprocess_pid: int|null}`
-Used by config UI to show live bridge state.
 
 ---
 
 ### 6. Initialization (`initialize.py`)
 
-Runs when user clicks "Init" in Plugin UI:
-1. Verify `node --version` >= 22 (fail with clear message if missing)
-2. `cd bridge/ && npm install`
-3. Run `node bridge.js --selftest` (bridge starts, pings itself, exits)
+Follows A0 convention: defines a `main() -> int` function, returns 0 on success, non-zero on failure.
+
+```python
+def main() -> int:
+    # 1. Verify node >= 22
+    # 2. cd bridge/ && npm install
+    # 3. node bridge.js --selftest
+    # 4. print success message
+    return 0
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
+```
+
+Steps:
+1. Verify `node --version` >= 22 (print install instructions and return 1 if missing)
+2. `cd bridge/ && npm install` (installs `@tobilu/qmd`)
+3. Run `node bridge.js --selftest` (bridge starts, calls ping, exits cleanly)
 4. Print: "QMD bridge ready. Run `qmd embed` to generate embeddings for your collections."
+
+**npm package:** `@tobilu/qmd` (confirmed — this is the published npm package name for `github.com/tobi/qmd`).
 
 ---
 
