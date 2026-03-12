@@ -1,0 +1,6 @@
+management_enabled: false
+auto_index_project: true
+db_path: ""
+bridge_startup_timeout: 30
+request_timeout_search: 60
+request_timeout_default: 10
