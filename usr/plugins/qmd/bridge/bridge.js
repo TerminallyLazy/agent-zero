@@ -18,6 +18,7 @@
 import readline from 'readline';
 import os from 'os';
 import path from 'path';
+import fs from 'fs';
 import { createStore } from '@tobilu/qmd';
 
 /**
@@ -186,6 +187,7 @@ const handlers = {
 
 async function main() {
   const dbPath = process.env.QMD_DB_PATH || computeDefaultDbPath();
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const store = await createStore({ dbPath });
 
   const isSelfTest = process.argv.includes('--selftest');
