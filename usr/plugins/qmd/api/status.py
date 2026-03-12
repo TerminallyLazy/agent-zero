@@ -23,7 +23,9 @@ class Status(ApiHandler):
                 context = self.use_context(ctxid, create_if_not_exists=False)
             except Exception:
                 context = None
-        agent = context.streaming_agent if context else None
+        # Use agent0 (the persistent root agent) — streaming_agent is only set
+        # while a message is actively processing, so it's None most of the time.
+        agent = context.agent0 if context else None
 
         running = False
         pid = None
