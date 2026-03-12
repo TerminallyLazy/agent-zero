@@ -1,0 +1,92 @@
+<html>
+<head>
+    <title>QMD Knowledge Search</title>
+</head>
+
+<body>
+    <div x-data="{ bridgeStatus: null }" x-init="
+        fetch('/api/plugins/qmd/status?ctxid=' + (context?.id || ''))
+            .then(r => r.json())
+            .then(d => bridgeStatus = d)
+            .catch(() => bridgeStatus = { running: false, collections: [] })
+    ">
+        <template x-if="config">
+            <div>
+                <div class="section-title">QMD Knowledge Search</div>
+                <div class="section-description">
+                    Local hybrid search for markdown notes, docs, and knowledge bases.
+                    Uses BM25 + vector + LLM reranking, all on-device.
+                </div>
+
+                <!-- Bridge Status Card -->
+                <div class="field" x-show="bridgeStatus">
+                    <div class="field-label">
+                        <div class="field-title">Bridge Status</div>
+                        <div class="field-description">
+                            QMD Node.js bridge process state.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <span x-show="bridgeStatus?.running" style="color: green">● Running</span>
+                        <span x-show="!bridgeStatus?.running" style="color: gray">○ Stopped</span>
+                        <span x-show="bridgeStatus?.collections?.length > 0">
+                            — <span x-text="bridgeStatus?.collections?.length"></span> collection(s)
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Management Access Toggle -->
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Management Access</div>
+                        <div class="field-description">
+                            Allow the agent to add/remove collections, add context, and trigger reindexing.
+                            Disabled by default — enable only if you want the agent to modify your index.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <label class="toggle">
+                            <input type="checkbox" x-model="config.management_enabled" />
+                            <span class="toggler"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Auto-index Project Toggle -->
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Auto-index Project</div>
+                        <div class="field-description">
+                            Automatically add the current project directory as a QMD collection
+                            when an agent session starts. Requires Management Access to be enabled.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <label class="toggle">
+                            <input type="checkbox" x-model="config.auto_index_project" />
+                            <span class="toggler"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Database Path -->
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Database Path</div>
+                        <div class="field-description">
+                            Path to the QMD SQLite index. Leave empty to use the QMD default
+                            (~/.cache/qmd/index.sqlite).
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text"
+                            x-model="config.db_path"
+                            placeholder="~/.cache/qmd/index.sqlite" />
+                    </div>
+                </div>
+
+            </div>
+        </template>
+    </div>
+</body>
+</html>
