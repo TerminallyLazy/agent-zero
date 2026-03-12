@@ -231,3 +231,8 @@ async def test_manage_collection_add():
     mock_client.call.assert_called_once()
     call_kwargs = mock_client.call.call_args
     assert call_kwargs.kwargs.get("gated") is True or call_kwargs.args[2] is True
+    # Verify management_enabled=True was passed as kwarg
+    assert call_kwargs.kwargs.get("management_enabled") is True
+    # Verify _management_enabled: True was in the params dict
+    call_params = mock_client.call.call_args.args[1]
+    assert call_params.get("_management_enabled") is True
