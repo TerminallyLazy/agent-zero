@@ -96,7 +96,7 @@ async def test_status_tool_returns_message():
         ]
     }
 
-    with patch("usr.plugins.qmd.tools.qmd_status.get_or_create_client", return_value=mock_client):
+    with patch("usr.plugins.qmd.tools.qmd_status.get_or_create_client", new=AsyncMock(return_value=mock_client)):
         tool = _make_tool(QMDStatus, agent)
         response = await tool.execute()
 
