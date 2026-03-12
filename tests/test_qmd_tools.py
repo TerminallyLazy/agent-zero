@@ -104,3 +104,48 @@ async def test_status_tool_returns_message():
     assert "notes" in response.message
     assert "42" in response.message
     assert response.break_loop is False
+
+
+@pytest.mark.asyncio
+async def test_search_tool_returns_results():
+    """Search tool formats results with title, path, docid, score."""
+    from usr.plugins.qmd.tools.qmd_search import QMDSearch
+
+    agent = _make_agent()
+    mock_client = AsyncMock()
+    mock_client.call.return_value = {
+        "items": [
+            {
+                "title": "Authentication Guide",
+                "path": "/notes/auth.md",
+                "id": "abc123",
+                "score": 0.87,
+                "snippet": "This guide covers authentication patterns.",
+            }
+        ]
+    }
+
+    with patch("usr.plugins.qmd.tools.qmd_search.get_or_create_client", new=AsyncMock(return_value=mock_client)):
+        tool = _make_tool(QMDSearch, agent, args={"q": "authentication", "mode": "query"})
+        response = await tool.execute()
+
+    assert "Authentication Guide" in response.message
+    assert "#abc123" in response.message
+    assert "87%" in response.message
+    assert response.break_loop is False
+
+
+@pytest.mark.asyncio
+async def test_search_tool_no_results():
+    """Search tool returns 'No results found.' for empty results."""
+    from usr.plugins.qmd.tools.qmd_search import QMDSearch
+
+    agent = _make_agent()
+    mock_client = AsyncMock()
+    mock_client.call.return_value = {"items": []}
+
+    with patch("usr.plugins.qmd.tools.qmd_search.get_or_create_client", new=AsyncMock(return_value=mock_client)):
+        tool = _make_tool(QMDSearch, agent, args={"q": "nothing"})
+        response = await tool.execute()
+
+    assert "No results found." in response.message
