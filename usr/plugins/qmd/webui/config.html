@@ -5,7 +5,7 @@
 
 <body>
     <div x-data="{ bridgeStatus: null }" x-init="
-        fetch('/api/plugins/qmd/status?ctxid=' + (context?.id || ''))
+        fetch('/api/plugins/qmd/status?ctxid=' + (globalThis.getContext?.() || ''))
             .then(r => r.json())
             .then(d => bridgeStatus = d)
             .catch(() => bridgeStatus = { running: false, collections: [] })
