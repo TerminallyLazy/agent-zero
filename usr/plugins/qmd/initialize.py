@@ -48,11 +48,15 @@ def main() -> int:
 
     # Step 3: Bridge selftest
     print("Running bridge selftest...")
-    result = subprocess.run(
-        ["node", bridge_js, "--selftest"],
-        capture_output=True, text=True, check=False,
-        timeout=60,
-    )
+    try:
+        result = subprocess.run(
+            ["node", bridge_js, "--selftest"],
+            capture_output=True, text=True, check=False,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        print("ERROR: Bridge selftest timed out after 60 seconds.")
+        return 1
     if result.returncode != 0:
         print(f"ERROR: Bridge selftest failed (exit {result.returncode}).")
         print(f"stderr: {result.stderr[:300]}")
