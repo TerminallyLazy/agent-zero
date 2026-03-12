@@ -191,7 +191,10 @@ async function main() {
   const isSelfTest = process.argv.includes('--selftest');
 
   // Graceful shutdown handlers
+  let closing = false;
   async function shutdown() {
+    if (closing) return;
+    closing = true;
     await store.close();
     process.exit(0);
   }
