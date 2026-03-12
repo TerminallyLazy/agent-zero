@@ -31,7 +31,7 @@ class QMDGet(Tool):
                 params: dict = {"path": path, "full": full, "lineNumbers": line_numbers}
                 if from_line is not None:
                     params["fromLine"] = int(from_line)
-                if max_lines:
+                if max_lines is not None:
                     params["maxLines"] = max_lines
                 result = await client.call("get", params)
             else:

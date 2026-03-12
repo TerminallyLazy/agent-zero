@@ -193,3 +193,4 @@ async def test_get_tool_multi():
     assert "/notes/a.md" in response.message
     assert "Content A" in response.message
     assert "/notes/b.md" in response.message
+    assert "---" in response.message
