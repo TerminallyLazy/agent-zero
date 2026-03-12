@@ -17,7 +17,12 @@ class Status(ApiHandler):
 
     async def process(self, input: Input, request: Request) -> Output:
         ctxid = request.args.get("ctxid", "") or input.get("ctxid", "")
-        context = self.use_context(ctxid) if ctxid else None
+        context = None
+        if ctxid:
+            try:
+                context = self.use_context(ctxid, create_if_not_exists=False)
+            except Exception:
+                context = None
         agent = context.streaming_agent if context else None
 
         running = False
@@ -30,11 +35,12 @@ class Status(ApiHandler):
                 running = client.is_running()
                 if running and hasattr(client, "_proc") and client._proc:
                     pid = client._proc.pid
-                try:
-                    result = await client.call("collection_list")
-                    collections = result.get("collections", [])
-                except Exception:
-                    pass
+                if running:  # only fetch collections if bridge is already up
+                    try:
+                        result = await client.call("collection_list")
+                        collections = result.get("collections", [])
+                    except Exception:
+                        pass
 
         return {
             "running": running,
