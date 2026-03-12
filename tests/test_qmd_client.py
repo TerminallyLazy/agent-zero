@@ -92,15 +92,17 @@ async def test_gating_allows_when_enabled(db_path):
     """Gated call with management_enabled=True should reach the bridge."""
     client = QMDClient()
     await client.start(db_path=db_path)
-    # collection_add will fail (no path param) but it should reach the bridge,
-    # not be blocked by gating
-    result = await client.call(
-        "collection_add",
-        params={"_management_enabled": True},
-        gated=True,
-        management_enabled=True,
-    )
-    # Should get a bridge-level error or result, not a gating error
-    if "error" in result:
-        assert "disabled" not in result["error"].lower()  # not a gating error
-    await client.stop()
+    try:
+        # collection_add will fail (no path param) but it should reach the bridge,
+        # not be blocked by gating
+        result = await client.call(
+            "collection_add",
+            params={"_management_enabled": True},
+            gated=True,
+            management_enabled=True,
+        )
+        # Should get a bridge-level error or result, not a gating error
+        if "error" in result:
+            assert "disabled" not in result["error"].lower()  # not a gating error
+    finally:
+        await client.stop()

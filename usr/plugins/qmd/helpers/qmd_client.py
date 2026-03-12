@@ -37,9 +37,11 @@ class QMDClient:
         self._proc = None
         self._lock = asyncio.Lock()
         self._id = 0
+        self._db_path: str | None = None
 
     async def start(self, db_path: str = None) -> None:
         """Spawn bridge.js subprocess and wait for {"ready":true}."""
+        self._db_path = db_path
         env = os.environ.copy()
         if db_path:
             env["QMD_DB_PATH"] = db_path
@@ -100,7 +102,7 @@ class QMDClient:
 
         # Auto-respawn if subprocess died
         if not self.is_running():
-            await self.start()
+            await self.start(self._db_path)
 
         async with self._lock:
             self._id += 1
