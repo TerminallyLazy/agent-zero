@@ -201,7 +201,7 @@ Fires once per agent context. If `auto_index_project` is enabled:
    from helpers.defer import DeferredTask
    async def run_embed():
        await client.call("embed", {})
-   DeferredTask().start_task(run_embed())
+   DeferredTask().start_task(run_embed)  # pass callable, not run_embed()
    ```
 4. Set `agent.set_data("qmd_auto_indexed", True)` to skip on re-init
 
