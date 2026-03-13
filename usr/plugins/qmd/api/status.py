@@ -31,18 +31,25 @@ class Status(ApiHandler):
         pid = None
         collections = []
 
+        from usr.plugins.qmd.helpers.client_access import get_global_client
+        # Prefer the per-agent client; fall back to the global singleton so
+        # the config UI (which has no ctxid) can still reflect bridge state.
+        client = None
         if agent:
             client = agent.get_data("qmd_client")
-            if client:
-                running = client.is_running()
-                if running and hasattr(client, "_proc") and client._proc:
-                    pid = client._proc.pid
-                if running:  # only fetch collections if bridge is already up
-                    try:
-                        result = await client.call("collection_list")
-                        collections = result.get("collections", [])
-                    except Exception:
-                        pass
+        if client is None:
+            client = get_global_client()
+
+        if client:
+            running = client.is_running()
+            if running and hasattr(client, "_proc") and client._proc:
+                pid = client._proc.pid
+            if running:  # only fetch collections if bridge is already up
+                try:
+                    result = await client.call("collection_list")
+                    collections = result.get("collections", [])
+                except Exception:
+                    pass
 
         return {
             "running": running,

@@ -44,13 +44,17 @@ class QMDSearch(Tool):
             if not items:
                 return Response(message="No results found.", break_loop=False)
 
-            lines = [f"**QMD Search Results** (mode={method}, {len(items)} results)\n"]
+            warning = result.get("warning", "")
+            header = f"**QMD Search Results** (mode={method}, {len(items)} results)"
+            if warning:
+                header += f"\n⚠ {warning}"
+            lines = [header + "\n"]
             for i, item in enumerate(items, 1):
-                title = item.get("title") or item.get("path", "unknown")
-                path = item.get("path", "")
-                docid = item.get("id", "")
+                title = item.get("title") or item.get("displayPath") or item.get("path", "unknown")
+                path = item.get("displayPath") or item.get("path", "")
+                docid = item.get("docid") or item.get("id", "")
                 score = item.get("score", 0.0)
-                snippet = item.get("snippet") or item.get("content", "")
+                snippet = item.get("bestChunk") or item.get("snippet") or item.get("body") or item.get("content", "")
                 if snippet and len(snippet) > 500:
                     snippet = snippet[:500] + "…"
 

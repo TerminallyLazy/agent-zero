@@ -88,19 +88,46 @@ const handlers = {
   },
 
   async query(store, params) {
-    // Hybrid search: BM25 + vector + optional reranking
-    const results = await store.search({
-      query: params.query,
-      queries: params.queries,
-      intent: params.intent,
-      rerank: params.rerank,
-      collection: params.collection,
-      collections: params.collections,
-      limit: params.limit,
-      minScore: params.minScore,
-      explain: params.explain,
-    });
-    return { results };
+    // Hybrid search: BM25 + vector + optional reranking.
+    // Falls back to no-rerank then BM25-only if LLM steps fail (e.g. models not
+    // yet downloaded, chunk exceeds context size, or OOM).
+    try {
+      const results = await store.search({
+        query: params.query,
+        queries: params.queries,
+        intent: params.intent,
+        rerank: params.rerank,
+        collection: params.collection,
+        collections: params.collections,
+        limit: params.limit,
+        minScore: params.minScore,
+        explain: params.explain,
+      });
+      return { results };
+    } catch (hybridErr) {
+      // Tier-2: try without reranking (still uses embeddings for vector search)
+      try {
+        const results = await store.search({
+          query: params.query,
+          rerank: false,
+          collection: params.collection,
+          collections: params.collections,
+          limit: params.limit,
+          minScore: params.minScore,
+        });
+        const hybridMsg = hybridErr instanceof Error ? hybridErr.message : String(hybridErr);
+        return { results, warning: `Reranking skipped: ${hybridMsg}` };
+      } catch (_vecErr) {
+        // Tier-3: BM25-only — always works, no LLM needed
+        const hybridMsg = hybridErr instanceof Error ? hybridErr.message : String(hybridErr);
+        const collection = params.collection ?? params.collections?.[0];
+        const ftsResults = await store.searchLex(params.query, {
+          limit: params.limit,
+          collection,
+        });
+        return { results: ftsResults, warning: `Hybrid search unavailable, showing BM25 results: ${hybridMsg}` };
+      }
+    }
   },
 
   async search(store, params) {
@@ -270,7 +297,7 @@ async function main() {
       const result = await handler(store, params);
       respond(id, result);
     } catch (err) {
-      respondError(id, String(err.message ?? err), -32000);
+      respondError(id, String(err instanceof Error ? err.message : err), -32000);
     }
   });
 

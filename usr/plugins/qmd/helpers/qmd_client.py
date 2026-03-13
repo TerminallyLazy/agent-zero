@@ -28,6 +28,7 @@ from pathlib import Path
 TIMEOUT_SEARCH = 120  # query, search, vsearch, embed — GGUF model loading can be slow
 TIMEOUT_DEFAULT = 10  # get, status, ping, management, etc.
 _LONG_METHODS = {"query", "search", "vsearch", "embed"}
+_STREAM_LIMIT = 16 * 1024 * 1024  # 16 MB — bridge responses can be large JSON lines
 
 BRIDGE_JS = Path(__file__).parent.parent / "bridge" / "bridge.js"
 
@@ -51,6 +52,7 @@ class QMDClient:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            limit=_STREAM_LIMIT,
         )
         # Wait for {"ready":true} line with 30s timeout
         try:

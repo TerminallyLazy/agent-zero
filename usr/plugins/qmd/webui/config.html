@@ -4,7 +4,7 @@
 </head>
 
 <body>
-    <div x-data="{ bridgeStatus: null }" x-init="
+    <div x-data="{ bridgeStatus: null, bridgeStarting: false }" x-init="
         fetch('/api/plugins/qmd/status?ctxid=' + (globalThis.getContext?.() || ''))
             .then(r => r.json())
             .then(d => bridgeStatus = d)
@@ -26,12 +26,30 @@
                             QMD Node.js bridge process state.
                         </div>
                     </div>
-                    <div class="field-control">
+                    <div class="field-control" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
                         <span x-show="bridgeStatus?.running" style="color: green">● Running</span>
-                        <span x-show="!bridgeStatus?.running" style="color: gray">○ Stopped</span>
+                        <span x-show="!bridgeStatus?.running && !bridgeStarting" style="color: gray">○ Stopped</span>
+                        <span x-show="bridgeStarting" style="color: orange">◌ Starting…</span>
                         <span x-show="bridgeStatus?.collections?.length > 0">
                             — <span x-text="bridgeStatus?.collections?.length"></span> collection(s)
                         </span>
+                        <button
+                            x-show="!bridgeStatus?.running"
+                            :disabled="bridgeStarting"
+                            style="padding:2px 10px;font-size:0.85em;cursor:pointer"
+                            @click="
+                                bridgeStarting = true;
+                                fetch('/api/plugins/qmd/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+                                    .then(r => r.json())
+                                    .then(d => {
+                                        bridgeStarting = false;
+                                        return fetch('/api/plugins/qmd/status?ctxid=' + (globalThis.getContext?.() || ''));
+                                    })
+                                    .then(r => r.json())
+                                    .then(d => bridgeStatus = d)
+                                    .catch(() => { bridgeStarting = false; })
+                            "
+                        >Start Bridge</button>
                     </div>
                 </div>
 
