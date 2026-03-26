@@ -8,6 +8,8 @@ import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 const model = {
   paused: false,
   message: "",
+  progressText: "",
+  progressActive: false,
 
   _getSendState() {
     const hasInput = this.message.trim() || attachmentsStore?.attachments?.length > 0;
@@ -22,6 +24,10 @@ const model = {
   get inputPlaceholder() {
     const state = this._getSendState();
     if (state === "all") return "Press Enter to send queued messages";
+    // Show progress as ghost text when agent is working and input is empty
+    if (this.progressText && !this.message) {
+      return "|>  " + this.progressText;
+    }
     return "Type your message here...";
   },
 

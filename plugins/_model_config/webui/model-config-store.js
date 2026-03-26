@@ -497,6 +497,21 @@ export const store = createStore("modelConfig", {
     return o.preset_name || o.name || o.provider || 'Custom';
   },
 
+  getActivePreset() {
+    const o = this.switcherOverride;
+    if (!o || !o.preset_name) return null;
+    return this.switcherPresets.find(p => p.name === o.preset_name) || null;
+  },
+
+  getActiveModels() {
+    const preset = this.getActivePreset();
+    if (!preset) return { main: null, utility: null };
+    return {
+      main: preset.chat?.name ? { provider: preset.chat.provider, name: preset.chat.name } : null,
+      utility: preset.utility?.name ? { provider: preset.utility.provider, name: preset.utility.name } : null,
+    };
+  },
+
   // Text conversion utilities (accessible from templates via $store.modelConfig)
   textToKwargs,
   textToHeaders,

@@ -481,16 +481,33 @@ function speakMessages(logs) {
 }
 
 function updateProgress(progress, active) {
-  const progressBarEl = document.getElementById("progress-bar");
-  if (!progressBarEl) return;
   if (!progress) progress = "";
 
-  setProgressBarShine(progressBarEl, active);
+  // Strip HTML tags for plain-text placeholder use
+  const plainText = progress.replace(/<[^>]*>/g, "").trim();
 
-  progress = msgs.convertIcons(progress);
+  // Update the input store so the placeholder reflects progress
+  inputStore.progressText = plainText;
+  inputStore.progressActive = !!active;
 
-  if (progressBarEl.innerHTML != progress) {
-    progressBarEl.innerHTML = progress;
+  // Apply shimmer class to the textarea when active
+  const chatInputEl = document.getElementById("chat-input");
+  if (chatInputEl) {
+    if (active && plainText) {
+      addClassToElement(chatInputEl, "progress-active");
+    } else {
+      removeClassFromElement(chatInputEl, "progress-active");
+    }
+  }
+
+  // Also update legacy progress bar element if it still exists
+  const progressBarEl = document.getElementById("progress-bar");
+  if (progressBarEl) {
+    setProgressBarShine(progressBarEl, active);
+    const html = msgs.convertIcons(progress);
+    if (progressBarEl.innerHTML != html) {
+      progressBarEl.innerHTML = html;
+    }
   }
 }
 

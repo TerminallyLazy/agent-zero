@@ -102,7 +102,20 @@
     #chat-input::-webkit-scrollbar-thumb { background-color: rgba(155,155,155,0.5); border-radius: 6px; -webkit-transition: background-color 0.2s ease; transition: background-color 0.2s ease; }
     #chat-input::-webkit-scrollbar-thumb:hover { background-color: rgba(155,155,155,0.7); }
     #chat-input:focus { outline: 0.05rem solid rgba(155,155,155,0.5); font-size: 0.955rem; padding-top: 0.45rem; background-color: var(--color-input-focus); }
-    #chat-input::placeholder { color: var(--color-text-muted); opacity: 0.7; }
+    #chat-input::placeholder { color: var(--color-text-muted); opacity: 0.7; transition: color 0.3s ease; }
+
+    /* Progress ghost text animation — gentle pulse on placeholder */
+    #chat-input.progress-active::placeholder {
+      animation: placeholder-pulse 2s ease-in-out infinite;
+    }
+    @keyframes placeholder-pulse {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 0.85; }
+    }
+    #chat-input.progress-active {
+      border-color: color-mix(in srgb, var(--color-highlight) 20%, transparent);
+      outline-color: color-mix(in srgb, var(--color-highlight) 15%, transparent);
+    }
 
     #expand-button { 
     position: absolute;
