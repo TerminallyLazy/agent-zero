@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import types
 from pathlib import Path
@@ -12,6 +13,17 @@ if str(PROJECT_ROOT) not in sys.path:
 sys.modules["giturlparse"] = types.SimpleNamespace(parse=lambda *args, **kwargs: None)
 
 from helpers import self_update
+
+
+def load_self_update_manager():
+    manager_path = (
+        PROJECT_ROOT / "docker" / "run" / "fs" / "exe" / "self_update_manager.py"
+    )
+    spec = importlib.util.spec_from_file_location("test_self_update_manager", manager_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_self_update_selector_tags_use_two_segments_and_v1_floor():
@@ -66,7 +78,290 @@ def test_self_update_branch_filter_prefers_remote_branch_tags(monkeypatch):
     assert tags == ["v1.1", "v1.0"]
 
 
-def test_self_update_frontend_filters_old_tag_suggestions():
+def test_self_update_available_branch_values_filter_prs_and_pin_main_first(monkeypatch):
+    monkeypatch.setattr(self_update, "_remote_branch_list_cache", None)
+    monkeypatch.setattr(
+        self_update,
+        "_run_git_raw",
+        lambda *args: "\n".join(
+            [
+                "111 refs/heads/testing",
+                "222 refs/heads/ready",
+                "333 refs/heads/pr/123",
+                "444 refs/heads/development",
+                "555 refs/heads/main",
+                "666 refs/heads/pr-999",
+            ]
+        ),
+    )
+
+    branches = self_update.get_available_branch_values()
+
+    assert branches == ["main", "development", "ready", "testing"]
+
+
+def test_self_update_available_branch_values_fallback_to_local_origin(monkeypatch):
+    monkeypatch.setattr(self_update, "_remote_branch_list_cache", None)
+    monkeypatch.setattr(
+        self_update,
+        "_run_git_raw",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "_run_git",
+        lambda repo_dir, *args: "\n".join(
+            [
+                "origin/HEAD",
+                "origin/ready",
+                "origin/testing",
+                "origin/pr/999",
+                "origin/main",
+            ]
+        ),
+    )
+
+    branches = self_update.get_available_branch_values()
+
+    assert branches == ["main", "ready", "testing"]
+
+
+def test_self_update_uses_durable_manager_capability_when_present(monkeypatch, tmp_path):
+    durable_manager = tmp_path / "self_update_manager.py"
+    repo_manager = tmp_path / "repo-self_update_manager.py"
+    durable_manager.write_text("# old manager without latest\n", encoding="utf-8")
+    repo_manager.write_text(
+        'LATEST_SELECTOR_TAG = "latest"\n'
+        "def resolve_requested_target():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        self_update,
+        "get_durable_self_update_manager_path",
+        lambda: durable_manager,
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_repo_self_update_manager_path",
+        lambda repo_dir=None: repo_manager,
+    )
+
+    assert self_update.durable_self_update_supports_latest() is False
+
+
+def test_self_update_falls_back_to_repo_manager_capability_when_durable_missing(monkeypatch, tmp_path):
+    missing_durable = tmp_path / "missing-self_update_manager.py"
+    repo_manager = tmp_path / "repo-self_update_manager.py"
+    repo_manager.write_text(
+        'LATEST_SELECTOR_TAG = "latest"\n'
+        "def resolve_requested_target():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        self_update,
+        "get_durable_self_update_manager_path",
+        lambda: missing_durable,
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_repo_self_update_manager_path",
+        lambda repo_dir=None: repo_manager,
+    )
+
+    assert self_update.durable_self_update_supports_latest() is True
+
+
+def test_self_update_selector_tag_options_filter_to_current_major(monkeypatch):
+    monkeypatch.setattr(
+        self_update,
+        "get_available_tags",
+        lambda branch, *, repo_dir=None, query="": (
+            ["v3.0", "v2.1", "v1.4", "v1.2"],
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "_get_branch_head_info",
+        lambda branch, repo_dir=None: {
+            "describe": "v1.4-4-gabc1234",
+            "short_tag": "v1.4",
+            "commit": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: True,
+    )
+
+    tag_options, higher_major_versions, error = self_update.get_selector_tag_options(
+        "main",
+        current_version="v1.2",
+    )
+
+    assert error == ""
+    assert tag_options == [
+        {"value": "latest", "label": "latest (v1.4)"},
+        {"value": "v1.4", "label": "v1.4"},
+        {"value": "v1.2", "label": "v1.2"},
+    ]
+    assert higher_major_versions == [2, 3]
+
+
+def test_self_update_selector_tag_options_keep_main_latest_within_current_major(monkeypatch):
+    monkeypatch.setattr(
+        self_update,
+        "get_available_tags",
+        lambda branch, *, repo_dir=None, query="": (
+            ["v2.0", "v1.4", "v1.2"],
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "_get_branch_head_info",
+        lambda branch, repo_dir=None: {
+            "describe": "v2.0",
+            "short_tag": "v2.0",
+            "commit": "def5678",
+        },
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: True,
+    )
+
+    tag_options, higher_major_versions, error = self_update.get_selector_tag_options(
+        "main",
+        current_version="v1.2",
+    )
+
+    assert error == ""
+    assert tag_options == [
+        {"value": "latest", "label": "latest (v1.4)"},
+        {"value": "v1.4", "label": "v1.4"},
+        {"value": "v1.2", "label": "v1.2"},
+    ]
+    assert higher_major_versions == [2]
+
+
+def test_self_update_selector_tag_options_hide_latest_when_durable_updater_lacks_support(monkeypatch):
+    monkeypatch.setattr(
+        self_update,
+        "get_available_tags",
+        lambda branch, *, repo_dir=None, query="": (
+            ["v1.4", "v1.2"],
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "_get_branch_head_info",
+        lambda branch, repo_dir=None: {
+            "describe": "v1.4-4-gabc1234",
+            "short_tag": "v1.4",
+            "commit": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: False,
+    )
+
+    tag_options, higher_major_versions, error = self_update.get_selector_tag_options(
+        "development",
+        current_version="v1.2",
+    )
+
+    assert error == ""
+    assert tag_options == [
+        {"value": "v1.4", "label": "v1.4"},
+        {"value": "v1.2", "label": "v1.2"},
+    ]
+    assert higher_major_versions == []
+
+
+def test_self_update_update_info_uses_current_branch_for_latest_version(monkeypatch):
+    monkeypatch.setattr(
+        self_update,
+        "get_repo_version_info",
+        lambda _repo=None: {
+            "branch": "main",
+            "describe": "v1.2",
+            "short_tag": "v1.2",
+            "display_version": "v1.2",
+            "commit": "abc1234def",
+            "short_commit": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_available_branches",
+        lambda repo_dir=None: [
+            {"value": "main", "label": "main"},
+            {"value": "ready", "label": "ready"},
+            {"value": "testing", "label": "testing"},
+        ],
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_available_branch_values",
+        lambda repo_dir=None: ["main", "ready", "testing"],
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_selector_tag_options",
+        lambda branch, *, repo_dir=None, current_version=None: (
+            [{"value": "latest", "label": "latest (v1.4)"}],
+            [],
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: True,
+    )
+    monkeypatch.setattr(self_update, "load_pending_update", lambda: None)
+    monkeypatch.setattr(self_update, "load_last_status", lambda: None)
+    monkeypatch.setattr(
+        self_update,
+        "_get_branch_head_info",
+        lambda branch, repo_dir=None: {
+            "main": {
+                "describe": "v1.4",
+                "short_tag": "v1.4",
+                "commit": "def5678abcd",
+            },
+            "development": {
+                "describe": "v9.9-3-gfeedbee",
+                "short_tag": "v9.9",
+                "commit": "feedbee1234",
+            },
+        }[branch],
+    )
+
+    info = self_update.get_update_info()
+
+    assert info["current_branch_latest"] == {
+        "branch": "main",
+        "supported": True,
+        "describe": "v1.4",
+        "short_tag": "v1.4",
+        "display_version": "v1.4",
+        "commit": "def5678abcd",
+        "short_commit": "def5678",
+    }
+
+
+def test_self_update_frontend_uses_preloaded_select():
     store_path = (
         PROJECT_ROOT
         / "webui"
@@ -77,20 +372,51 @@ def test_self_update_frontend_filters_old_tag_suggestions():
     )
     content = store_path.read_text(encoding="utf-8")
 
+    assert 'const SELF_UPDATE_MANUAL_BACKUP_MODAL_PATH = "settings/backup/backup_restore.html";' in content
     assert "const MIN_SELECTOR_VERSION = [1, 0];" in content
-    assert "response.tags.filter((tag) => this.isSupportedSuggestionTag(tag))" in content
+    assert "availableTagOptions: []" in content
+    assert "higherMajorVersions: []" in content
+    assert "this.applyAvailableTags({" in content
+    assert "response.available_tag_options" in content
+    assert "response.available_higher_major_versions" in content
+    assert "response.tag_options" in content
+    assert "response.higher_major_versions" in content
+    assert "response.pending || {" in content
+    assert "tag: \"\"," in content
+    assert "await this.fetchTags();" in content
+    assert '"Preparing update"' in content
+    assert '"Saving the request and asking Agent Zero to restart."' in content
     assert "Release tag must use the format vX.Y." in content
     assert "Release tag must be v1.0 or newer." in content
+    assert "isLatestSelectorTag(value)" in content
+    assert "this.isSelectableTag(this.form.tag)" in content
+    assert "getLastStatusBadgeClass(status)" in content
+    assert "this.info?.current?.display_version" in content
+    assert "resetRestartState()" in content
+    assert "restartRequestStarted" in content
+    assert "restartResponse.status >= 500" in content
+    assert "while Agent Zero was shutting down" in content
+    assert "await notificationStore.frontendWarning(" not in content
+    assert "status-pill-error" in content
+    assert "status-pill-success" in content
     assert "this.info?.defaults?.branch ||" in content
-    assert "Version ${tag} does not exist on branch" in content
+    assert "Version ${this.trimmedTag} does not exist on branch" in content
     assert "this.selectedTagExistsOnBranch" in content
+    assert "this.form.tag = \"\";" in content
+    assert "this.availableTags[0]" not in content
     assert 'const response = await fetch("/api/health"' in content
     assert "if (response.ok && observedBackendUnavailable)" in content
+    assert "window.location.reload();" in content
     assert "Waiting for Agent Zero to disconnect before reloading the page." in content
+    assert "SELF_UPDATE_RETURN_URL_KEY" not in content
+    assert "saveReturnUrl(" not in content
+    assert "getSavedReturnUrl(" not in content
     assert "/api/csrf_token" not in content
+    assert "tagSuggestions" not in content
+    assert "tagDropdownOpen" not in content
 
 
-def test_self_update_modal_validates_exact_tag_on_blur():
+def test_self_update_modal_uses_standard_select_and_manual_backup():
     modal_path = (
         PROJECT_ROOT
         / "webui"
@@ -101,10 +427,58 @@ def test_self_update_modal_validates_exact_tag_on_blur():
     )
     content = modal_path.read_text(encoding="utf-8")
 
-    assert '@blur="$store.selfUpdateStore.onTagBlur()"' in content
-    assert '@mousedown.prevent="$store.selfUpdateStore.selectTag(tag)"' in content
-    assert "$store.selfUpdateStore.tagExistenceWarning" in content
+    assert 'x-model="$store.selfUpdateStore.form.tag"' in content
+    assert "$store.selfUpdateStore.versionSelectPlaceholder" in content
+    assert "$store.selfUpdateStore.higherMajorVersionMessage" in content
+    assert "$store.selfUpdateStore.availableTagOptions" in content
+    assert "$store.selfUpdateStore.info?.current?.describe" in content
+    assert "current_branch_latest?.display_version" in content
+    assert "tagOption.label" in content
+    assert 'data-bs-target="#self-update-last-attempt-collapse"' in content
+    assert "self-update-header-status" in content
+    assert "getLastStatusLabel($store.selfUpdateStore.info?.last_status?.status)" in content
+    assert "Latest version" in content
+    assert "Docker update guide" in content
+    assert "https://www.agent-zero.ai/p/docs/get-started/" in content
+    assert "Manual backup" in content
     assert 'type="button"' in content
+    assert "@blur" not in content
+    assert "selectTag(tag)" not in content
+
+
+def test_self_update_repo_version_info_includes_display_version_for_non_main(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        self_update,
+        "_run_git",
+        lambda repo_dir, *args: {
+            ("describe", "--tags", "--always"): "v1.11-9-gf69147a",
+            ("rev-parse", "HEAD"): "f69147a123456789",
+            ("branch", "--show-current"): "development",
+        }[args],
+    )
+
+    info = self_update.get_repo_version_info(tmp_path)
+
+    assert info["short_tag"] == "v1.11"
+    assert info["display_version"] == "v1.11+9"
+    assert info["short_commit"] == "f69147a"
+
+
+def test_self_update_recovery_script_and_docs_are_present():
+    script_path = PROJECT_ROOT / "docker" / "run" / "fs" / "exe" / "trigger_self_update.sh"
+    script_content = script_path.read_text(encoding="utf-8")
+    docs_path = PROJECT_ROOT / "docs" / "guides" / "troubleshooting.md"
+    docs_content = docs_path.read_text(encoding="utf-8")
+    dockerfile_path = PROJECT_ROOT / "docker" / "run" / "Dockerfile"
+    dockerfile_content = dockerfile_path.read_text(encoding="utf-8")
+
+    assert 'trigger-update "$@"' in script_content
+    assert "/exe/trigger_self_update.sh" in docs_content
+    assert "docker exec -it <container>" in docs_content
+    assert "/exe/a0-self-update.log" in docs_content
+    assert "reload the current browser window" in docs_content
+    assert "main` and `latest`" in docs_content
+    assert "/exe/trigger_self_update.sh" in dockerfile_content
 
 
 def test_self_update_schedule_rejects_missing_tag_on_branch(monkeypatch, tmp_path):
@@ -121,8 +495,22 @@ def test_self_update_schedule_rejects_missing_tag_on_branch(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(
         self_update,
-        "get_available_tags",
-        lambda branch, *, repo_dir=None, query="": (["v1.0"], ""),
+        "get_selector_tag_options",
+        lambda branch, *, repo_dir=None, current_version=None: (
+            [{"value": "v1.0", "label": "v1.0"}],
+            [],
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_available_branch_values",
+        lambda repo_dir=None: ["development", "ready", "testing", "main"],
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: True,
     )
     monkeypatch.setattr(self_update, "_write_yaml", lambda path, payload: None)
 
@@ -130,6 +518,264 @@ def test_self_update_schedule_rejects_missing_tag_on_branch(monkeypatch, tmp_pat
         self_update.schedule_update(
             branch="development",
             tag="v1.1",
+            backup_usr=True,
+            backup_path="",
+            backup_name="",
+            backup_conflict_policy="rename",
+            repo_dir=tmp_path,
+        )
+
+
+def test_self_update_schedule_accepts_latest_when_selector_exposes_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        self_update,
+        "get_repo_version_info",
+        lambda _repo: {
+            "branch": "development",
+            "describe": "v1.4-2-gabc1234",
+            "short_tag": "v1.4",
+            "commit": "abc1234",
+            "short_commit": "abc1234",
+        },
+    )
+    captured_payload = {}
+    monkeypatch.setattr(
+        self_update,
+        "get_selector_tag_options",
+        lambda branch, *, repo_dir=None, current_version=None: (
+            [{"value": "latest", "label": "latest (v1.4+2)"}],
+            [],
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_available_branch_values",
+        lambda repo_dir=None: ["development", "ready", "testing", "main"],
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: True,
+    )
+    monkeypatch.setattr(
+        self_update,
+        "_write_yaml",
+        lambda path, payload: captured_payload.update(payload),
+    )
+
+    payload = self_update.schedule_update(
+        branch="development",
+        tag="latest",
+        backup_usr=True,
+        backup_path="",
+        backup_name="",
+        backup_conflict_policy="rename",
+        repo_dir=tmp_path,
+    )
+
+    assert payload["tag"] == "latest"
+    assert captured_payload["tag"] == "latest"
+
+
+def test_self_update_manager_queues_update_with_main_latest_defaults(monkeypatch):
+    manager = load_self_update_manager()
+    captured = {}
+    monkeypatch.setattr(
+        manager,
+        "get_repo_version_info",
+        lambda _repo: {
+            "branch": "main",
+            "describe": "v1.2",
+            "short_tag": "v1.2",
+            "commit": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        manager,
+        "write_yaml",
+        lambda path, payload: captured.update({"path": path, "payload": payload}),
+    )
+
+    payload = manager.queue_update_request(branch="", tag="")
+
+    assert payload["branch"] == "main"
+    assert payload["tag"] == "latest"
+    assert payload["backup_usr"] is True
+    assert payload["backup_path"] == "/root/update-backups"
+    assert payload["backup_conflict_policy"] == "rename"
+    assert captured["path"] == manager.TRIGGER_FILE
+    assert captured["payload"]["tag"] == "latest"
+
+
+def test_self_update_manager_latest_on_main_uses_current_major_release(monkeypatch):
+    manager = load_self_update_manager()
+    monkeypatch.setattr(
+        manager,
+        "fetch_branch_refs",
+        lambda repo_dir, branch, logger: "refs/remotes/a0-self-update/main",
+    )
+    monkeypatch.setattr(
+        manager,
+        "git_output",
+        lambda repo_dir, *args: {
+            ("tag", "--merged", "refs/remotes/a0-self-update/main"): "v2.0\nv1.4\nv1.2\n",
+            ("rev-parse", "refs/tags/v1.4^{commit}"): "deadbeef1234",
+        }[args],
+    )
+
+    resolved = manager.resolve_requested_target(
+        Path("/tmp/repo"),
+        "main",
+        "latest",
+        "v1.2",
+        manager.NullLogger(),
+    )
+
+    assert resolved["effective_tag"] == "v1.4"
+    assert resolved["expected_short_tag"] == "v1.4"
+    assert resolved["expected_commit"] == "deadbeef1234"
+
+
+def test_self_update_manager_explicit_tag_uses_peeled_commit(monkeypatch):
+    manager = load_self_update_manager()
+    monkeypatch.setattr(manager, "fetch_release_refs", lambda repo_dir, branch, tag, logger: None)
+    monkeypatch.setattr(
+        manager,
+        "git_output",
+        lambda repo_dir, *args: {
+            ("rev-parse", "refs/tags/v1.10^{commit}"): "192d6e2cae1a85c0a2e7a6ecf41c153b39f1b4c6",
+        }[args],
+    )
+
+    resolved = manager.resolve_requested_target(
+        Path("/tmp/repo"),
+        "development",
+        "v1.10",
+        "v1.11",
+        manager.NullLogger(),
+    )
+
+    assert resolved["effective_tag"] == "v1.10"
+    assert resolved["expected_commit"] == "192d6e2cae1a85c0a2e7a6ecf41c153b39f1b4c6"
+
+
+def test_self_update_manager_skip_check_requires_exact_describe_match():
+    manager = load_self_update_manager()
+
+    assert (
+        manager.installed_target_matches_request(
+            {
+                "branch": "development",
+                "describe": "v1.11",
+                "short_tag": "v1.11",
+            },
+            requested_branch="development",
+            requested_tag="v1.11",
+        )
+        is True
+    )
+    assert (
+        manager.installed_target_matches_request(
+            {
+                "branch": "development",
+                "describe": "v1.11-12-ge9d9c93d",
+                "short_tag": "v1.11",
+            },
+            requested_branch="development",
+            requested_tag="v1.11",
+        )
+        is False
+    )
+    assert (
+        manager.installed_target_matches_request(
+            {
+                "branch": "development",
+                "describe": "v1.11",
+                "short_tag": "v1.11",
+            },
+            requested_branch="development",
+            requested_tag="latest",
+        )
+        is False
+    )
+
+
+def test_self_update_manager_fetch_release_refs_checks_peeled_tag_commit(monkeypatch):
+    manager = load_self_update_manager()
+    commands = []
+    monkeypatch.setattr(
+        manager,
+        "run_command",
+        lambda command, **kwargs: commands.append(command),
+    )
+
+    manager.fetch_release_refs(
+        Path("/tmp/repo"),
+        "development",
+        "v1.10",
+        manager.NullLogger(),
+    )
+
+    assert commands[1][-2] == "refs/tags/v1.10^{commit}"
+
+
+def test_self_update_manager_latest_on_non_main_rejects_cross_major(monkeypatch):
+    manager = load_self_update_manager()
+    monkeypatch.setattr(
+        manager,
+        "fetch_branch_refs",
+        lambda repo_dir, branch, logger: "refs/remotes/a0-self-update/development",
+    )
+    monkeypatch.setattr(
+        manager,
+        "git_output",
+        lambda repo_dir, *args: {
+            ("describe", "--tags", "--always", "refs/remotes/a0-self-update/development"): "v2.0-3-gabc1234",
+            ("rev-parse", "refs/remotes/a0-self-update/development"): "abc123456789",
+        }[args],
+    )
+
+    with pytest.raises(RuntimeError, match=r"Use an explicit tag to change major versions"):
+        manager.resolve_requested_target(
+            Path("/tmp/repo"),
+            "development",
+            "latest",
+            "v1.2",
+            manager.NullLogger(),
+        )
+
+
+def test_self_update_schedule_rejects_latest_when_durable_updater_lacks_support(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        self_update,
+        "get_repo_version_info",
+        lambda _repo: {
+            "branch": "development",
+            "describe": "v1.4-2-gabc1234",
+            "short_tag": "v1.4",
+            "commit": "abc1234",
+            "short_commit": "abc1234",
+        },
+    )
+    monkeypatch.setattr(
+        self_update,
+        "get_available_branch_values",
+        lambda repo_dir=None: ["development", "ready", "testing", "main"],
+    )
+    monkeypatch.setattr(
+        self_update,
+        "durable_self_update_supports_latest",
+        lambda repo_dir=None: False,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"durable updater does not support the latest selector",
+    ):
+        self_update.schedule_update(
+            branch="development",
+            tag="latest",
             backup_usr=True,
             backup_path="",
             backup_name="",

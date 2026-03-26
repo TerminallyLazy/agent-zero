@@ -20,7 +20,7 @@ permissions:
 
 env:
   DEFAULT_INACTIVE_DAYS: "90"
-  DEFAULT_DRY_RUN: "true"
+  DEFAULT_DRY_RUN: "false"
 
 jobs:
   close_inactive:
@@ -103,6 +103,6 @@ jobs:
               }
             }
 
-            const base = `repo:${owner}/${repo} is:open updated:<${cutoffDate}`;
+            const base = `repo:${owner}/${repo} is:open updated:<${cutoffDate} sort:updated-asc`;
             await processQuery("issues", `${base} is:issue`);
             await processQuery("pull requests", `${base} is:pr`);

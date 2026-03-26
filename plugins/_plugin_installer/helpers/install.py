@@ -286,9 +286,9 @@ def run_install_hook(plugin_name: str):
 def run_pre_update_hook(plugin_name: str):
     return plugins.call_plugin_hook(plugin_name, "pre_update")
 
-def get_plugin_hub_index() -> dict[str, Any]:
+def get_plugin_hub_index(force: bool = False) -> dict[str, Any]:
     """Return the plugin index plus installed Plugin Hub keys."""
-    index_data = fetch_plugin_index()
+    index_data = fetch_plugin_index(force=force)
     if not isinstance(index_data, dict):
         raise ValueError("Plugin index response was not a JSON object")
 
@@ -339,10 +339,19 @@ def get_plugin_hub_index() -> dict[str, Any]:
     return {"index": index_data, "installed_plugins": installed_keys}
 
 
-def fetch_plugin_index() -> dict:
+def fetch_plugin_index(force: bool = False) -> dict:
     """Download the plugin index from GitHub releases."""
     index_url = "https://github.com/agent0ai/a0-plugins/releases/download/generated-index/index.json"
-    req = urllib.request.Request(index_url, headers={"User-Agent": "AgentZero"})
+    if force:
+        separator = "&" if "?" in index_url else "?"
+        index_url = f"{index_url}{separator}ts={time.time_ns()}"
+
+    headers = {"User-Agent": "AgentZero"}
+    if force:
+        headers["Cache-Control"] = "no-cache"
+        headers["Pragma"] = "no-cache"
+
+    req = urllib.request.Request(index_url, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read().decode())
     return data

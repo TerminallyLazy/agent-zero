@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import os
 import subprocess
 import base64
+import re
 from urllib.parse import urlparse, urlunparse
 from helpers import files
 
@@ -98,6 +99,33 @@ class GitRepoReleaseInfo:
 
 def _format_git_timestamp(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _split_describe_version(describe: str) -> tuple[str, int]:
+    normalized = describe.strip()
+    match = re.fullmatch(r"(.+)-(\d+)-g[0-9a-f]+", normalized)
+    if not match:
+        return normalized, 0
+    return match.group(1), int(match.group(2))
+
+
+def _format_release_version(
+    branch: str,
+    short_tag: str,
+    commits_since_tag: int,
+    commit_hash: str,
+) -> str:
+    version_prefix = branch[0].upper() if branch else "D"
+    version_core = short_tag or commit_hash[:7]
+
+    if (
+        short_tag
+        and commits_since_tag > 0
+        and branch.strip().lower() != "main"
+    ):
+        version_core = f"{short_tag}+{commits_since_tag}"
+
+    return f"{version_prefix} {version_core}"
 
 
 def get_remote_releases(author: str, repo: str) -> GitRemoteReleasesResult:
@@ -289,13 +317,10 @@ def get_repo_release_info(repo_path: str) -> GitRepoReleaseInfo:
         tag = ""
         short_tag = ""
         release_time = ""
+        commits_since_tag = 0
         try:
-            tag = repo.git.describe(tags=True)
-            tag_split = tag.split('-')
-            if len(tag_split) >= 3:
-                short_tag = "-".join(tag_split[:-1])
-            else:
-                short_tag = tag
+            tag = repo.git.describe(tags=True, always=True)
+            short_tag, commits_since_tag = _split_describe_version(tag)
 
             tag_ref = next((t for t in repo.tags if t.name == short_tag), None)
             if tag_ref:
@@ -305,9 +330,14 @@ def get_repo_release_info(repo_path: str) -> GitRepoReleaseInfo:
             tag = ""
             short_tag = ""
             release_time = ""
+            commits_since_tag = 0
 
-        version_prefix = branch[0].upper() if branch else "D"
-        version = version_prefix + " " + (short_tag or commit.hexsha[:7])
+        version = _format_release_version(
+            branch,
+            short_tag,
+            commits_since_tag,
+            commit.hexsha,
+        )
 
         return GitRepoReleaseInfo(
             is_git_repo=True,

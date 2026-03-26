@@ -1,4 +1,5 @@
 import { createStore } from "/js/AlpineStore.js";
+import { store as pluginSettingsStore } from "/components/plugins/plugin-settings-store.js";
 
 
 export const MODEL_SECTIONS = [
@@ -59,6 +60,12 @@ export const store = createStore("modelConfig", {
   // Global presets state
   globalPresets: [],
   _presetsLoaded: false,
+
+  // Settings include summary state
+  modelsSummary: [],
+  modelsSummaryLoading: false,
+  _modelsSummaryLoaded: false,
+  _modelsSummaryPromise: null,
 
   // Switcher state
   switcherAllowed: false,
@@ -462,6 +469,59 @@ export const store = createStore("modelConfig", {
       { icon: 'manufacturing', title: 'Utility', cfg: cfg.utility_model, pList: chatP },
       { icon: 'database', title: 'Embedding', cfg: cfg.embedding_model, pList: embedP },
     ].map(s => ({ icon: s.icon, title: s.title, provider: label(s.pList, s.cfg?.provider), name: s.cfg?.name || '\u2014' }));
+  },
+
+  async refreshModelsSummary() {
+    if (this._modelsSummaryPromise) return await this._modelsSummaryPromise;
+
+    this.modelsSummaryLoading = true;
+    this._modelsSummaryPromise = (async () => {
+      try {
+        const models = await this.loadModelsSummary();
+        this.modelsSummary = models;
+        this._modelsSummaryLoaded = true;
+        return models;
+      } catch (e) {
+        console.error('Failed to load models summary:', e);
+        this.modelsSummary = [];
+        this._modelsSummaryLoaded = true;
+        return [];
+      }
+    })();
+
+    try {
+      return await this._modelsSummaryPromise;
+    } finally {
+      this._modelsSummaryPromise = null;
+      this.modelsSummaryLoading = false;
+    }
+  },
+
+  async ensureModelsSummaryLoaded() {
+    if (this._modelsSummaryLoaded) return this.modelsSummary;
+    return await this.refreshModelsSummary();
+  },
+
+  async openConfigFromSummary() {
+    try {
+      await pluginSettingsStore.openConfig('_model_config');
+    } finally {
+      await this.refreshModelsSummary();
+    }
+  },
+
+  async openPresetsFromSummary() {
+    await window.openModal?.('/plugins/_model_config/webui/main.html');
+  },
+
+  async openApiKeysFromSummary() {
+    try {
+      await window.openModal?.('/plugins/_model_config/webui/api-keys.html');
+    } finally {
+      await this.refreshApiKeyStatus().catch((e) => {
+        console.error('Failed to refresh API key status:', e);
+      });
+    }
   },
 
   // Switcher high-level methods

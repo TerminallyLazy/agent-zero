@@ -5,6 +5,7 @@ from helpers.extension import Extension
 from helpers.errors import format_error
 from helpers.print_style import PrintStyle
 from helpers import plugins
+from plugins._telegram_integration.helpers.dependencies import ensure_dependencies, has_aiogram
 
 
 PLUGIN_NAME: str = "_telegram_integration"
@@ -13,6 +14,19 @@ PLUGIN_NAME: str = "_telegram_integration"
 class TelegramBotManager(Extension):
 
     async def execute(self, **kwargs: Any) -> None:
+        config = plugins.get_plugin_config(PLUGIN_NAME) or {}
+        bots_cfg = config.get("bots", [])
+        enabled_names = {
+            b["name"] for b in bots_cfg if b.get("enabled") and b.get("name") and b.get("token")
+        }
+
+        # Avoid installing aiogram on idle ticks when Telegram is not configured.
+        if not enabled_names and not has_aiogram():
+            return
+
+        if enabled_names:
+            ensure_dependencies()
+
         from plugins._telegram_integration.helpers.bot_manager import (
             get_all_bots,
             create_bot,
@@ -31,12 +45,6 @@ class TelegramBotManager(Extension):
         )
 
         cleanup_old_attachments()
-
-        config = plugins.get_plugin_config(PLUGIN_NAME) or {}
-        bots_cfg = config.get("bots", [])
-        enabled_names = {
-            b["name"] for b in bots_cfg if b.get("enabled") and b.get("name") and b.get("token")
-        }
 
         running = get_all_bots()
 

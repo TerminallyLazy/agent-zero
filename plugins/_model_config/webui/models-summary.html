@@ -7,7 +7,6 @@
 <body>
   <script type="module">
     import { store } from "/plugins/_model_config/webui/model-config-store.js";
-    import { store as pluginListStore } from "/components/plugins/list/pluginListStore.js";
   </script>
 
   <div x-data>
@@ -19,21 +18,18 @@
         </div>
 
         <!-- Read-only model config summary -->
-        <div x-data="{ loading: true, models: [] }" x-init="
-           models = await $store.modelConfig.loadModelsSummary().catch(() => []);
-           loading = false;
-         " class="model-summary">
+        <div x-init="$store.modelConfig.refreshModelsSummary()" class="model-summary">
           <div class="model-summary-header">
             <div class="field-title">Current Models</div>
             <div class="field-description">Active model configuration resolved from global, project, and agent profile
               scopes.</div>
           </div>
-          <div x-show="loading" style="text-align:center; padding:12px;">
+          <div x-show="$store.modelConfig.modelsSummaryLoading" style="text-align:center; padding:12px;">
             <span class="material-symbols-outlined spinning" style="font-size:18px;">progress_activity</span>
           </div>
-          <template x-if="!loading && models.length">
+          <template x-if="!$store.modelConfig.modelsSummaryLoading && $store.modelConfig.modelsSummary.length">
             <div class="model-summary-grid">
-              <template x-for="m in models" :key="m.title">
+              <template x-for="m in $store.modelConfig.modelsSummary" :key="m.title">
                 <div class="model-summary-row">
                   <span class="material-symbols-outlined model-summary-icon" x-text="m.icon"></span>
                   <span class="model-summary-label" x-text="m.title"></span>
@@ -49,13 +45,13 @@
         </div>
 
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-          <button class="btn btn-field" @click="$store.pluginListStore.openPluginConfig({ name: '_model_config', has_config_screen: true })">
+          <button class="btn btn-field" @click="$store.modelConfig.openConfigFromSummary()">
             Configure Models
           </button>
-          <button class="btn btn-field" @click="openModal('/plugins/_model_config/webui/main.html')">
+          <button class="btn btn-field" @click="$store.modelConfig.openPresetsFromSummary()">
             Configure Presets
           </button>
-          <button class="btn btn-field" @click="openModal('/plugins/_model_config/webui/api-keys.html')">
+          <button class="btn btn-field" @click="$store.modelConfig.openApiKeysFromSummary()">
             Configure API Keys
           </button>
         </div>

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -38,6 +39,11 @@ DEFAULT_HEALTH_TIMEOUT_SECONDS = int(
 DEFAULT_HEALTH_POLL_INTERVAL_SECONDS = float(
     os.environ.get("A0_SELF_UPDATE_HEALTH_POLL_INTERVAL_SECONDS", "2")
 )
+DEFAULT_BACKUP_DIR = "/root/update-backups"
+DEFAULT_BACKUP_CONFLICT_POLICY = "rename"
+BACKUP_CONFLICT_POLICIES = {"rename", "overwrite", "fail"}
+MIN_SELECTOR_VERSION = (1, 0)
+LATEST_SELECTOR_TAG = "latest"
 
 
 def now_iso() -> str:
@@ -115,6 +121,132 @@ def normalize_describe_to_version(describe: str) -> str:
     if match:
         return match.group(1)
     return describe
+
+
+def split_describe_version(describe: str) -> tuple[str, int]:
+    normalized = describe.strip()
+    match = re.fullmatch(r"(.+)-(\d+)-g[0-9a-f]+", normalized)
+    if not match:
+        return normalized, 0
+    return match.group(1), int(match.group(2))
+
+
+def parse_selector_version(tag: str) -> tuple[int, int] | None:
+    match = re.fullmatch(r"v(\d+)\.(\d+)", tag.strip())
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def is_valid_selector_tag(tag: str) -> bool:
+    return parse_selector_version(tag) is not None
+
+
+def is_supported_selector_tag(tag: str) -> bool:
+    parsed = parse_selector_version(tag)
+    return parsed is not None and parsed >= MIN_SELECTOR_VERSION
+
+
+def sort_selector_supported_tags(tags: list[str]) -> list[str]:
+    return sorted(
+        tags,
+        key=lambda tag: parse_selector_version(tag) or (-1, -1),
+        reverse=True,
+    )
+
+
+def parse_major_version(tag: str) -> int | None:
+    match = re.fullmatch(r"v(\d+)(?:[.-].*)?", tag.strip())
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def is_latest_selector_tag(tag: str) -> bool:
+    return tag.strip().lower() == LATEST_SELECTOR_TAG
+
+
+def get_tag_commit_ref(tag: str) -> str:
+    return f"refs/tags/{tag}^{{commit}}"
+
+
+def build_default_backup_name() -> str:
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    return f"usr-{timestamp}.zip"
+
+
+def normalize_requested_tag(tag: str) -> str:
+    normalized = (tag or "").strip()
+    if not normalized:
+        return LATEST_SELECTOR_TAG
+    if is_latest_selector_tag(normalized):
+        return LATEST_SELECTOR_TAG
+    if not is_valid_selector_tag(normalized):
+        raise ValueError("Release tag must use the format vX.Y.")
+    if not is_supported_selector_tag(normalized):
+        raise ValueError("Release tag must be v1.0 or newer.")
+    return normalized
+
+
+def normalize_backup_conflict_policy(conflict_policy: str) -> str:
+    normalized = (conflict_policy or DEFAULT_BACKUP_CONFLICT_POLICY).strip().lower()
+    if normalized not in BACKUP_CONFLICT_POLICIES:
+        raise ValueError("Backup conflict policy must be one of: rename, overwrite, fail.")
+    return normalized
+
+
+def get_latest_same_major_tag(
+    repo_dir: Path,
+    *,
+    branch_ref: str,
+    current_version: str,
+) -> str:
+    current_major = parse_major_version(current_version)
+    if current_major is None:
+        raise RuntimeError(
+            f"Could not determine the installed major version from {current_version}. "
+            "Use an explicit tag instead of latest."
+        )
+
+    output = git_output(repo_dir, "tag", "--merged", branch_ref)
+    same_major_tags = [
+        tag
+        for tag in (line.strip() for line in output.splitlines())
+        if is_supported_selector_tag(tag) and parse_major_version(tag) == current_major
+    ]
+    if not same_major_tags:
+        raise RuntimeError(
+            f"No v{current_major}.x release tags are reachable from branch "
+            f"{branch_ref.rsplit('/', 1)[-1]}."
+        )
+    return sort_selector_supported_tags(same_major_tags)[0]
+
+
+def ensure_latest_target_matches_current_major(
+    *,
+    branch: str,
+    current_version: str,
+    target_version: str,
+) -> None:
+    current_major = parse_major_version(current_version)
+    if current_major is None:
+        raise RuntimeError(
+            f"Could not determine the installed major version from {current_version}. "
+            "Use an explicit tag instead of latest."
+        )
+
+    target_major = parse_major_version(target_version)
+    if target_major is None or not is_supported_selector_tag(target_version):
+        raise RuntimeError(
+            f"Could not resolve latest on branch {branch} to a supported vX.Y release. "
+            "Use an explicit tag instead."
+        )
+
+    if target_major != current_major:
+        raise RuntimeError(
+            f"Latest on branch {branch} resolves to {target_version}, but the installed "
+            f"version is {current_version}. Use an explicit tag to change major versions."
+        )
 
 
 def get_repo_version_info(repo_dir: Path) -> dict[str, str]:
@@ -365,6 +497,7 @@ def clean_repo_worktree(
 
 def fetch_release_refs(repo_dir: Path, branch: str, tag: str, logger: AttemptLogger) -> None:
     remote_branch_ref = f"refs/remotes/a0-self-update/{branch}"
+    tag_commit_ref = get_tag_commit_ref(tag)
     logger.log(f"Fetching branch {branch} and tag {tag} from {OFFICIAL_REPO_URL}")
     run_command(
         [
@@ -388,7 +521,7 @@ def fetch_release_refs(repo_dir: Path, branch: str, tag: str, logger: AttemptLog
             str(repo_dir),
             "merge-base",
             "--is-ancestor",
-            f"refs/tags/{tag}",
+            tag_commit_ref,
             remote_branch_ref,
         ],
         cwd=None,
@@ -397,15 +530,97 @@ def fetch_release_refs(repo_dir: Path, branch: str, tag: str, logger: AttemptLog
     )
 
 
-def checkout_target_release(
+def fetch_branch_refs(repo_dir: Path, branch: str, logger: AttemptLogger) -> str:
+    remote_branch_ref = f"refs/remotes/a0-self-update/{branch}"
+    logger.log(f"Fetching branch {branch} and tags from {OFFICIAL_REPO_URL}")
+    run_command(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "fetch",
+            "--force",
+            "--tags",
+            OFFICIAL_REPO_URL,
+            f"+refs/heads/{branch}:{remote_branch_ref}",
+        ],
+        cwd=None,
+        logger=logger,
+        error_message=f"Failed to fetch branch {branch} from the official repository.",
+    )
+    return remote_branch_ref
+
+
+def resolve_requested_target(
     repo_dir: Path,
     branch: str,
     tag: str,
+    current_version: str,
+    logger: AttemptLogger,
+) -> dict[str, str]:
+    normalized_tag = tag.strip()
+
+    if not is_latest_selector_tag(normalized_tag):
+        fetch_release_refs(repo_dir, branch, normalized_tag, logger)
+        tag_commit_ref = get_tag_commit_ref(normalized_tag)
+        return {
+            "requested_tag": normalized_tag,
+            "effective_tag": normalized_tag,
+            "target_ref": f"refs/tags/{normalized_tag}",
+            "expected_short_tag": normalized_tag,
+            "expected_commit": git_output(repo_dir, "rev-parse", tag_commit_ref),
+            "target_description": f"tag {normalized_tag}",
+        }
+
+    remote_branch_ref = fetch_branch_refs(repo_dir, branch, logger)
+    if branch == "main":
+        effective_tag = get_latest_same_major_tag(
+            repo_dir,
+            branch_ref=remote_branch_ref,
+            current_version=current_version,
+        )
+        tag_commit_ref = get_tag_commit_ref(effective_tag)
+        logger.log(f"Resolved latest on main to tag {effective_tag}")
+        return {
+            "requested_tag": LATEST_SELECTOR_TAG,
+            "effective_tag": effective_tag,
+            "target_ref": f"refs/tags/{effective_tag}",
+            "expected_short_tag": effective_tag,
+            "expected_commit": git_output(repo_dir, "rev-parse", tag_commit_ref),
+            "target_description": f"latest tag {effective_tag}",
+        }
+
+    head_describe = git_output(repo_dir, "describe", "--tags", "--always", remote_branch_ref)
+    head_short_tag = normalize_describe_to_version(head_describe)
+    head_commit = git_output(repo_dir, "rev-parse", remote_branch_ref)
+    ensure_latest_target_matches_current_major(
+        branch=branch,
+        current_version=current_version,
+        target_version=head_short_tag,
+    )
+    logger.log(
+        f"Resolved latest on branch {branch} to commit {head_commit[:7]} ({head_describe})"
+    )
+    return {
+        "requested_tag": LATEST_SELECTOR_TAG,
+        "effective_tag": head_short_tag,
+        "target_ref": remote_branch_ref,
+        "expected_short_tag": head_short_tag,
+        "expected_commit": head_commit,
+        "target_description": f"latest branch state {head_describe}",
+    }
+
+
+def checkout_target_release(
+    repo_dir: Path,
+    branch: str,
+    target_ref: str,
+    target_description: str,
     logger: AttemptLogger,
     *,
     exclude_paths: list[Path] | None = None,
 ) -> None:
-    logger.log(f"Checking out branch {branch} at tag {tag}")
+    logger.log(f"Checking out branch {branch} at {target_description}")
     run_command(
         [
             "git",
@@ -414,11 +629,11 @@ def checkout_target_release(
             "checkout",
             "-B",
             branch,
-            f"refs/tags/{tag}",
+            target_ref,
         ],
         cwd=None,
         logger=logger,
-        error_message=f"Failed to check out requested tag {tag} on branch {branch}.",
+        error_message=f"Failed to check out requested {target_description} on branch {branch}.",
     )
     clean_repo_worktree(repo_dir, logger, exclude_paths=exclude_paths)
 
@@ -492,6 +707,7 @@ def wait_for_health(
     timeout_seconds: int,
     poll_interval_seconds: float,
     expected_version: str | None = None,
+    expected_commit: str | None = None,
     logger: AttemptLogger,
 ) -> tuple[bool, dict[str, Any] | str]:
     deadline = time.monotonic() + timeout_seconds
@@ -514,7 +730,13 @@ def wait_for_health(
                 payload = json.loads(body) if body else {}
                 git_info = payload.get("gitinfo") or {}
                 current_version = (git_info.get("short_tag") or "").strip()
-                if expected_version and current_version and current_version != expected_version:
+                current_commit = (git_info.get("commit_hash") or "").strip()
+                if expected_commit and current_commit and current_commit != expected_commit:
+                    last_error = (
+                        f"Health check responded, but commit {current_commit} does not match "
+                        f"expected {expected_commit}."
+                    )
+                elif expected_version and current_version and current_version != expected_version:
                     last_error = (
                         f"Health check responded, but version {current_version} does not match "
                         f"expected {expected_version}."
@@ -602,6 +824,7 @@ def execute_pending_update(
     branch = str(request_data.get("branch", "")).strip()
     tag = str(request_data.get("tag", "")).strip()
     backup_exclusions: list[Path] = []
+    resolved_target: dict[str, str] | None = None
 
     try:
         if not branch:
@@ -614,7 +837,7 @@ def execute_pending_update(
         if bool(request_data.get("backup_usr", True)):
             backup_destination = create_usr_backup(
                 repo_dir=REPO_DIR,
-                backup_path=str(request_data.get("backup_path", "/a0/tmp/self-update-backups")),
+                backup_path=str(request_data.get("backup_path", "/root/update-backups")),
                 backup_name=str(request_data.get("backup_name", "agent-zero-usr-backup.zip")),
                 conflict_policy=str(request_data.get("backup_conflict_policy", "rename")),
                 logger=logger,
@@ -622,7 +845,13 @@ def execute_pending_update(
             backup_zip_path = str(backup_destination)
             backup_exclusions.append(backup_destination)
 
-        fetch_release_refs(REPO_DIR, branch, tag, logger)
+        resolved_target = resolve_requested_target(
+            REPO_DIR,
+            branch,
+            tag,
+            source_info["short_tag"],
+            logger,
+        )
 
         repository_changed = True
         logger.log(
@@ -632,16 +861,22 @@ def execute_pending_update(
         checkout_target_release(
             REPO_DIR,
             branch,
-            tag,
+            resolved_target["target_ref"],
+            resolved_target["target_description"],
             logger,
             exclude_paths=backup_exclusions,
         )
 
         current_info = get_repo_version_info(REPO_DIR)
-        if current_info["short_tag"] != tag:
+        if resolved_target.get("expected_commit") and current_info["commit"] != resolved_target["expected_commit"]:
+            raise RuntimeError(
+                "Git checkout completed but the repository commit does not match the requested target. "
+                f"Expected {resolved_target['expected_commit']}, got {current_info['commit']}."
+            )
+        if resolved_target.get("expected_short_tag") and current_info["short_tag"] != resolved_target["expected_short_tag"]:
             raise RuntimeError(
                 "Git checkout completed but the repository version does not match the requested tag. "
-                f"Expected {tag}, got {current_info['short_tag']}."
+                f"Expected {resolved_target['expected_short_tag']}, got {current_info['short_tag']}."
             )
 
         updated_process = launch_ui_process(REPO_DIR, logger)
@@ -650,13 +885,14 @@ def execute_pending_update(
             health_url=DEFAULT_HEALTH_URL,
             timeout_seconds=DEFAULT_HEALTH_TIMEOUT_SECONDS,
             poll_interval_seconds=DEFAULT_HEALTH_POLL_INTERVAL_SECONDS,
-            expected_version=tag,
+            expected_version=resolved_target.get("expected_short_tag"),
+            expected_commit=resolved_target.get("expected_commit"),
             logger=logger,
         )
         if healthy:
             record_result(
                 status="success",
-                message=f"Updated Agent Zero to branch {branch}, tag {tag}.",
+                message=f"Updated Agent Zero to branch {branch}, {resolved_target['target_description']}.",
                 request_data=request_data,
                 source_info=source_info,
                 current_version=current_info["short_tag"],
@@ -784,6 +1020,126 @@ def load_request_file() -> tuple[dict[str, Any] | None, str]:
         TRIGGER_FILE.unlink(missing_ok=True)
 
 
+def queue_update_request(
+    *,
+    branch: str = "main",
+    tag: str = LATEST_SELECTOR_TAG,
+    backup_usr: bool = True,
+    backup_path: str = DEFAULT_BACKUP_DIR,
+    backup_name: str = "",
+    backup_conflict_policy: str = DEFAULT_BACKUP_CONFLICT_POLICY,
+) -> dict[str, Any]:
+    source_info = get_repo_version_info(REPO_DIR)
+    normalized_branch = (branch or "").strip().lower() or "main"
+    normalized_tag = normalize_requested_tag(tag)
+    normalized_policy = normalize_backup_conflict_policy(backup_conflict_policy)
+    normalized_backup_path = (backup_path or "").strip() or DEFAULT_BACKUP_DIR
+    normalized_backup_name = sanitize_filename(
+        backup_name,
+        build_default_backup_name(),
+    )
+
+    payload = {
+        "branch": normalized_branch,
+        "tag": normalized_tag,
+        "source_version": source_info["short_tag"],
+        "source_describe": source_info["describe"],
+        "source_commit": source_info["commit"],
+        "requested_at": now_iso(),
+        "backup_usr": bool(backup_usr),
+        "backup_path": normalized_backup_path,
+        "backup_name": normalized_backup_name,
+        "backup_conflict_policy": normalized_policy,
+    }
+    write_yaml(TRIGGER_FILE, payload)
+    return payload
+
+
+def installed_target_matches_request(
+    current_info: dict[str, str],
+    *,
+    requested_branch: str,
+    requested_tag: str,
+) -> bool:
+    normalized_tag = requested_tag.strip()
+    if not normalized_tag or is_latest_selector_tag(normalized_tag):
+        return False
+
+    current_branch = current_info.get("branch", "").strip()
+    if requested_branch.strip() and current_branch != requested_branch.strip():
+        return False
+
+    return current_info.get("describe", "").strip() == normalized_tag
+
+
+def trigger_update_command(args: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="trigger_self_update.sh",
+        description="Queue an Agent Zero self-update for the next startup attempt.",
+    )
+    parser.add_argument(
+        "branch",
+        nargs="?",
+        default="main",
+        help="Target official branch. Default: main",
+    )
+    parser.add_argument(
+        "tag",
+        nargs="?",
+        default=LATEST_SELECTOR_TAG,
+        help='Target release tag such as v1.10 or "latest". Default: latest',
+    )
+    parser.add_argument(
+        "--backup-dir",
+        default=DEFAULT_BACKUP_DIR,
+        help=f"Directory for the usr backup zip. Default: {DEFAULT_BACKUP_DIR}",
+    )
+    parser.add_argument(
+        "--backup-name",
+        default="",
+        help="Backup zip filename. Default: autogenerated usr-YYYYMMDD-HHMMSS.zip",
+    )
+    parser.add_argument(
+        "--backup-conflict-policy",
+        default=DEFAULT_BACKUP_CONFLICT_POLICY,
+        choices=sorted(BACKUP_CONFLICT_POLICIES),
+        help="How to handle an existing backup zip. Default: rename",
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        help="Skip creating a usr backup before the update.",
+    )
+    parsed = parser.parse_args(args)
+
+    try:
+        payload = queue_update_request(
+            branch=parsed.branch,
+            tag=parsed.tag,
+            backup_usr=not parsed.no_backup,
+            backup_path=parsed.backup_dir,
+            backup_name=parsed.backup_name,
+            backup_conflict_policy=parsed.backup_conflict_policy,
+        )
+    except Exception as exc:
+        print(f"Failed to queue self-update: {exc}", file=sys.stderr)
+        return 1
+
+    print("Queued Agent Zero self-update for the next startup attempt.")
+    print(f"Branch: {payload['branch']}")
+    print(f"Version: {payload['tag']}")
+    if payload["backup_usr"]:
+        print(f"Backup dir: {payload['backup_path']}")
+        print(f"Backup name: {payload['backup_name']}")
+        print(f"Backup conflict policy: {payload['backup_conflict_policy']}")
+    else:
+        print("Backup: disabled")
+    print(f"Trigger file: {TRIGGER_FILE}")
+    print(f"Log file: {LOG_FILE}")
+    print("Restart the container or Agent Zero process to apply it.")
+    return 0
+
+
 def docker_run_ui() -> int:
     request_data, raw_text = load_request_file()
     logger = AttemptLogger(LOG_FILE)
@@ -798,11 +1154,10 @@ def docker_run_ui() -> int:
             current = get_repo_version_info(REPO_DIR)
             requested_branch = str(request_data.get("branch", "")).strip()
             requested_tag = str(request_data.get("tag", "")).strip()
-            current_branch = current.get("branch", "").strip()
-            if (
-                requested_tag
-                and current["short_tag"] == requested_tag
-                and (not requested_branch or current_branch == requested_branch)
+            if installed_target_matches_request(
+                current,
+                requested_branch=requested_branch,
+                requested_tag=requested_tag,
             ):
                 logger.log(
                     "Requested tag already matches the installed version, skipping file replacement."
@@ -846,10 +1201,15 @@ def docker_run_ui() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
-    if args and args[0] not in {"docker-run-ui"}:
-        print(f"Unknown command: {args[0]}", file=sys.stderr)
-        return 1
-    return docker_run_ui()
+    if not args or args[0] == "docker-run-ui":
+        return docker_run_ui()
+    if args[0] == "trigger-update":
+        return trigger_update_command(args[1:])
+    if args[0] in {"-h", "--help"}:
+        print("Usage: self_update_manager.py [docker-run-ui | trigger-update ...]")
+        return 0
+    print(f"Unknown command: {args[0]}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

@@ -2,10 +2,14 @@ from helpers.extension import Extension
 from helpers.print_style import PrintStyle
 from helpers.errors import format_error
 from agent import AgentContext, LoopData, UserMessage
-from plugins._telegram_integration.helpers.handler import (
-    CTX_TG_BOT, CTX_TG_ATTACHMENTS, CTX_TG_KEYBOARD,
-    CTX_TG_TYPING_STOP, CTX_TG_REPLY_TO,
+from plugins._telegram_integration.helpers.constants import (
+    CTX_TG_BOT,
+    CTX_TG_ATTACHMENTS,
+    CTX_TG_KEYBOARD,
+    CTX_TG_TYPING_STOP,
+    CTX_TG_REPLY_TO,
 )
+from plugins._telegram_integration.helpers.dependencies import ensure_dependencies
 
 MAX_SEND_RETRIES: int = 2
 CTX_SEND_FAILURES: str = "_telegram_send_failures"
@@ -46,6 +50,7 @@ class TelegramAutoReply(Extension):
         attachments: list[str],
         keyboard: list[list[dict]] | None,
     ):
+        ensure_dependencies()
         from plugins._telegram_integration.helpers.handler import send_telegram_reply
 
         error = await send_telegram_reply(

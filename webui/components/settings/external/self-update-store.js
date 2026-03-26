@@ -5,9 +5,9 @@ import { openModal, closeModal } from "/js/modals.js";
 
 const HEALTH_POLL_INTERVAL_MS = 2000;
 const HEALTH_WAIT_BUFFER_MS = 30000;
-const SELF_UPDATE_RETURN_URL_KEY = "a0:self-update:return-url";
 const SELF_UPDATE_OVERLAY_ID = "self-update-progress-overlay";
 const SELF_UPDATE_MODAL_PATH = "settings/external/self-update-modal.html";
+const SELF_UPDATE_MANUAL_BACKUP_MODAL_PATH = "settings/backup/backup_restore.html";
 const MIN_SELECTOR_VERSION = [1, 0];
 
 const model = {
@@ -18,9 +18,8 @@ const model = {
   error: "",
   tagsError: "",
   info: null,
-  tagSuggestions: [],
-  tagDropdownOpen: false,
-  tagExistenceChecked: false,
+  availableTagOptions: [],
+  higherMajorVersions: [],
   restartStatusText: "",
   restartDetailText: "",
   form: {
@@ -43,70 +42,46 @@ const model = {
   },
 
   get currentVersion() {
-    return this.info?.current?.short_tag || "unknown";
+    return this.info?.current?.display_version || this.info?.current?.short_tag || "unknown";
   },
 
   get currentBranch() {
     return this.info?.current?.branch || "";
   },
 
-  get groupedTagSuggestions() {
-    const tags = Array.isArray(this.tagSuggestions) ? this.tagSuggestions : [];
-    const query = (this.form.tag || "").trim().toLowerCase();
-    if (!query) {
-      return { matched: [], rest: tags };
-    }
-
-    const matched = [];
-    const rest = [];
-    for (const tag of tags) {
-      if ((tag || "").toLowerCase().includes(query)) {
-        matched.push(tag);
-      } else {
-        rest.push(tag);
-      }
-    }
-    return { matched, rest };
-  },
-
   get trimmedTag() {
     return (this.form.tag || "").trim();
   },
 
+  get hasAvailableTags() {
+    return this.availableTagOptions.length > 0;
+  },
+
+  get availableTags() {
+    return this.availableTagOptions
+      .map((option) => option?.value || "")
+      .filter(Boolean);
+  },
+
   get selectedTagExistsOnBranch() {
     const tag = this.trimmedTag;
-    return Boolean(tag) && this.tagSuggestions.includes(tag);
+    return Boolean(tag) && this.availableTags.includes(tag);
   },
 
-  get versionCompatibilityWarning() {
-    const current = this.parseCompatibilityTag(this.currentVersion);
-    const target = this.parseCompatibilityTag(this.form.tag);
-    if (!current || !target) return "";
-    if (current.major !== target.major) {
-      return (
-        "Changing the first version number requires downloading a new Docker image, " +
-        "because those releases can include operating system level changes or other breaking changes."
-      );
-    }
-    return "";
+  get higherMajorVersionMessage() {
+    if (!this.higherMajorVersions.length) return "";
+    const versionLabels = this.higherMajorVersions.map((major) => `v${major}.x`);
+    const versionText =
+      versionLabels.length === 1
+        ? versionLabels[0]
+        : `${versionLabels.slice(0, -1).join(", ")} and ${versionLabels[versionLabels.length - 1]}`;
+    return `A newer major release line is available on this branch (${versionText}). Major upgrades require downloading a newer Docker image before using self-update.`;
   },
 
-  get tagExistenceWarning() {
-    const tag = this.trimmedTag;
-    if (
-      !this.tagExistenceChecked ||
-      this.tagsLoading ||
-      this.tagsError ||
-      !tag ||
-      !this.parseSelectorTag(tag) ||
-      !this.isSupportedSelectorTag(tag)
-    ) {
-      return "";
-    }
-    if (!this.selectedTagExistsOnBranch) {
-      return `Version ${tag} does not exist on branch ${this.form.branch || "main"}.`;
-    }
-    return "";
+  get versionSelectPlaceholder() {
+    if (this.tagsLoading) return "Loading versions...";
+    if (!this.hasAvailableTags) return "No versions available";
+    return "Select a version";
   },
 
   get canScheduleUpdate() {
@@ -114,9 +89,9 @@ const model = {
       this.isSupported &&
       !this.isBusy &&
       !this.tagsLoading &&
-      this.isSupportedSelectorTag(this.form.tag) &&
-      this.selectedTagExistsOnBranch &&
-      !this.versionCompatibilityWarning
+      this.hasAvailableTags &&
+      this.isSelectableTag(this.form.tag) &&
+      this.selectedTagExistsOnBranch
     );
   },
 
@@ -132,8 +107,8 @@ const model = {
     this.saving = false;
     this.restarting = false;
     this.tagsLoading = false;
-    this.tagDropdownOpen = false;
-    this.tagExistenceChecked = false;
+    this.availableTagOptions = [];
+    this.higherMajorVersions = [];
     this.restartStatusText = "";
     this.restartDetailText = "";
     this.removeProgressOverlay();
@@ -159,24 +134,27 @@ const model = {
     return `${branch || "main"} / ${tag || "None"}`;
   },
 
-  getSavedReturnUrl() {
-    try {
-      return sessionStorage.getItem(SELF_UPDATE_RETURN_URL_KEY) || "";
-    } catch {
-      return "";
-    }
+  normalizeLastStatus(status) {
+    return (status || "unknown").trim().toLowerCase();
   },
 
-  saveReturnUrl(url = "") {
-    try {
-      if (url) {
-        sessionStorage.setItem(SELF_UPDATE_RETURN_URL_KEY, url);
-      } else {
-        sessionStorage.removeItem(SELF_UPDATE_RETURN_URL_KEY);
-      }
-    } catch {
-      // ignore storage errors
+  getLastStatusLabel(status) {
+    const normalizedStatus = this.normalizeLastStatus(status);
+    return normalizedStatus ? normalizedStatus.replace(/_/g, " ") : "unknown";
+  },
+
+  getLastStatusBadgeClass(status) {
+    const normalizedStatus = this.normalizeLastStatus(status);
+    if (normalizedStatus === "success") {
+      return "status-pill-success";
     }
+    if (normalizedStatus === "failed" || normalizedStatus === "rollback_failed") {
+      return "status-pill-error";
+    }
+    if (normalizedStatus === "rolled_back") {
+      return "status-pill-warning";
+    }
+    return "status-pill-neutral";
   },
 
   getProgressOverlay() {
@@ -283,6 +261,11 @@ const model = {
     document.getElementById(`${SELF_UPDATE_OVERLAY_ID}-styles`)?.remove();
   },
 
+  resetRestartState() {
+    this.restartStatusText = "";
+    this.restartDetailText = "";
+  },
+
   setRestartState(statusText, detailText = "") {
     this.restartStatusText = statusText;
     this.restartDetailText = detailText;
@@ -300,9 +283,17 @@ const model = {
         throw new Error(response?.error || "Failed to load self-update info.");
       }
       this.info = response;
-      this.applyFormState(response.pending || response.defaults || {});
-      this.tagExistenceChecked = Boolean((this.form.tag || "").trim());
-      await this.searchTags({ openResults: false });
+      this.applyFormState(
+        response.pending || {
+          ...(response.defaults || {}),
+          tag: "",
+        },
+      );
+      this.applyAvailableTags({
+        options: response.available_tag_options,
+        higherMajorVersions: response.available_higher_major_versions,
+        error: response.available_tags_error,
+      });
     } catch (error) {
       console.error("Failed to load self-update info:", error);
       this.error = error.message || "Failed to load self-update info.";
@@ -313,12 +304,14 @@ const model = {
 
   applyFormState(source) {
     this.form.branch =
+      source?.branch ||
       this.info?.defaults?.branch ||
       this.currentBranch ||
-      source?.branch ||
       "main";
     this.form.tag =
-      typeof source?.tag === "string" ? source.tag : this.currentVersion;
+      typeof source?.tag === "string"
+        ? source.tag
+        : this.info?.defaults?.tag || this.currentVersion;
     this.form.backup_usr =
       typeof source?.backup_usr === "boolean" ? source.backup_usr : true;
     this.form.backup_path = source?.backup_path || "";
@@ -327,35 +320,39 @@ const model = {
       source?.backup_conflict_policy || "rename";
   },
 
-  closeTagDropdown() {
-    this.tagDropdownOpen = false;
+  applyAvailableTags({ options = [], higherMajorVersions = [], error = "" } = {}) {
+    this.availableTagOptions = Array.isArray(options) ? options : [];
+    this.higherMajorVersions = Array.isArray(higherMajorVersions)
+      ? higherMajorVersions
+      : [];
+    this.tagsError = error || "";
+
+    if (!this.availableTags.length) {
+      this.form.tag = "";
+      return;
+    }
+
+    const preferredTag = this.trimmedTag;
+    if (preferredTag && this.availableTags.includes(preferredTag)) {
+      return;
+    }
+
+    this.form.tag = "";
   },
 
   async openModal() {
     await openModal(SELF_UPDATE_MODAL_PATH);
   },
 
-  openTagDropdown() {
-    this.tagDropdownOpen = true;
+  async openManualBackupModal() {
+    await openModal(SELF_UPDATE_MANUAL_BACKUP_MODAL_PATH);
   },
 
   async onBranchChanged() {
-    this.openTagDropdown();
-    this.tagExistenceChecked = Boolean(this.trimmedTag);
-    await this.searchTags();
+    await this.fetchTags();
   },
 
-  onTagInput() {
-    this.tagExistenceChecked = false;
-    this.openTagDropdown();
-  },
-
-  async onTagBlur() {
-    this.tagExistenceChecked = Boolean(this.trimmedTag);
-    await this.searchTags({ openResults: false });
-  },
-
-  async searchTags({ openResults = true } = {}) {
+  async fetchTags() {
     const requestId = ++this._tagRequestId;
     this.tagsLoading = true;
     this.tagsError = "";
@@ -363,7 +360,6 @@ const model = {
     try {
       const response = await API.callJsonApi("self_update_tags", {
         branch: this.form.branch,
-        query: "",
       });
       if (!response?.success) {
         throw new Error(response?.error || "Failed to fetch release tags.");
@@ -371,30 +367,23 @@ const model = {
       if (requestId !== this._tagRequestId) {
         return;
       }
-      this.tagSuggestions = Array.isArray(response?.tags)
-        ? response.tags.filter((tag) => this.isSupportedSuggestionTag(tag))
-        : [];
-      this.tagsError = response?.error || "";
-      this.tagDropdownOpen = openResults;
+      this.applyAvailableTags({
+        options: response.tag_options,
+        higherMajorVersions: response.higher_major_versions,
+        error: response.error,
+      });
     } catch (error) {
       console.error("Failed to fetch self-update tags:", error);
       if (requestId !== this._tagRequestId) {
         return;
       }
-      this.tagSuggestions = [];
+      this.applyAvailableTags();
       this.tagsError = error.message || "Failed to fetch release tags.";
-      this.tagDropdownOpen = openResults;
     } finally {
       if (requestId === this._tagRequestId) {
         this.tagsLoading = false;
       }
     }
-  },
-
-  selectTag(tag) {
-    this.form.tag = tag;
-    this.tagExistenceChecked = true;
-    this.tagDropdownOpen = false;
   },
 
   parseSelectorTag(value) {
@@ -404,10 +393,6 @@ const model = {
       Number.parseInt(match[1], 10),
       Number.parseInt(match[2], 10),
     ];
-  },
-
-  isSupportedSuggestionTag(value) {
-    return this.isSupportedSelectorTag(value);
   },
 
   isSupportedSelectorTag(value) {
@@ -420,13 +405,12 @@ const model = {
     return true;
   },
 
-  parseCompatibilityTag(value) {
-    const match = /^v(\d+)\.(\d+)(?:\..+)?$/.exec((value || "").trim());
-    if (!match) return null;
-    return {
-      major: Number.parseInt(match[1], 10),
-      minor: Number.parseInt(match[2], 10),
-    };
+  isLatestSelectorTag(value) {
+    return (value || "").trim().toLowerCase() === "latest";
+  },
+
+  isSelectableTag(value) {
+    return this.isLatestSelectorTag(value) || this.isSupportedSelectorTag(value);
   },
 
   async scheduleUpdate() {
@@ -436,23 +420,22 @@ const model = {
     }
 
     if (!this.form.tag?.trim()) {
-      this.error = "Enter a release tag to schedule.";
+      this.error = "Choose a version from the list.";
       return;
     }
 
-    if (!this.parseSelectorTag(this.form.tag)) {
+    if (!this.isLatestSelectorTag(this.form.tag) && !this.parseSelectorTag(this.form.tag)) {
       this.error = "Release tag must use the format vX.Y.";
       return;
     }
 
-    if (!this.isSupportedSelectorTag(this.form.tag)) {
+    if (!this.isLatestSelectorTag(this.form.tag) && !this.isSupportedSelectorTag(this.form.tag)) {
       this.error = "Release tag must be v1.0 or newer.";
       return;
     }
 
     if (!this.selectedTagExistsOnBranch) {
-      this.tagExistenceChecked = true;
-      await this.searchTags({ openResults: false });
+      await this.fetchTags();
       if (!this.selectedTagExistsOnBranch) {
         this.error = `Version ${this.trimmedTag} does not exist on branch ${this.form.branch || "main"}.`;
         return;
@@ -461,6 +444,11 @@ const model = {
 
     this.saving = true;
     this.error = "";
+    this.setRestartState(
+      "Preparing update",
+      "Saving the request and asking Agent Zero to restart."
+    );
+    this.ensureProgressOverlay();
     try {
       const response = await API.callJsonApi("self_update_schedule", {
         branch: this.form.branch,
@@ -477,18 +465,22 @@ const model = {
       if (this.info) {
         this.info.pending = response.pending;
       }
-      await notificationStore.frontendWarning(
-        "Agent Zero is restarting to apply the requested branch and release tag.",
+      notificationStore.frontendWarning(
+        "Agent Zero is restarting to apply the requested branch and version target.",
         "Self Update",
         10,
         "self-update-restart",
         undefined,
         true,
-      );
-      this.saveReturnUrl(window.location.href);
+      ).catch((warningError) => {
+        console.error("Failed to show self-update warning toast:", warningError);
+      });
       await this.restartAndReload();
     } catch (error) {
       console.error("Failed to schedule self-update:", error);
+      this.restarting = false;
+      this.resetRestartState();
+      this.removeProgressOverlay();
       this.error = error.message || "Failed to schedule the self-update.";
     } finally {
       this.saving = false;
@@ -501,12 +493,14 @@ const model = {
     let observedBackendUnavailable = false;
     this.setRestartState(
       "Starting self-update",
-      "The request was saved. Agent Zero is about to restart and apply the requested branch and tag."
+      "The request was saved. Agent Zero is about to restart and apply the requested branch and version target."
     );
     this.ensureProgressOverlay();
 
+    let restartRequestStarted = false;
     try {
       const token = await API.getCsrfToken();
+      restartRequestStarted = true;
       const restartResponse = await fetch("/api/restart", {
         method: "POST",
         credentials: "same-origin",
@@ -518,10 +512,36 @@ const model = {
         body: JSON.stringify({}),
       });
       if (restartResponse && !restartResponse.ok) {
-        throw new Error(`Restart request failed with HTTP ${restartResponse.status}.`);
+        if (restartResponse.status >= 500) {
+          console.warn(
+            `Restart request returned HTTP ${restartResponse.status} while Agent Zero was shutting down. Continuing to wait for the new runtime.`
+          );
+          this.setRestartState(
+            "Restarting backend",
+            "Agent Zero is shutting down and applying the update. Waiting for the new runtime to come back healthy."
+          );
+        } else {
+          throw new Error(
+            `Restart request failed with HTTP ${restartResponse.status}.`
+          );
+        }
+      } else {
+        this.setRestartState(
+          "Restarting backend",
+          "Agent Zero accepted the restart request. Waiting for the updater to take over."
+        );
       }
-    } catch (_error) {
-      // The restart request often terminates the backend mid-flight.
+    } catch (error) {
+      if (!restartRequestStarted) {
+        this.restarting = false;
+        this.resetRestartState();
+        this.removeProgressOverlay();
+        throw error;
+      }
+      console.warn(
+        "Restart request connection closed while Agent Zero was restarting:",
+        error
+      );
     }
 
     const maxWaitMs =
@@ -545,9 +565,7 @@ const model = {
           cache: "no-store",
         });
         if (response.ok && observedBackendUnavailable) {
-          const returnUrl = this.getSavedReturnUrl() || window.location.href;
-          this.saveReturnUrl("");
-          window.location.replace(returnUrl);
+          window.location.reload();
           return;
         }
         if (response.ok) {
@@ -582,8 +600,8 @@ const model = {
     }
 
     this.restarting = false;
+    this.resetRestartState();
     this.removeProgressOverlay();
-    this.saveReturnUrl("");
     this.error =
       "Agent Zero did not come back within the expected window. It may still be rolling back. " +
       (lastError ? `Last health check error: ${lastError}` : "");

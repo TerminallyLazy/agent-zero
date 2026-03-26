@@ -110,7 +110,8 @@ const model = {
   },
 
   menuClick(event, panelElement) {
-    if (this.menuOpen && panelElement && !panelElement.contains(event.target)) {
+    if (!this.menuOpen || !panelElement) return;
+    if (!panelElement.contains(event.target)) {
       this.menuClose();
     }
   },

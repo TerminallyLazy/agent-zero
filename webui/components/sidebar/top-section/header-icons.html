@@ -4,6 +4,7 @@
     import { store as sidebarStore } from "/components/sidebar/sidebar-store.js";
     import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
     import { store as projectsStore } from "/components/projects/projects-store.js";
+    import { store as chatInputStore } from "/components/chat/input/input-store.js";
   </script>
 </head>
 <body>
@@ -61,7 +62,13 @@
         </button>
       </div>
 
-      <div class="dropdown-menu quick-actions-dropdown" x-show="$store.sidebar.menuOpen" :style="$store.sidebar.dropdownStyle">
+      <!-- Stop propagation so @click.window menuClick does not treat in-menu clicks as outside the header panel (fixed menu + confirm flow). -->
+      <div
+        class="dropdown-menu quick-actions-dropdown"
+        x-show="$store.sidebar.menuOpen"
+        :style="$store.sidebar.dropdownStyle"
+        @click.stop
+      >
         <div id="sidebar-quick-actions-dropdown-slot-start"></div>
 
         <div class="dropdown-header">Navigation</div>
@@ -74,6 +81,11 @@
         <button class="dropdown-item" @click="$store.projects.openProjectsModal(); $store.sidebar.menuClose()">
           <span class="material-symbols-outlined">snippet_folder</span>
           <span>Projects</span>
+        </button>
+
+        <button class="dropdown-item" @click="$store.chatInput.browseFiles(); $store.sidebar.menuClose()">
+          <span class="material-symbols-outlined">folder</span>
+          <span>Files</span>
         </button>
 
         <button class="dropdown-item" @click="openModal('components/modals/scheduler/scheduler-modal.html'); $store.sidebar.menuClose()">
@@ -99,19 +111,19 @@
           <span>Load Chat</span>
         </button>
 
-        <button class="dropdown-item" @click="$store.chats.saveChat(); $store.sidebar.menuClose()" :disabled="!$store.chats.selected">
+        <button class="dropdown-item" x-show="$store.chats.selected" @click="$store.chats.saveChat(); $store.sidebar.menuClose()">
           <span class="material-symbols-outlined">save</span>
           <span>Save Chat</span>
         </button>
 
-        <button class="dropdown-item" @click="$confirmClick($event, () => { $store.chats.resetChat(); $store.sidebar.menuClose() })" :disabled="!$store.chats.selected">
+        <button class="dropdown-item" x-show="$store.chats.selected" @click="$confirmClick($event, () => { $store.chats.resetChat(); $store.sidebar.menuClose() })">
           <span class="material-symbols-outlined">delete_sweep</span>
           <span>Clear Chat</span>
         </button>
 
         <div class="dropdown-separator"></div>
 
-        <button class="dropdown-item" @click="$confirmClick($event, () => { $store.chats.logout(); $store.sidebar.menuClose() })" :disabled="!$store.chats.loggedIn">
+        <button class="dropdown-item" x-show="$store.chats.loggedIn" @click="$confirmClick($event, () => { $store.chats.logout(); $store.sidebar.menuClose() })">
           <span class="material-symbols-outlined">logout</span>
           <span>Logout</span>
         </button>

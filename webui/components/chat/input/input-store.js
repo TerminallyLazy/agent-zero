@@ -10,6 +10,16 @@ const model = {
   message: "",
   progressText: "",
   progressActive: false,
+  /** Composer + menu (bottom actions moved into dropdown) */
+  chatMoreMenuOpen: false,
+
+  toggleChatMoreMenu() {
+    this.chatMoreMenuOpen = !this.chatMoreMenuOpen;
+  },
+
+  closeChatMoreMenu() {
+    this.chatMoreMenuOpen = false;
+  },
 
   _getSendState() {
     const hasInput = this.message.trim() || attachmentsStore?.attachments?.length > 0;
@@ -199,13 +209,17 @@ const model = {
 
   async browseFiles(path) {
     if (!path) {
-      try {
-        const resp = await shortcuts.callJsonApi("/chat_files_path_get", {
-          ctxid: shortcuts.getCurrentContextId(),
-        });
-        if (resp.ok) path = resp.path;
-      } catch (_e) {
-        console.error("Error getting chat files path", _e);
+      const ctxid = shortcuts.getCurrentContextId();
+
+      if (ctxid) {
+        try {
+          const resp = await shortcuts.callJsonApi("/chat_files_path_get", {
+            ctxid,
+          });
+          if (resp.ok) path = resp.path;
+        } catch (_e) {
+          console.error("Error getting chat files path", _e);
+        }
       }
     }
     await fileBrowserStore.open(path);
@@ -214,6 +228,7 @@ const model = {
   reset() {
     this.message = "";
     attachmentsStore.clearAttachments();
+    this.chatMoreMenuOpen = false;
     this.adjustTextareaHeight();
   }
 };

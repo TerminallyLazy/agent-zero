@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Any, Awaitable, Type, cast
 from helpers import modules, files
-from helpers import cache, subagents
+from helpers import cache
 from typing import TYPE_CHECKING
 from functools import wraps
 import inspect
@@ -253,6 +253,8 @@ def call_extensions_sync(extension_point: str, agent: "Agent|None" = None, **kwa
 def get_webui_extensions(
     agent: "Agent | None", extension_point: str, filters: list[str] | None = None
 ):
+    from helpers import subagents
+
     entries: list[str] = []
     effective_filters = filters or ["*"]
 
@@ -280,6 +282,8 @@ def get_webui_extensions(
 def _get_extension_classes(
     extension_point: str, agent: "Agent|None" = None, **kwargs
 ) -> list[Type[Extension]]:
+    from helpers import subagents
+
     cache_key = cache.determine_cache_key(agent, extension_point)
     cached = cache.get(_CLASSES_CACHE_AREA, cache_key)
     if cached is not None:

@@ -55,6 +55,44 @@ Yes, by creating custom tools or using MCP servers. See [Extensions](../develope
 **Usage**
 
 - **Terminal commands not executing:** Ensure the Docker container is running and properly configured.  Check SSH settings if applicable. Check if the Docker image is updated by removing it from Docker Desktop app, and subsequently pulling it again.
+- **Agent Zero stuck on the update screen or not starting after an update:** If the browser stays on the updating screen for multiple minutes, reload the current browser window first. If the UI still does not come back, restart the Docker container. If it still does not recover, queue another self-update for the next startup and inspect the updater log.
+
+From the host, find the container name:
+
+```bash
+docker ps
+```
+
+Open a shell inside the container:
+
+```bash
+docker exec -it <container> /bin/bash
+```
+
+Queue an update for the next startup attempt with the recovery script in `/exe`:
+
+```bash
+/exe/trigger_self_update.sh
+```
+
+That default command writes `/exe/a0-self-update.yaml` with `main` and `latest`, so the next startup tries the newest release in the current installed major version. You can also specify the branch, version, and backup settings:
+
+```bash
+/exe/trigger_self_update.sh ready latest
+/exe/trigger_self_update.sh main v1.10 --backup-dir /root/update-backups --backup-name usr-recovery.zip
+/exe/trigger_self_update.sh development latest --no-backup
+```
+
+You can run the same commands directly from the host without opening a shell:
+
+```bash
+docker exec -it <container> /exe/trigger_self_update.sh
+docker exec -it <container> /exe/trigger_self_update.sh ready latest
+docker exec -it <container> tail -n 200 /exe/a0-self-update.log
+docker exec -it <container> cat /exe/a0-self-update-status.yaml
+```
+
+The recovery command only schedules the update. Restart the container or let Agent Zero start again, then check `/exe/a0-self-update.log` and `/exe/a0-self-update-status.yaml` to see what happened.
 
 * **Error Messages:** Pay close attention to the error messages displayed in the Web UI or terminal.  They often provide valuable clues for diagnosing the issue. Refer to the specific error message in online searches or community forums for potential solutions.
 

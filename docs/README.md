@@ -30,7 +30,6 @@ Welcome to the Agent Zero documentation hub. Whether you're getting started or d
 - **[Notifications](developer/notifications.md):** Notification system architecture and setup.
 - **[Contributing Skills](developer/contributing-skills.md):** Create and share agent skills.
 - **[Contributing Guide](guides/contribution.md):** Contribute to the Agent Zero project.
-- **[Release Notes](release_notes/README.md):** File format and process used by the automated Docker and GitHub release workflow.
 
 ## Community & Support
 

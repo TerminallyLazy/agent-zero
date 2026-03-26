@@ -7,9 +7,10 @@
 </head>
 
 <body>
-    <div x-data >
-        <template x-if="$store.welcomeStore && $store.welcomeStore.isVisible">
-            <div x-create="$store.welcomeStore.onCreate()" class="welcome-container">
+    <div x-data>
+        <template x-if="$store.welcomeStore">
+            <div x-init="$store.welcomeStore.init(); if ($store.welcomeStore.isVisible) { $store.welcomeStore.onCreate(); } $watch('$store.welcomeStore.isVisible', (visible) => { if (visible) { $store.welcomeStore.onCreate(); } });"
+                 class="welcome-container">
                 <x-extension id="welcome-screen-start"></x-extension>
                 <div class="welcome-content">
                     <!-- Action Cards -->

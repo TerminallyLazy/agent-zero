@@ -7,6 +7,15 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_SYSTEM_PROMPT_PATH = REPO_ROOT / "scripts" / "openrouter_release_notes_system_prompt.md"
 
 
 def fail(message: str) -> None:
@@ -61,6 +70,24 @@ def split_branches(raw: str) -> list[str]:
     return [part for part in parts if part]
 
 
+def require_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        fail(f"Required environment variable `{name}` is missing.")
+    return value
+
+
+def require_any_env(*names: str) -> str:
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    fail(
+        "Required environment variable is missing. Expected one of: "
+        + ", ".join(f"`{name}`" for name in names)
+    )
+
+
 @dataclass(frozen=True)
 class Config:
     allowed_branches: list[str]
@@ -91,6 +118,12 @@ class Candidate:
     publish_version: bool
     publish_branch_tag: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class CommitEntry:
+    heading: str
+    description: str
 
 
 def load_config() -> Config:
@@ -136,6 +169,20 @@ def tag_exists(tag: str) -> bool:
 
 def tag_commit(tag: str) -> str:
     return git("rev-list", "-n", "1", f"refs/tags/{tag}")
+
+
+def commit_is_ancestor(older_ref: str, newer_ref: str) -> bool:
+    return (
+        run_command(
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            older_ref,
+            newer_ref,
+            check=False,
+        ).returncode
+        == 0
+    )
 
 
 def branch_contains_commit(branch: str, commit: str) -> bool:
@@ -416,11 +463,215 @@ def unique(items: list[str]) -> list[str]:
     return output
 
 
+def load_text(path: Path) -> str:
+    if not path.exists():
+        fail(f"Expected file `{path}` to exist.")
+    return path.read_text(encoding="utf-8").strip()
+
+
+def github_repository_parts() -> tuple[str, str]:
+    repository = require_env("GITHUB_REPOSITORY")
+    owner, separator, repo = repository.partition("/")
+    if not owner or not separator or not repo:
+        fail(f"GITHUB_REPOSITORY must be in `owner/repo` format, got `{repository}`.")
+    return owner, repo
+
+
+def github_api_get(path: str, params: dict[str, str | int] | None = None) -> object:
+    api_base = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+    token = require_env("GITHUB_TOKEN")
+    query = f"?{urlencode(params)}" if params else ""
+    request = Request(
+        f"{api_base}{path}{query}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace").strip()
+        fail(f"GitHub API request failed ({path}): {exc.code} {exc.reason}\n{details}")
+    except URLError as exc:
+        fail(f"GitHub API request failed ({path}): {exc.reason}")
+
+
+def list_github_releases() -> list[dict[str, object]]:
+    owner, repo = github_repository_parts()
+    releases: list[dict[str, object]] = []
+    page = 1
+
+    while True:
+        payload = github_api_get(
+            f"/repos/{owner}/{repo}/releases",
+            {"per_page": 100, "page": page},
+        )
+        if not isinstance(payload, list):
+            fail("GitHub releases response was not a list.")
+        page_items = [item for item in payload if isinstance(item, dict)]
+        releases.extend(page_items)
+        if len(page_items) < 100:
+            break
+        page += 1
+
+    return releases
+
+
+def previous_published_release_tag(config: Config, source_tag: str) -> str | None:
+    source_version = parse_release_tag(config, source_tag)
+    if source_version is None:
+        fail(f"Tag `{source_tag}` is not a releasable tag.")
+
+    previous: list[tuple[tuple[int, int], str]] = []
+    for release in list_github_releases():
+        if release.get("draft") or release.get("prerelease"):
+            continue
+        tag_name = str(release.get("tag_name", "")).strip()
+        version = parse_release_tag(config, tag_name)
+        if version is None or version >= source_version:
+            continue
+        previous.append((version, tag_name))
+
+    previous.sort(key=lambda item: item[0])
+    return previous[-1][1] if previous else None
+
+
+def parse_commit_entries(raw_log: str) -> list[CommitEntry]:
+    entries: list[CommitEntry] = []
+    for raw_entry in raw_log.split("\x1e"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        heading, separator, description = entry.partition("\x1f")
+        if not separator:
+            continue
+        entries.append(
+            CommitEntry(
+                heading=re.sub(r"\s+", " ", heading).strip(),
+                description=description.strip(),
+            )
+        )
+    return entries
+
+
+def collect_release_commits(previous_release_tag: str | None, source_tag: str) -> list[CommitEntry]:
+    range_ref = source_tag
+    if previous_release_tag:
+        if not tag_exists(previous_release_tag):
+            fail(f"Previous published release tag `{previous_release_tag}` is not available in the repository.")
+        if not commit_is_ancestor(
+            f"refs/tags/{previous_release_tag}^{{commit}}",
+            f"refs/tags/{source_tag}^{{commit}}",
+        ):
+            fail(
+                f"Previous published release tag `{previous_release_tag}` is not an ancestor of `{source_tag}`."
+            )
+        range_ref = f"{previous_release_tag}..{source_tag}"
+
+    raw_log = git("log", "--reverse", "--format=%s%x1f%b%x1e", range_ref)
+    return parse_commit_entries(raw_log)
+
+
+def build_release_notes_user_message(commits: list[CommitEntry]) -> str:
+    lines = ["Commit headings and descriptions:"]
+
+    if not commits:
+        lines.append("No commits were found in this release range.")
+        return "\n".join(lines)
+
+    for index, commit in enumerate(commits, start=1):
+        lines.append(f"{index}. Heading: {commit.heading}")
+        if commit.description:
+            lines.append("Description:")
+            lines.append(commit.description)
+        else:
+            lines.append("Description: (none)")
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
+def extract_openrouter_message_content(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+
+    content = payload.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+
+    parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        text = part.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def generate_release_body_with_openrouter(commits: list[CommitEntry]) -> str:
+    api_key = require_env("OPENROUTER_API_KEY")
+    model = require_any_env("OPENROUTER_MODEL_NAME", "OPENROUTER_MODEL")
+    system_prompt = load_text(OPENROUTER_SYSTEM_PROMPT_PATH)
+    repository = require_env("GITHUB_REPOSITORY")
+    user_message = build_release_notes_user_message(commits)
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "temperature": 0.2,
+    }
+    request = Request(
+        OPENROUTER_CHAT_COMPLETIONS_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": f"https://github.com/{repository}",
+            "X-OpenRouter-Title": "Agent Zero Docker Release Notes",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=60) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace").strip()
+        fail(f"OpenRouter request failed: {exc.code} {exc.reason}\n{details}")
+    except URLError as exc:
+        fail(f"OpenRouter request failed: {exc.reason}")
+
+    if not isinstance(response_payload, dict):
+        fail("OpenRouter response was not a JSON object.")
+
+    choices = response_payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        fail(f"OpenRouter response did not include choices: {json.dumps(response_payload)}")
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        fail("OpenRouter returned an invalid choice payload.")
+
+    message = first_choice.get("message")
+    body = extract_openrouter_message_content(message).strip()
+    return body or "No release notes."
+
+
 def resolve_release_command() -> None:
     config = load_config()
     branch = os.environ["TARGET_BRANCH"].strip()
     source_tag = os.environ["TARGET_TAG"].strip()
-    notes_dir = os.environ["RELEASE_NOTES_DIR"].strip()
 
     if branch != config.main_branch:
         write_output("should_release", "false")
@@ -452,20 +703,30 @@ def resolve_release_command() -> None:
         )
         return
 
-    notes_path = os.path.join(notes_dir, f"{source_tag}.md")
-    if not os.path.exists(notes_path):
-        fail(
-            f"Expected release notes file `{notes_path}` for GitHub release `{source_tag}`."
+    previous_release_tag = ""
+    commits: list[CommitEntry] = []
+    body = "Failed to generate release notes."
+    try:
+        previous_release_tag = previous_published_release_tag(config, source_tag) or ""
+        commits = collect_release_commits(previous_release_tag or None, source_tag)
+        body = generate_release_body_with_openrouter(commits)
+    except SystemExit:
+        print(
+            f"Release note generation failed for `{source_tag}`. Falling back to a static release body.",
+            file=sys.stderr,
         )
-
-    with open(notes_path, "r", encoding="utf-8") as handle:
-        body = handle.read().strip()
+    except Exception as exc:
+        print(
+            f"Unexpected release note generation error for `{source_tag}`: {exc}. Falling back to a static release body.",
+            file=sys.stderr,
+        )
 
     write_output("should_release", "true")
     write_output("release_tag", source_tag)
     write_output("release_name", source_tag)
-    write_output("release_notes_path", notes_path)
-    write_output("release_body", body or "No release notes.")
+    write_output("previous_release_tag", previous_release_tag)
+    write_output("release_commit_count", str(len(commits)))
+    write_output("release_body", body)
     print(source_tag)
 
 

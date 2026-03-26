@@ -170,12 +170,11 @@ docker run -p 50001:80 agent0ai/agent-zero
 | [Architecture](./docs/developer/architecture.md) | System design and components |
 | [Contributing](./docs/guides/contribution.md) | How to contribute |
 | [Troubleshooting](./docs/guides/troubleshooting.md) | Common issues and their solutions |
-| [Release Notes](./docs/release_notes/README.md) | Release note format used by the automated Docker and GitHub release workflow |
 
 
 ## 🎯 Changelog
 
-New release-note files for current releases live in [docs/release_notes](./docs/release_notes/README.md). The latest eligible `main` tag uses `docs/release_notes/vX.Y.md` for the GitHub release body.
+GitHub release notes for the latest eligible `main` tag are generated during `.github/workflows/docker-publish.yml` from commit subjects and descriptions since the previous published release, using OpenRouter and the editable prompt in `scripts/openrouter_release_notes_system_prompt.md`.
 
 ### v0.9.8 - Skills, UI Redesign & Git projects
 [Release video](https://youtu.be/NV7s78yn6DY)

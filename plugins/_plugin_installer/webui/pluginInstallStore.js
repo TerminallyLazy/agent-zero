@@ -36,6 +36,7 @@ const model = {
   // Index state
   index: { authors: {}, plugins: {} },
   indexLoadPromise: null,
+  indexLoadSeq: 0,
   installedPlugins: [],
   installedPluginDetails: {},
   search: "",
@@ -64,10 +65,6 @@ const model = {
   setTab(tab) {
     this.activeTab = tab;
     this.result = null;
-    if (tab === "store") {
-      this.resetIndex();
-      void this.fetchIndex();
-    }
   },
 
   setBrowseFilter(filter) {
@@ -281,62 +278,91 @@ const model = {
   },
 
   async fetchIndex(options = {}) {
+    const force = !!options?.force;
     const background = !!options?.background;
     const suppressErrors = !!options?.suppressErrors;
-    if (this.indexLoadPromise) {
-      return this.indexLoadPromise;
-    }
-
-    const loadPromise = (async () => {
-    try {
-      if (!background) {
-        this.loading = true;
-        this.loadingMessage = "Loading plugin index...";
+    if (!force && this.indexLoadPromise) {
+      if (background) {
+        return this.indexLoadPromise;
       }
 
-      const data = await api.callJsonApi(PLUGIN_API, {
-        action: "fetch_index",
-      });
-
-      if (!data.success) {
-        if (!suppressErrors) {
-          void toastFrontendError(data.error || "Failed to load index", "Plugin Installer");
-        }
-        return false;
-      }
-
-      this.index = data.index;
-      this.installedPlugins = data.installed_plugins || [];
-      const installedResponse = await api.callJsonApi("plugins_list", {
-        filter: { custom: true, builtin: false, search: "" },
-      });
-      const installedList = Array.isArray(installedResponse.plugins) ? installedResponse.plugins : [];
-      this.installedPluginDetails = Object.fromEntries(
-        installedList.map((plugin) => [plugin.name, plugin])
-      );
-      this.page = 1;
-      return true;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (!suppressErrors) {
-        void toastFrontendError(`Failed to load plugin index: ${message}`, "Plugin Installer");
-      }
-      return false;
-    } finally {
-      if (!background) {
+      this.loading = true;
+      this.loadingMessage = "Loading plugin index...";
+      try {
+        return await this.indexLoadPromise;
+      } finally {
         this.loading = false;
         this.loadingMessage = "";
       }
     }
+
+    const requestSeq = ++this.indexLoadSeq;
+    const loadPromise = (async () => {
+      try {
+        if (!background) {
+          this.loading = true;
+          this.loadingMessage = "Loading plugin index...";
+        }
+
+        const data = await api.callJsonApi(PLUGIN_API, {
+          action: "fetch_index",
+          force,
+        });
+
+        if (!data.success) {
+          if (!suppressErrors && requestSeq === this.indexLoadSeq) {
+            void toastFrontendError(data.error || "Failed to load index", "Plugin Installer");
+          }
+          return false;
+        }
+
+        const installedResponse = await api.callJsonApi("plugins_list", {
+          filter: { custom: true, builtin: false, search: "" },
+        });
+        const installedList = Array.isArray(installedResponse.plugins) ? installedResponse.plugins : [];
+
+        if (requestSeq !== this.indexLoadSeq) {
+          return false;
+        }
+
+        this.index = data.index;
+        this.installedPlugins = data.installed_plugins || [];
+        this.installedPluginDetails = Object.fromEntries(
+          installedList.map((plugin) => [plugin.name, plugin])
+        );
+        this.page = 1;
+        return true;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (!suppressErrors && requestSeq === this.indexLoadSeq) {
+          void toastFrontendError(`Failed to load plugin index: ${message}`, "Plugin Installer");
+        }
+        return false;
+      } finally {
+        if (!background && requestSeq === this.indexLoadSeq) {
+          this.loading = false;
+          this.loadingMessage = "";
+        }
+      }
     })();
 
-    this.indexLoadPromise = loadPromise.finally(() => {
-      if (this.indexLoadPromise === loadPromise) {
+    const trackedPromise = loadPromise.finally(() => {
+      if (this.indexLoadPromise === trackedPromise) {
         this.indexLoadPromise = null;
       }
     });
+    this.indexLoadPromise = trackedPromise;
 
-    return this.indexLoadPromise;
+    return trackedPromise;
+  },
+
+  async openIndexView() {
+    this.resetIndex();
+    return this.fetchIndex({ force: true });
+  },
+
+  async reloadIndex() {
+    return this.fetchIndex({ force: true });
   },
 
   async ensureIndexLoaded(options = {}) {

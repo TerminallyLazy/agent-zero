@@ -174,4 +174,4 @@ These environment variables automatically override the hardcoded defaults in `ge
 - Navigate to your project root in the terminal and run `docker build -f DockerfileLocal -t agent-zero-local --build-arg CACHE_DATE=$(date +%Y-%m-%d:%H:%M:%S) .`
 - The `CACHE_DATE` argument is optional, it is used to cache most of the build process and only rebuild the last steps when the files or dependencies change.
 - See `docker/run/build.txt` for more build command examples.
-- Automated Docker Hub publishing for release tags is handled by `.github/workflows/docker-publish.yml`. Latest `main` releases also read `docs/release_notes/vX.Y.md` to create the GitHub release body.
+- Automated Docker Hub publishing for release tags is handled by `.github/workflows/docker-publish.yml`. The latest eligible `main` tag generates its GitHub release body on the fly from commit subjects and descriptions via OpenRouter.

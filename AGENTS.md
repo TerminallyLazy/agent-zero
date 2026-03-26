@@ -103,7 +103,7 @@ Key Files:
 - helpers/plugins.py: Plugin discovery and configuration logic.
 - webui/js/AlpineStore.js: Store factory for reactive frontend state.
 - helpers/api.py: Base class for all API endpoints.
-- docs/release_notes/: Markdown files used by the release workflow to populate GitHub releases for the latest `main` tag.
+- scripts/openrouter_release_notes_system_prompt.md: Editable system prompt used to generate GitHub release notes during Docker publishing.
 - knowledge/main/about/: Agent self-knowledge files, indexed into the vector DB for runtime recall. Not user-facing docs - written for the agent's internal reference.
 - docs/agents/AGENTS.components.md: Deep dive into the frontend component architecture.
 - docs/agents/AGENTS.modals.md: Guide to the stacked modal system.
@@ -149,10 +149,10 @@ Key Files:
 - Docker publishing automation lives in `.github/workflows/docker-publish.yml`.
 - Releasable tags follow `v{X}.{Y}` and only tags `>= v1.0` are considered by the workflow.
 - The latest eligible tag on `main` also creates or updates a GitHub release after the Docker image push succeeds.
-- Release notes live in `docs/release_notes/<tag>.md`.
-- When asked to prepare release notes, compare the repo changes against the previous release notes tag in `docs/release_notes/` and write a concise Markdown summary of the meaningful changes since that release.
+- GitHub release notes are generated on the fly in `.github/scripts/docker_release_plan.py` by comparing the new tag against the previous published GitHub release tag, collecting commit subjects and descriptions in that range, and sending them to OpenRouter.
+- The OpenRouter call uses `OPENROUTER_API_KEY` and `OPENROUTER_MODEL_NAME` from the workflow environment, with the system prompt stored in `scripts/openrouter_release_notes_system_prompt.md`.
 - Prioritize user-visible features, important fixes, infra or packaging changes, and breaking notes. Skip low-signal churn.
-- If no notes are needed, an empty `docs/release_notes/<tag>.md` is valid and publishes `No release notes.`
+- If the generated summary has no meaningful content, the release body falls back to `No release notes.`
 
 ### Lifecycle Synchronization
 | Action | Backend Extension | Frontend Lifecycle |
@@ -230,9 +230,9 @@ class MyTool(Tool):
 
 ## Release Notes
 
-- Store release notes in `docs/release_notes/` as `vX.Y.md`.
-- Keep them concise and summarize changes since the previous release notes tag.
-- The latest eligible `main` tag uses that file for the GitHub release body after Docker publish succeeds.
+- The latest eligible `main` tag generates its GitHub release notes during Docker publish instead of reading committed Markdown files.
+- The release-note prompt is editable in `scripts/openrouter_release_notes_system_prompt.md`.
+- The commit range starts at the previous published GitHub release tag, not merely the previous semantic tag in the repository.
 
 ## Troubleshooting
 

@@ -8,6 +8,9 @@ This plugin connects one or more Telegram bots to Agent Zero. Each bot runs inde
 
 ## Main Behavior
 
+- **Dependency management**
+  - Keeps `aiogram` in the plugin-local `requirements.txt` instead of the global root requirements.
+  - Active code paths call `helpers/dependencies.py::ensure_dependencies()` to install `aiogram` into the framework runtime on first use via `uv pip install --python <current interpreter> -r plugins/_telegram_integration/requirements.txt`.
 - **Bot lifecycle**
   - Managed by a `job_loop` extension that starts, restarts, or stops bots whenever plugin settings change.
   - Supports both long-polling and webhook delivery modes.

@@ -121,10 +121,16 @@
     background-color: rgba(155, 155, 155, 0.7);
   }
 
-  /* Dropdown item icon sizing */
-  .quick-actions-dropdown .dropdown-item,
-  .quick-actions-dropdown .dropdown-item .material-symbols-outlined {
+  /* Dropdown item icon sizing (do not override disabled opacity from index.css) */
+  .quick-actions-dropdown .dropdown-item:not(:disabled),
+  .quick-actions-dropdown .dropdown-item:not(:disabled) .material-symbols-outlined {
     opacity: 1;
+  }
+
+  .quick-actions-dropdown .dropdown-item:disabled,
+  .quick-actions-dropdown .dropdown-item:disabled .material-symbols-outlined {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .quick-actions-dropdown .dropdown-item .material-symbols-outlined {

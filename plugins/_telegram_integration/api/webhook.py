@@ -1,5 +1,6 @@
 from helpers.api import ApiHandler, Request, Response
 from helpers.print_style import PrintStyle
+from plugins._telegram_integration.helpers.dependencies import ensure_dependencies
 
 
 class TelegramWebhook(ApiHandler):
@@ -18,6 +19,7 @@ class TelegramWebhook(ApiHandler):
         return ["POST"]
 
     async def process(self, input: dict, request: Request) -> dict | Response:
+        ensure_dependencies()
         from aiogram.types import Update
 
         from plugins._telegram_integration.helpers.bot_manager import get_bot

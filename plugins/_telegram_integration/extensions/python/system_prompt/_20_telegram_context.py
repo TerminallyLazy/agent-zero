@@ -1,6 +1,6 @@
 from helpers.extension import Extension
 from agent import LoopData
-from plugins._telegram_integration.helpers.handler import CTX_TG_BOT, CTX_TG_BOT_CFG
+from plugins._telegram_integration.helpers.constants import CTX_TG_BOT, CTX_TG_BOT_CFG
 
 
 class TelegramContextPrompt(Extension):

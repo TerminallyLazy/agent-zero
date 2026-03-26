@@ -14,45 +14,56 @@
           x-destroy="$store.selfUpdateStore.cleanup()"
           class="self-update-modal"
         >
-          <div class="self-update-howto">
-            <button
-              type="button"
-              class="self-update-howto-toggle"
-              data-bs-toggle="collapse"
-              data-bs-target="#self-update-howto-collapse"
-              aria-expanded="false"
-              aria-controls="self-update-howto-collapse"
-            >
-              <span>How it works?</span>
-              <span class="material-symbols-outlined self-update-howto-toggle-icon">expand_more</span>
-            </button>
-            <div class="collapse" id="self-update-howto-collapse">
-              <div class="self-update-howto-body self-update-copy">
-                <p>
-                  Agent Zero saves this request into
-                  <code x-text="$store.selfUpdateStore.info?.paths?.update_file || '/exe/a0-self-update.yaml'"></code>,
-                  restarts once, applies the requested branch and release tag before the UI
-                  starts again, then reloads this page when <code>/api/health</code> is healthy.
-                </p>
-                <p>
-                  If the updated UI does not become healthy within 2 minutes, the bootstrap
-                  manager in <code>/exe</code> restores the previous checkout and starts that
-                  version again, so even an older downgraded <code>/a0</code> can be upgraded back
-                  by creating the YAML file manually.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="self-update-summary-grid">
+          <div class="self-update-version-grid">
             <div class="self-update-summary-card">
               <div class="summary-label">Current version</div>
               <div class="summary-value" x-text="$store.selfUpdateStore.currentVersion"></div>
-              <div class="summary-meta" x-text="$store.selfUpdateStore.info?.current?.short_commit || ''"></div>
-              <div class="summary-meta" x-text="$store.selfUpdateStore.currentBranch || ''"></div>
+              <div class="summary-meta">
+                Commit
+                <code x-text="$store.selfUpdateStore.info?.current?.short_commit || 'unknown'"></code>
+              </div>
+              <div class="summary-meta" x-text="`Branch ${$store.selfUpdateStore.currentBranch || 'unknown'}`"></div>
+              <template x-if="$store.selfUpdateStore.info?.current?.describe && $store.selfUpdateStore.info?.current?.describe !== $store.selfUpdateStore.info?.current?.short_tag">
+                <div
+                  class="summary-meta"
+                  x-text="$store.selfUpdateStore.info?.current?.describe"
+                ></div>
+              </template>
             </div>
 
-            <div class="self-update-summary-card" x-show="$store.selfUpdateStore.info?.pending">
+            <div class="self-update-summary-card">
+              <div class="summary-label">Latest version</div>
+              <div
+                class="summary-value"
+                x-text="$store.selfUpdateStore.info?.current_branch_latest?.display_version || 'Unavailable'"
+              ></div>
+              <template x-if="$store.selfUpdateStore.info?.current_branch_latest?.short_commit && $store.selfUpdateStore.info?.current_branch_latest?.branch !== 'main'">
+                <div class="summary-meta">
+                  Commit
+                  <code x-text="$store.selfUpdateStore.info?.current_branch_latest?.short_commit"></code>
+                </div>
+              </template>
+              <div
+                class="summary-meta"
+                x-text="`Branch ${$store.selfUpdateStore.info?.current_branch_latest?.branch || $store.selfUpdateStore.currentBranch || 'unknown'}`"
+              ></div>
+              <template x-if="$store.selfUpdateStore.info?.current_branch_latest?.describe && $store.selfUpdateStore.info?.current_branch_latest?.describe !== $store.selfUpdateStore.info?.current_branch_latest?.short_tag">
+                <div
+                  class="summary-meta"
+                  x-text="$store.selfUpdateStore.info?.current_branch_latest?.describe"
+                ></div>
+              </template>
+              <template x-if="$store.selfUpdateStore.info?.current_branch_latest?.supported === false">
+                <div class="summary-meta">
+                  Latest official version is only tracked for <code>main</code>, <code>testing</code>,
+                  and <code>development</code>.
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="self-update-summary-grid" x-show="$store.selfUpdateStore.info?.pending">
+            <div class="self-update-summary-card">
               <div class="summary-label">Pending request</div>
               <div
                 class="summary-value"
@@ -72,29 +83,79 @@
             </div>
           </template>
 
+          <div class="self-update-panel">
+            <button
+              type="button"
+              class="self-update-panel-toggle"
+              data-bs-toggle="collapse"
+              data-bs-target="#self-update-howto-collapse"
+              aria-expanded="false"
+              aria-controls="self-update-howto-collapse"
+            >
+              <span>How it works?</span>
+              <span class="material-symbols-outlined self-update-panel-toggle-icon">expand_more</span>
+            </button>
+            <div class="collapse" id="self-update-howto-collapse">
+              <div class="self-update-panel-body self-update-copy">
+                <p>
+                  Agent Zero saves this request into
+                  <code x-text="$store.selfUpdateStore.info?.paths?.update_file || '/exe/a0-self-update.yaml'"></code>,
+                  restarts once, applies the requested branch and version target before the UI
+                  starts again, then reloads this page when <code>/api/health</code> is healthy.
+                </p>
+                <p>
+                  If the updated UI does not become healthy within 2 minutes, the bootstrap
+                  manager in <code>/exe</code> restores the previous checkout and starts that
+                  version again, so even an older downgraded <code>/a0</code> can be upgraded back
+                  by creating the YAML file manually.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <template x-if="$store.selfUpdateStore.info?.last_status">
-            <div class="self-update-status-card">
-              <div class="section-title">Last Attempt</div>
-              <div class="status-pill" x-text="$store.selfUpdateStore.info?.last_status?.status || 'unknown'"></div>
-              <div class="status-message" x-text="$store.selfUpdateStore.info?.last_status?.message || ''"></div>
-              <div class="summary-meta">
-                Trigger:
-                <code x-text="$store.selfUpdateStore.info?.paths?.update_file || '/exe/a0-self-update.yaml'"></code>
-              </div>
-              <div class="summary-meta">
-                Log:
-                <code x-text="$store.selfUpdateStore.info?.paths?.log_file || '/exe/a0-self-update.log'"></code>
-              </div>
-              <div
-                class="summary-meta"
-                x-text="$store.selfUpdateStore.formatTimestamp($store.selfUpdateStore.info?.last_status?.finished_at)"
-              ></div>
-              <template x-if="$store.selfUpdateStore.info?.last_status?.backup_zip_path">
-                <div class="status-path">
-                  Backup:
-                  <code x-text="$store.selfUpdateStore.info?.last_status?.backup_zip_path"></code>
+            <div class="self-update-panel">
+              <button
+                type="button"
+                class="self-update-panel-toggle"
+                data-bs-toggle="collapse"
+                data-bs-target="#self-update-last-attempt-collapse"
+                aria-expanded="false"
+                aria-controls="self-update-last-attempt-collapse"
+              >
+                <span>Last Attempt</span>
+                <span class="self-update-panel-toggle-trailing">
+                  <span
+                    class="status-pill self-update-header-status"
+                    :class="$store.selfUpdateStore.getLastStatusBadgeClass($store.selfUpdateStore.info?.last_status?.status)"
+                    x-text="$store.selfUpdateStore.getLastStatusLabel($store.selfUpdateStore.info?.last_status?.status)"
+                  ></span>
+                  <span class="material-symbols-outlined self-update-panel-toggle-icon">expand_more</span>
+                </span>
+              </button>
+              <div class="collapse" id="self-update-last-attempt-collapse">
+                <div class="self-update-panel-body">
+                  <div class="status-message" x-text="$store.selfUpdateStore.info?.last_status?.message || ''"></div>
+                  <div class="summary-meta">
+                    Trigger:
+                    <code x-text="$store.selfUpdateStore.info?.paths?.update_file || '/exe/a0-self-update.yaml'"></code>
+                  </div>
+                  <div class="summary-meta">
+                    Log:
+                    <code x-text="$store.selfUpdateStore.info?.paths?.log_file || '/exe/a0-self-update.log'"></code>
+                  </div>
+                  <div
+                    class="summary-meta"
+                    x-text="$store.selfUpdateStore.formatTimestamp($store.selfUpdateStore.info?.last_status?.finished_at)"
+                  ></div>
+                  <template x-if="$store.selfUpdateStore.info?.last_status?.backup_zip_path">
+                    <div class="status-path">
+                      Backup:
+                      <code x-text="$store.selfUpdateStore.info?.last_status?.backup_zip_path"></code>
+                    </div>
+                  </template>
                 </div>
-              </template>
+              </div>
             </div>
           </template>
 
@@ -125,77 +186,43 @@
                 <div class="field-label">
                   <div class="field-title">Version</div>
                   <div class="field-description">
-                    Enter a version tag from the
+                    Choose a preloaded version target from the
                     <a href="https://github.com/agent0ai/agent-zero" target="_blank" rel="noreferrer">Agent Zero repository</a>.
-                    Start typing to filter, or use the search button to fetch versions from the selected branch. Only <code>vX.Y</code> tags at <code>v1.0</code> or newer are supported. Exact text entry is still allowed, including downgrades.
+                    Only versions from the current major release line are listed here. Newer major lines require a Docker image update first.
+                  </div>
+                  <div class="field-description">
+                    <code>latest</code> resolves to the newest tag on <code>main</code>, and to the current branch head on <code>testing</code> and <code>development</code>.
                   </div>
                   <template x-if="$store.selfUpdateStore.tagsError">
                     <div class="field-description">
-                      Tag lookup failed:
+                      Version lookup failed:
                       <span x-text="$store.selfUpdateStore.tagsError"></span>
                     </div>
                   </template>
                 </div>
-                <div class="field-control self-update-tag-search" @click.outside="$store.selfUpdateStore.closeTagDropdown()">
-                  <input
-                    type="text"
-                    x-model="$store.selfUpdateStore.form.tag"
-                    @input="$store.selfUpdateStore.onTagInput()"
-                    @focus="$store.selfUpdateStore.openTagDropdown()"
-                    @blur="$store.selfUpdateStore.onTagBlur()"
-                    @keydown.enter.prevent="$store.selfUpdateStore.searchTags()"
-                    placeholder="v1.0"
-                    :disabled="$store.selfUpdateStore.isBusy"
-                    style="padding-right: 32px;"
-                  />
-                  <span
-                    class="material-symbols-outlined self-update-tag-search-btn"
-                    :class="{ 'spinning': $store.selfUpdateStore.tagsLoading }"
-                    @click="if (!$store.selfUpdateStore.isBusy) $store.selfUpdateStore.searchTags()"
-                    title="Search tags from selected branch"
-                    x-text="$store.selfUpdateStore.tagsLoading ? 'progress_activity' : 'search'"
-                  ></span>
-                  <div
-                    class="self-update-tag-results"
-                    x-show="$store.selfUpdateStore.tagDropdownOpen"
-                    x-transition.opacity
-                  >
-                    <template x-if="$store.selfUpdateStore.tagsLoading">
-                      <div class="self-update-tag-item disabled">Loading tags...</div>
-                    </template>
-                    <template x-if="!$store.selfUpdateStore.tagsLoading && $store.selfUpdateStore.tagSuggestions.length === 0">
-                      <div class="self-update-tag-item disabled">No matching tags found</div>
-                    </template>
-                    <template x-for="tag in $store.selfUpdateStore.groupedTagSuggestions.matched" :key="`match-${tag}`">
-                      <div
-                        class="self-update-tag-item"
-                        @mousedown.prevent="$store.selfUpdateStore.selectTag(tag)"
-                        x-text="tag"
-                      ></div>
-                    </template>
-                    <div
-                      class="self-update-tag-separator"
-                      x-show="$store.selfUpdateStore.groupedTagSuggestions.matched.length > 0 && $store.selfUpdateStore.groupedTagSuggestions.rest.length > 0"
+                <template x-if="$store.selfUpdateStore.higherMajorVersionMessage">
+                  <div class="self-update-warning-banner">
+                    <div x-text="$store.selfUpdateStore.higherMajorVersionMessage"></div>
+                    <a
+                      href="https://www.agent-zero.ai/p/docs/get-started/"
+                      target="_blank"
+                      rel="noreferrer"
                     >
-                      Other versions
-                    </div>
-                    <template x-for="tag in $store.selfUpdateStore.groupedTagSuggestions.rest" :key="`rest-${tag}`">
-                      <div
-                        class="self-update-tag-item"
-                        @mousedown.prevent="$store.selfUpdateStore.selectTag(tag)"
-                        x-text="tag"
-                      ></div>
-                    </template>
+                      Docker update guide
+                    </a>
                   </div>
+                </template>
+                <div class="field-control">
+                  <select
+                    x-model="$store.selfUpdateStore.form.tag"
+                    :disabled="$store.selfUpdateStore.isBusy || $store.selfUpdateStore.tagsLoading || !$store.selfUpdateStore.hasAvailableTags"
+                  >
+                    <option value="" x-text="$store.selfUpdateStore.versionSelectPlaceholder"></option>
+                    <template x-for="tagOption in $store.selfUpdateStore.availableTagOptions" :key="tagOption.value">
+                      <option :value="tagOption.value" x-text="tagOption.label"></option>
+                    </template>
+                  </select>
                 </div>
-              </div>
-
-              <div class="self-update-warning-banner" x-show="$store.selfUpdateStore.versionCompatibilityWarning">
-                <span x-text="$store.selfUpdateStore.versionCompatibilityWarning"></span>
-              </div>
-
-              <div class="self-update-warning-banner" x-show="$store.selfUpdateStore.tagExistenceWarning">
-                <span x-text="$store.selfUpdateStore.tagExistenceWarning"></span>
               </div>
 
               <div class="field">
@@ -231,6 +258,25 @@
                       x-model="$store.selfUpdateStore.form.backup_path"
                       :disabled="$store.selfUpdateStore.isBusy"
                     />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <div class="field-label">
+                    <div class="field-title">Manual backup</div>
+                    <div class="field-description">
+                      Open the existing backup and restore modal if you want to create a backup before scheduling the update.
+                    </div>
+                  </div>
+                  <div class="field-control">
+                    <button
+                      type="button"
+                      class="btn btn-field"
+                      @click="$store.selfUpdateStore.openManualBackupModal()"
+                      :disabled="$store.selfUpdateStore.isBusy"
+                    >
+                      Manual backup
+                    </button>
                   </div>
                 </div>
 
@@ -301,7 +347,7 @@
               @click="$store.selfUpdateStore.scheduleUpdate()"
               :disabled="!$store.selfUpdateStore.canScheduleUpdate"
             >
-              Schedule Update And Restart
+              Restart and Update
             </button>
             <button
               type="button"
@@ -331,61 +377,6 @@
         gap: 1rem;
       }
 
-      .self-update-tag-search {
-        position: relative;
-      }
-
-      .self-update-tag-search-btn {
-        position: absolute;
-        right: 0.5rem;
-        top: 0.55rem;
-        cursor: pointer;
-        color: var(--color-text-muted);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .self-update-tag-results {
-        position: absolute;
-        inset: calc(100% + 0.35rem) 0 auto 0;
-        max-height: 14rem;
-        overflow-y: auto;
-        z-index: 20;
-        border: 1px solid var(--color-border);
-        border-radius: 0.75rem;
-        background: var(--color-panel);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-      }
-
-      .self-update-tag-item {
-        padding: 0.65rem 0.85rem;
-        cursor: pointer;
-        color: var(--color-text);
-      }
-
-      .self-update-tag-item:hover {
-        background: var(--color-background-hover);
-      }
-
-      .self-update-tag-item.disabled {
-        cursor: default;
-        color: var(--color-text-muted);
-      }
-
-      .self-update-tag-item.disabled:hover {
-        background: transparent;
-      }
-
-      .self-update-tag-separator {
-        padding: 0.45rem 0.85rem;
-        border-top: 1px solid var(--color-border);
-        color: var(--color-text-muted);
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-
       .self-update-copy {
         color: var(--color-text-muted);
         line-height: 1.5;
@@ -395,13 +386,13 @@
         margin: 0 0 0.75rem;
       }
 
-      .self-update-howto {
+      .self-update-panel {
         border: 1px solid var(--color-border);
         border-radius: 0.9rem;
         background: var(--color-panel);
       }
 
-      .self-update-howto-toggle {
+      .self-update-panel-toggle {
         width: 100%;
         display: flex;
         align-items: center;
@@ -416,15 +407,22 @@
         text-align: left;
       }
 
-      .self-update-howto-toggle-icon {
+      .self-update-panel-toggle-icon {
         transition: transform 0.2s ease;
       }
 
-      .self-update-howto-toggle[aria-expanded="true"] .self-update-howto-toggle-icon {
+      .self-update-panel-toggle-trailing {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 0 0 auto;
+      }
+
+      .self-update-panel-toggle[aria-expanded="true"] .self-update-panel-toggle-icon {
         transform: rotate(180deg);
       }
 
-      .self-update-howto-body {
+      .self-update-panel-body {
         padding: 0 1rem 1rem;
       }
 
@@ -459,6 +457,11 @@
       }
 
       .self-update-warning-banner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
         padding: 0.85rem 0.95rem;
         border: 1px solid var(--color-warning-text);
         border-radius: 0.8rem;
@@ -467,16 +470,27 @@
         line-height: 1.5;
       }
 
+      .self-update-warning-banner a {
+        color: inherit;
+        font-weight: 700;
+        text-decoration: underline;
+      }
+
+      .self-update-version-grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .self-update-summary-grid {
         display: grid;
         gap: 0.75rem;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
 
-      .self-update-summary-card,
-      .self-update-status-card {
+      .self-update-summary-card {
         border: 1px solid var(--color-border);
-        border-radius: 10px;
+        border-radius: 0.9rem;
         padding: 0.9rem 1rem;
         background: var(--color-panel);
       }
@@ -542,9 +556,43 @@
         letter-spacing: 0.04em;
       }
 
+      .self-update-header-status {
+        margin-top: 0;
+      }
+
+      .status-pill-success {
+        border-color: color-mix(in srgb, var(--color-success, #16a34a) 55%, var(--color-border));
+        background: color-mix(in srgb, var(--color-success, #16a34a) 18%, transparent);
+        color: var(--color-success, #16a34a);
+      }
+
+      .status-pill-error {
+        border-color: color-mix(in srgb, var(--color-error, #dc2626) 55%, var(--color-border));
+        background: color-mix(in srgb, var(--color-error, #dc2626) 18%, transparent);
+        color: var(--color-error, #dc2626);
+      }
+
+      .status-pill-warning {
+        border-color: color-mix(in srgb, var(--color-warning, #d97706) 55%, var(--color-border));
+        background: color-mix(in srgb, var(--color-warning, #d97706) 18%, transparent);
+        color: var(--color-warning, #d97706);
+      }
+
+      .status-pill-neutral {
+        border-color: var(--color-border);
+        background: transparent;
+        color: var(--color-text);
+      }
+
       .status-message {
         margin-top: 0.7rem;
         line-height: 1.5;
+      }
+
+      @media (max-width: 720px) {
+        .self-update-version-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
     </style>
   </body>

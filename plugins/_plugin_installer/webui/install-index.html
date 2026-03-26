@@ -8,7 +8,7 @@
 <body>
     <div x-data>
         <template x-if="$store.pluginInstallStore">
-            <div class="pi-browse-shell">
+            <div class="pi-browse-shell" x-create="$store.pluginInstallStore.openIndexView()">
 
                 <section class="pi-browse-hero">
                     <div class="pi-browse-copy">
@@ -39,6 +39,15 @@
                             <option value="name">Name</option>
                         </select>
                     </label>
+
+                    <button type="button"
+                        class="button icon-button pi-reload-button"
+                        aria-label="Reload Plugin Hub"
+                        title="Reload Plugin Hub"
+                        @click="$store.pluginInstallStore.reloadIndex()"
+                        :disabled="$store.pluginInstallStore.loading">
+                        <span class="material-symbols-outlined">refresh</span>
+                    </button>
                 </div>
 
                 <div class="pi-filter-row" x-show="$store.pluginInstallStore.browseFilters.length > 1">
@@ -266,6 +275,20 @@
             min-width: 160px;
             flex-shrink: 0;
             justify-content: space-between;
+        }
+
+        .pi-reload-button {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+            min-height: 0;
+            padding: 0.45rem 0.6rem;
+        }
+
+        .pi-reload-button .material-symbols-outlined {
+            font-size: 1.1rem;
         }
 
         .pi-field-label {
