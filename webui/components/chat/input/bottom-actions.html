@@ -11,6 +11,7 @@
   <div x-data>
     <template x-if="$store.chatInput">
       <div class="text-buttons-row">
+        <x-extension id="chat-input-bottom-actions-start"></x-extension>
         <button class="text-button" @click="$store.chatInput.pauseAgent(!$store.chatInput.paused)">
             <template x-if="!$store.chatInput.paused">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
@@ -73,12 +74,14 @@
             </svg>
             <p>Nudge</p>
         </button>
+        <x-extension id="chat-input-bottom-actions-end"></x-extension>
       </div>
     </template>
   </div>
 
   <style>
         .text-buttons-row { width: 100%; display: flex; padding-top: var(--spacing-xs); margin-left: var(--spacing-xs); }
+        .text-buttons-row > x-extension { display: contents; }
         .text-button { background-color: transparent; border: none; border-radius: 5px; color: var(--color-text); font-family: "Rubik", Arial, Helvetica, sans-serif; font-size: 0.6rem; padding: 6px var(--spacing-sm); cursor: pointer; opacity: 0.8; -webkit-transition: all 0.3s; transition: all 0.3s; display: flex; align-items: center; gap: var(--spacing-xs); }
         .text-button:hover:not(:disabled) { opacity: 1; background-color: var(--color-background-hover); border-radius: 4px; }
         .text-button:active:not(:disabled) { opacity: 0.5; }

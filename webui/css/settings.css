@@ -136,6 +136,11 @@ input:checked + .toggler:before {
 /* Select Styles */
 select {
   cursor: pointer;
+  color-scheme: dark;
+}
+
+.light-mode select {
+  color-scheme: light;
 }
 
 select:disabled {

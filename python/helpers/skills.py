@@ -54,13 +54,21 @@ def get_skill_roots(
         projects = files.find_existing_paths_by_pattern("usr/projects/*/.a0proj/skills") # projects
         usr_agents = files.find_existing_paths_by_pattern("usr/agents/*/skills") # agents
         agents = files.find_existing_paths_by_pattern("agents/*/skills") # agents
+        plugins = files.find_existing_paths_by_pattern("plugins/*/skills") # plugins
+        usr_plugins = files.find_existing_paths_by_pattern("usr/plugins/*/skills") # plugins
+        plugins_agents = files.find_existing_paths_by_pattern("plugins/*/agents/*/skills") # agents in plugins
+        usr_plugins_agents = files.find_existing_paths_by_pattern("usr/plugins/*/agents/*/skills") # agents in plugins
         paths = [
             files.get_abs_path("skills"), 
             files.get_abs_path("usr/skills"),
             *project_agents,
             *projects,
             *usr_agents,
-            *agents 
+            *agents,
+            *plugins,
+            *usr_plugins,
+            *plugins_agents,
+            *usr_plugins_agents,
         ]
     return paths
 

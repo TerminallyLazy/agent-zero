@@ -17,6 +17,3 @@ class GetBanners(ApiHandler):
         
         return {"banners": banners}
 
-    @classmethod
-    def get_methods(cls) -> list[str]:
-        return ["POST"]

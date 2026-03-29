@@ -1,9 +1,17 @@
 {
     "compilerOptions": {
+      "checkJs": true,
+      "allowJs": true,
+      "strict": true,
+      "noImplicitAny": false,
+      "module": "esnext",
+      "target": "es2022",
       "baseUrl": ".",
       "paths": {
-        "*": ["webui/*"]
+        "*": ["webui/*"],
+        "/plugins/*": ["plugins/*"],
+        "/usr/plugins/*": ["usr/plugins/*"]
       }
     },
-    "include": ["webui/**/*.js"]
+    "include": ["webui/**/*.js", "plugins/**/*.js", "usr/plugins/**/*.js"]
   }

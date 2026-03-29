@@ -11,25 +11,25 @@
 <body>
   <div class="wrapper" x-data="{ dropdownOpen: false }" @click.outside="dropdownOpen = false" @keydown.escape.window="dropdownOpen = false" x-init="$watch('dropdownOpen', v => v && $store.sidebar.updateDropdownPosition($el))">
     <div id="quick-actions">
+
+      <x-extension id="sidebar-quick-actions-main-start"></x-extension>
+
       <!-- Dashboard -->
       <button class="config-button" id="dashboard" @click="deselectChat()" title="Dashboard">
         <span class="material-symbols-outlined">home</span>
       </button>
 
-      <!-- Memory -->
-      <button class="config-button" id="memory-dash" @click="openModal('modals/memory/memory-dashboard.html')" title="Memory">
-        <span class="material-symbols-outlined">psychology</span>
-      </button>
-
       <!-- Scheduler -->
-      <button class="config-button" id="scheduler" @click="openModal('modals/scheduler/scheduler-modal.html')" title="Scheduler">
-        <span class="material-symbols-outlined">schedule</span>
+      <button class="config-button" id="plugins" @click="openModal('components/plugins/list/plugin-list.html')" title="Plugins">
+        <span class="material-symbols-outlined">extension</span>
       </button>
 
       <!-- Settings -->
       <button class="config-button" id="settings" @click="openModal('settings/settings.html')" title="Settings">
         <span class="material-symbols-outlined">settings</span>
       </button>
+
+      <x-extension id="sidebar-quick-actions-main-end"></x-extension>
 
       <!-- Dropdown Toggle -->
       <button class="config-button dropdown-toggle" @click="dropdownOpen = !dropdownOpen" title="More options">
@@ -42,6 +42,8 @@
          x-show="dropdownOpen"
          :style="$store.sidebar.dropdownStyle">
       
+      <x-extension id="sidebar-quick-actions-dropdown-start"></x-extension>
+
       <div class="dropdown-header">Navigation</div>
       
       <button class="dropdown-item" @click="deselectChat(); dropdownOpen = false">
@@ -53,13 +55,8 @@
         <span class="material-symbols-outlined">snippet_folder</span>
         <span>Projects</span>
       </button>
-      
-      <button class="dropdown-item" @click="openModal('modals/memory/memory-dashboard.html'); dropdownOpen = false">
-        <span class="material-symbols-outlined">psychology</span>
-        <span>Memories</span>
-      </button>
-      
-      <button class="dropdown-item" @click="openModal('modals/scheduler/scheduler-modal.html'); dropdownOpen = false">
+            
+      <button class="dropdown-item" @click="openModal('components/scheduler/scheduler-modal.html'); dropdownOpen = false">
         <span class="material-symbols-outlined">schedule</span>
         <span>Scheduler</span>
       </button>
@@ -94,6 +91,7 @@
       
       <div class="dropdown-separator"></div>
       
+
       <button class="dropdown-item" @click="$confirmClick($event, () => { $store.chats.logout(); dropdownOpen = false })" :disabled="!$store.chats.loggedIn">
         <span class="material-symbols-outlined">logout</span>
         <span>Logout</span>
@@ -104,6 +102,7 @@
         <span>Restart A0</span>
       </button>
 
+      <x-extension id="sidebar-quick-actions-dropdown-end"></x-extension>
     </div>
   </div>
 </body>
@@ -132,7 +131,7 @@
   .config-button {
     background-color: var(--color-panel);
     border: 0.05rem solid var(--color-border);
-    border-radius: 6px;
+    border-radius: 0;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -159,18 +158,14 @@
     border-right: 1px solid var(--color-border);
   }
 
-  .config-button:first-child {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
+  .config-button:first-of-type {
+    border-top-left-radius: 6px !important;
+    border-bottom-left-radius: 6px !important;
   }
 
   .config-button:last-child {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
-
-  .config-button:not(:first-child):not(:last-child) {
-    border-radius: 0;
+    border-top-right-radius: 6px !important;
+    border-bottom-right-radius: 6px !important;
   }
 
   .config-button:hover {

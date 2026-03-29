@@ -7,7 +7,7 @@ import subprocess
 from typing import Any, Literal, TypedDict, cast, TypeVar
 
 import models
-from python.helpers import runtime, whisper, defer, git
+from python.helpers import runtime, whisper, defer, git, subagents
 from . import files, dotenv
 from python.helpers.print_style import PrintStyle
 from python.helpers.providers import get_providers, FieldOption as ProvidersFO
@@ -92,7 +92,6 @@ class Settings(TypedDict):
     browser_http_headers: dict[str, Any]
 
     agent_profile: str
-    agent_memory_subdir: str
     agent_knowledge_subdir: str
 
     workdir_path: str
@@ -102,21 +101,6 @@ class Settings(TypedDict):
     workdir_max_folders: int
     workdir_max_lines: int
     workdir_gitignore: str
-
-    memory_recall_enabled: bool
-    memory_recall_delayed: bool
-    memory_recall_interval: int
-    memory_recall_history_len: int
-    memory_recall_memories_max_search: int
-    memory_recall_solutions_max_search: int
-    memory_recall_memories_max_result: int
-    memory_recall_solutions_max_result: int
-    memory_recall_similarity_threshold: float
-    memory_recall_query_prep: bool
-    memory_recall_post_filter: bool
-    memory_memorize_enabled: bool
-    memory_memorize_consolidation: bool
-    memory_memorize_replace_threshold: float
 
     api_keys: dict[str, str]
 
@@ -157,6 +141,7 @@ class Settings(TypedDict):
     litellm_global_kwargs: dict[str, Any]
 
     update_check_enabled: bool
+    chat_inherit_project: bool
 
 
 class PartialSettings(Settings, total=False):
@@ -248,9 +233,9 @@ def convert_out(settings: Settings) -> SettingsOutput:
             embedding_providers=get_providers("embedding"),
             shell_interfaces=[{"value": "local", "label": "Local Python TTY"}, {"value": "ssh", "label": "SSH"}],
             is_dockerized=runtime.is_dockerized(),
-            agent_subdirs=[{"value": subdir, "label": subdir}
-                for subdir in files.get_subdirectories("agents")
-                if subdir != "_example"],
+            agent_subdirs=[{"value": item["key"], "label": item["label"]}
+                for item in subagents.get_all_agents_list()
+                if item["key"] != "_example"],
             knowledge_subdirs=[{"value": subdir, "label": subdir}
                 for subdir in files.get_subdirectories("knowledge", exclude="default")],
             stt_models=[
@@ -547,26 +532,11 @@ def get_default_settings() -> Settings:
         browser_model_rl_output=get_default_value("browser_model_rl_output", 0),
         browser_model_kwargs=get_default_value("browser_model_kwargs", {}),
         browser_http_headers=get_default_value("browser_http_headers", {}),
-        memory_recall_enabled=get_default_value("memory_recall_enabled", True),
-        memory_recall_delayed=get_default_value("memory_recall_delayed", False),
-        memory_recall_interval=get_default_value("memory_recall_interval", 3),
-        memory_recall_history_len=get_default_value("memory_recall_history_len", 10000),
-        memory_recall_memories_max_search=get_default_value("memory_recall_memories_max_search", 12),
-        memory_recall_solutions_max_search=get_default_value("memory_recall_solutions_max_search", 8),
-        memory_recall_memories_max_result=get_default_value("memory_recall_memories_max_result", 5),
-        memory_recall_solutions_max_result=get_default_value("memory_recall_solutions_max_result", 3),
-        memory_recall_similarity_threshold=get_default_value("memory_recall_similarity_threshold", 0.7),
-        memory_recall_query_prep=get_default_value("memory_recall_query_prep", False),
-        memory_recall_post_filter=get_default_value("memory_recall_post_filter", False),
-        memory_memorize_enabled=get_default_value("memory_memorize_enabled", True),
-        memory_memorize_consolidation=get_default_value("memory_memorize_consolidation", True),
-        memory_memorize_replace_threshold=get_default_value("memory_memorize_replace_threshold", 0.9),
         api_keys={},
         auth_login="",
         auth_password="",
         root_password="",
         agent_profile=get_default_value("agent_profile", "agent0"),
-        agent_memory_subdir=get_default_value("agent_memory_subdir", "default"),
         agent_knowledge_subdir=get_default_value("agent_knowledge_subdir", "custom"),
         workdir_path=get_default_value("workdir_path", files.get_abs_path_dockerized("usr/workdir")),
         workdir_show=get_default_value("workdir_show", True),
@@ -599,6 +569,7 @@ def get_default_settings() -> Settings:
         secrets="",
         litellm_global_kwargs=get_default_value("litellm_global_kwargs", {}),
         update_check_enabled=get_default_value("update_check_enabled", True),
+        chat_inherit_project=get_default_value("chat_inherit_project", True),
     )
 
 
@@ -623,15 +594,17 @@ def _apply_settings(previous: Settings | None):
                 whisper.preload, _settings["stt_model_size"]
             )  # TODO overkill, replace with background task
 
-        # force memory reload on embedding model change
+        # notify plugins of embedding model change
         if not previous or (
             _settings["embed_model_name"] != previous["embed_model_name"]
             or _settings["embed_model_provider"] != previous["embed_model_provider"]
             or _settings["embed_model_kwargs"] != previous["embed_model_kwargs"]
         ):
-            from python.helpers.memory import reload as memory_reload
+            from python.helpers.extension import call_extensions
 
-            memory_reload()
+            defer.DeferredTask().start_task(
+                call_extensions, "embedding_model_changed"
+            )
 
         # update mcp settings if necessary
         if not previous or _settings["mcp_servers"] != previous["mcp_servers"]:
@@ -813,4 +786,3 @@ def create_auth_token() -> str:
 
 def _get_version():
     return git.get_version()
-

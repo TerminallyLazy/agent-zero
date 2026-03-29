@@ -260,7 +260,7 @@ const model = {
 
   // Generate server-side API URL for file (for device sync)
   getServerImgUrl(filename) {
-    return `/image_get?path=/a0/usr/uploads/${encodeURIComponent(filename)}`;
+    return `/api/image_get?path=/a0/usr/uploads/${encodeURIComponent(filename)}`;
   },
 
   getServerFileUrl(filename) {

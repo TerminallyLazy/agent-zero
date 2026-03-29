@@ -58,7 +58,7 @@
                 // Fetch and populate projects
                 const projectSelect = document.getElementById('mcp-project-select');
                 try {
-                    const response = await fetch('/projects', {
+                    const response = await fetchApi('/projects', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'list' })

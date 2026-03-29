@@ -38,7 +38,6 @@ class LoadProfileSettings(Extension):
 
             for override_key, config_attr in (
                 ("agent_profile", "profile"),
-                ("agent_memory_subdir", "memory_subdir"),
                 ("mcp_servers", "mcp_servers"),
                 ("browser_http_headers", "browser_http_headers"),
             ):

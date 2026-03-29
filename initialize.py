@@ -1,9 +1,10 @@
 from agent import AgentConfig
 import models
-from python.helpers import runtime, settings, defer
+from python.helpers import runtime, settings, defer, extension
 from python.helpers.print_style import PrintStyle
 
 
+@extension.extensible
 def initialize_agent(override_settings: dict | None = None):
     current_settings = settings.get_settings()
     if override_settings:
@@ -78,7 +79,6 @@ def initialize_agent(override_settings: dict | None = None):
         embeddings_model=embedding_llm,
         browser_model=browser_llm,
         profile=current_settings["agent_profile"],
-        memory_subdir=current_settings["agent_memory_subdir"],
         knowledge_subdirs=[current_settings["agent_knowledge_subdir"], "default"],
         mcp_servers=current_settings["mcp_servers"],
         browser_http_headers=current_settings["browser_http_headers"],
@@ -119,12 +119,14 @@ def initialize_agent(override_settings: dict | None = None):
     # return config object
     return config
 
+@extension.extensible
 def initialize_chats():
     from python.helpers import persist_chat
     async def initialize_chats_async():
         persist_chat.load_tmp_chats()
     return defer.DeferredTask().start_task(initialize_chats_async)
 
+@extension.extensible
 def initialize_mcp():
     set = settings.get_settings()
     async def initialize_mcp_async():
@@ -132,18 +134,21 @@ def initialize_mcp():
         return _initialize_mcp(set["mcp_servers"])
     return defer.DeferredTask().start_task(initialize_mcp_async)
 
+@extension.extensible
 def initialize_job_loop():
     from python.helpers.job_loop import run_loop
     return defer.DeferredTask("JobLoop").start_task(run_loop)
 
+@extension.extensible
 def initialize_preload():
     import preload
     return defer.DeferredTask().start_task(preload.preload)
 
+@extension.extensible
 def initialize_migration():
     from python.helpers import migration, dotenv
     # run migration
-    migration.migrate_user_data()
+    migration.startup_migration()
     # reload .env as it might have been moved
     dotenv.load_dotenv()
     # reload settings to ensure new paths are picked up

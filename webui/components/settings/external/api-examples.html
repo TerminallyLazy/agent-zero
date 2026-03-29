@@ -209,7 +209,7 @@
                 const basicExample = `// Basic message example
 async function sendMessage() {
     try {
-        const response = await fetch('${url}/api_message', {
+        const response = await fetch('${url}/api/api_message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -249,7 +249,7 @@ sendMessage().then(result => {
                 const continuationExample = `// Continue conversation example
 async function continueConversation(contextId) {
     try {
-        const response = await fetch('${url}/api_message', {
+        const response = await fetch('${url}/api/api_message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -296,7 +296,7 @@ async function sendWithAttachment() {
         const textContent = "Hello World from attachment!";
         const base64Content = btoa(textContent);
 
-        const response = await fetch('${url}/api_message', {
+        const response = await fetch('${url}/api/api_message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -342,7 +342,7 @@ async function getLogsGET(contextId, length = 50) {
             length: length.toString()
         });
 
-        const response = await fetch('${url}/api_log_get?' + params, {
+        const response = await fetch('${url}/api/api_log_get?' + params, {
             method: 'GET',
             headers: {
                 'X-API-KEY': '${token}'
@@ -374,7 +374,7 @@ getLogsGET('ctx_abc123', 20);`;
                 const logPostExample = `// Get logs using POST request
 async function getLogsPOST(contextId, length = 50) {
     try {
-        const response = await fetch('${url}/api_log_get', {
+        const response = await fetch('${url}/api/api_log_get', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -415,7 +415,7 @@ getLogsPOST('ctx_abc123', 10);`;
                 const terminateExample = `// Basic terminate chat function
 async function terminateChat(contextId) {
     try {
-        const response = await fetch('${url}/api_terminate_chat', {
+        const response = await fetch('${url}/api/api_terminate_chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -469,7 +469,7 @@ simpleWorkflow();`;
                 const resetExample = `// Basic reset chat function
 async function resetChat(contextId) {
     try {
-        const response = await fetch('${url}/api_reset_chat', {
+        const response = await fetch('${url}/api/api_reset_chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -511,7 +511,7 @@ async function resetAndContinue() {
         console.log('Chat reset, starting fresh conversation...');
 
         // Continue with same context_id but fresh history
-        const response = await fetch('${url}/api_message', {
+        const response = await fetch('${url}/api/api_message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -536,7 +536,7 @@ resetAndContinue();`;
                 const filesGetExample = `// Basic file retrieval
 async function getFiles(filePaths) {
     try {
-        const response = await fetch('${url}/api_files_get', {
+        const response = await fetch('${url}/api/api_files_get', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -584,7 +584,7 @@ getFiles(filePaths);
 // Example 2: Complete attachment workflow
 async function attachmentWorkflow() {
     // Step 1: Send message with attachments
-    const messageResponse = await fetch('${url}/api_message', {
+    const messageResponse = await fetch('${url}/api/api_message', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -621,7 +621,7 @@ attachmentWorkflow();`;
 async function sendMessageWithProject() {
     try {
         // First message - activate project
-        const response = await fetch('${url}/api_message', {
+        const response = await fetch('${url}/api/api_message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -641,7 +641,7 @@ async function sendMessageWithProject() {
             console.log('Response:', data.response);
 
             // Continue conversation - project already set
-            const followUp = await fetch('${url}/api_message', {
+            const followUp = await fetch('${url}/api/api_message', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

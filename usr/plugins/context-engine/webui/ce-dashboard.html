@@ -1,0 +1,624 @@
+<html>
+
+<head>
+    <title>Context Engine</title>
+    <script type="module">
+        import { store } from "/usr/plugins/context-engine/webui/ce-dashboard-store.js";
+    </script>
+</head>
+
+<body>
+    <div x-data>
+        <template x-if="$store.ceDashboardStore">
+            <div x-create="$store.ceDashboardStore.onOpen()" x-destroy="$store.ceDashboardStore.cleanup()"
+                class="ce-dashboard">
+
+                <!-- Connection Status Bar -->
+                <div class="ce-status-bar">
+                    <div class="ce-status-indicator"
+                        :class="$store.ceDashboardStore.connected ? 'status-connected' : 'status-disconnected'">
+                        <span class="material-symbols-outlined"
+                            x-text="$store.ceDashboardStore.statusLoading ? 'sync' : ($store.ceDashboardStore.connected ? 'check_circle' : 'error')"></span>
+                        <span
+                            x-text="$store.ceDashboardStore.statusLoading ? 'Checking...' : ($store.ceDashboardStore.connected ? 'Connected' : 'Disconnected')"></span>
+                    </div>
+                    <template x-if="$store.ceDashboardStore.statusInfo">
+                        <div class="ce-status-details">
+                            <span class="status-item">
+                                Collection: <strong
+                                    x-text="$store.ceDashboardStore.statusInfo.collection || '—'"></strong>
+                            </span>
+                            <span class="status-separator">•</span>
+                            <span class="status-item">
+                                Indexer: <strong
+                                    x-text="$store.ceDashboardStore.statusInfo.indexer_endpoint || '—'"></strong>
+                            </span>
+                        </div>
+                    </template>
+                    <template x-if="$store.ceDashboardStore.statusError">
+                        <div class="ce-status-error">
+                            <span x-text="$store.ceDashboardStore.statusError"></span>
+                        </div>
+                    </template>
+                    <button class="btn btn-icon ce-refresh-btn" @click="$store.ceDashboardStore.checkStatus()"
+                        :disabled="$store.ceDashboardStore.statusLoading" title="Refresh Status">
+                        <span class="material-symbols-outlined">refresh</span>
+                    </button>
+                </div>
+
+                <!-- Tabs -->
+                <div class="ce-tabs">
+                    <button class="ce-tab" :class="{ 'active': $store.ceDashboardStore.activeTab === 'search' }"
+                        @click="$store.ceDashboardStore.activeTab = 'search'">
+                        <span class="material-symbols-outlined">search</span> Search
+                    </button>
+                    <button class="ce-tab" :class="{ 'active': $store.ceDashboardStore.activeTab === 'index' }"
+                        @click="$store.ceDashboardStore.activeTab = 'index'">
+                        <span class="material-symbols-outlined">contextual_token</span> Index
+                    </button>
+                </div>
+
+                <!-- Search Tab -->
+                <div x-show="$store.ceDashboardStore.activeTab === 'search'" class="ce-tab-content">
+
+                    <!-- Search Controls -->
+                    <div class="ce-search-header">
+                        <input type="text" class="ce-search-input" x-model="$store.ceDashboardStore.searchQuery"
+                            placeholder="Search code... (e.g. 'authentication middleware')"
+                            @keyup.enter="$store.ceDashboardStore.search()" />
+
+                        <div class="ce-search-filters">
+                            <div class="ce-filter-group">
+                                <label>Language</label>
+                                <input type="text" x-model="$store.ceDashboardStore.searchLanguage"
+                                    placeholder="e.g. python" />
+                            </div>
+                            <div class="ce-filter-group">
+                                <label>Path filter</label>
+                                <input type="text" x-model="$store.ceDashboardStore.searchPathFilter"
+                                    placeholder="e.g. src/" />
+                            </div>
+                            <div class="ce-filter-group">
+                                <label>Limit</label>
+                                <input type="number" x-model.number="$store.ceDashboardStore.searchLimit" min="1"
+                                    max="100" />
+                            </div>
+                        </div>
+
+                        <div class="ce-search-actions">
+                            <button class="btn btn-ok" @click="$store.ceDashboardStore.search()"
+                                :disabled="$store.ceDashboardStore.searching || !$store.ceDashboardStore.searchQuery.trim()">
+                                <span x-show="!$store.ceDashboardStore.searching">Search</span>
+                                <span x-show="$store.ceDashboardStore.searching">Searching...</span>
+                            </button>
+                            <button class="btn btn-cancel" @click="$store.ceDashboardStore.clearSearch()">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading -->
+                    <div x-show="$store.ceDashboardStore.searching" class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <span>Searching codebase...</span>
+                    </div>
+
+                    <!-- Error -->
+                    <div x-show="$store.ceDashboardStore.searchError" class="error-state">
+                        <span class="material-symbols-outlined">error</span>
+                        <span x-text="$store.ceDashboardStore.searchError"></span>
+                    </div>
+
+                    <!-- Results -->
+                    <div x-show="!$store.ceDashboardStore.searching && !$store.ceDashboardStore.searchError && $store.ceDashboardStore.searchResults.length > 0"
+                        class="ce-results-container">
+
+                        <!-- Results count -->
+                        <div class="ce-results-bar">
+                            <span class="status-item">
+                                <span class="material-symbols-outlined">description</span>
+                                Results: <strong x-text="$store.ceDashboardStore.searchResults.length"></strong>
+                            </span>
+
+                            <!-- Pagination -->
+                            <div class="status-pagination" x-show="$store.ceDashboardStore.totalPages > 1">
+                                <button class="btn btn-icon" @click="$store.ceDashboardStore.prevPage()"
+                                    :disabled="$store.ceDashboardStore.currentPage === 1">
+                                    <span class="material-symbols-outlined">chevron_left</span>
+                                </button>
+                                <span>Page <strong x-text="$store.ceDashboardStore.currentPage"></strong> of <strong
+                                        x-text="$store.ceDashboardStore.totalPages"></strong></span>
+                                <button class="btn btn-icon" @click="$store.ceDashboardStore.nextPage()"
+                                    :disabled="$store.ceDashboardStore.currentPage === $store.ceDashboardStore.totalPages">
+                                    <span class="material-symbols-outlined">chevron_right</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Result cards -->
+                        <template x-for="(result, idx) in $store.ceDashboardStore.paginatedResults" :key="idx">
+                            <div class="ce-result-card">
+                                <div class="ce-result-header">
+                                    <div class="ce-result-file">
+                                        <span class="material-symbols-outlined">description</span>
+                                        <span class="ce-file-path"
+                                            x-text="result.file_path || result.path || result.file || '—'"></span>
+                                    </div>
+                                    <div class="ce-result-meta">
+                                        <template x-if="result.language">
+                                            <span class="ce-lang-badge" x-text="result.language"></span>
+                                        </template>
+                                        <template x-if="result.score != null">
+                                            <span class="ce-score-badge"
+                                                :class="$store.ceDashboardStore.getScoreBadgeClass(result.score)"
+                                                x-text="$store.ceDashboardStore.formatScore(result.score)"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <template x-if="result.snippet || result.content || result.text">
+                                    <div class="ce-result-snippet">
+                                        <pre><code x-text="result.snippet || result.content || result.text"></code></pre>
+                                        <button class="btn btn-icon ce-copy-btn"
+                                            @click="$store.ceDashboardStore.copySnippet(result.snippet || result.content || result.text)"
+                                            title="Copy snippet">
+                                            <span class="material-symbols-outlined">content_copy</span>
+                                        </button>
+                                    </div>
+                                </template>
+                                <template x-if="result.line_number || result.start_line">
+                                    <div class="ce-result-line">
+                                        Line <span x-text="result.line_number || result.start_line"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div x-show="!$store.ceDashboardStore.searching && !$store.ceDashboardStore.searchError && $store.ceDashboardStore.searchResults.length === 0 && $store.ceDashboardStore.searchQuery"
+                        class="data-empty-state">
+                        No results found for this query.
+                    </div>
+
+                    <!-- Initial state -->
+                    <div x-show="!$store.ceDashboardStore.searchQuery && $store.ceDashboardStore.searchResults.length === 0 && !$store.ceDashboardStore.searching"
+                        class="ce-initial-state">
+                        <span class="material-symbols-outlined">manage_search</span>
+                        <p>Enter a query to search your indexed codebase.</p>
+                    </div>
+                </div>
+
+                <!-- Index Tab -->
+                <div x-show="$store.ceDashboardStore.activeTab === 'index'" class="ce-tab-content">
+                    <div class="ce-index-form">
+                        <div class="ce-index-hint">
+                            Indexes files from the Host Index Path configured in settings (mounted as /work
+                            in the container). Leave subdirectory empty to index the full workspace.
+                        </div>
+                        <div class="ce-index-row">
+                            <label>Subdirectory (optional, relative to workspace):</label>
+                            <input type="text" x-model="$store.ceDashboardStore.indexPath"
+                                placeholder="e.g. src/ or leave empty for full workspace"
+                                @keyup.enter="$store.ceDashboardStore.triggerIndex()" />
+                        </div>
+                        <div class="ce-index-actions">
+                            <button class="btn btn-ok" @click="$store.ceDashboardStore.triggerIndex()"
+                                :disabled="$store.ceDashboardStore.indexing">
+                                <span class="material-symbols-outlined">bolt</span>
+                                <span x-text="$store.ceDashboardStore.indexing ? 'Indexing...' : ($store.ceDashboardStore.indexPath.trim() ? 'Index Subdirectory' : 'Index Full Workspace')"></span>
+                            </button>
+                        </div>
+                        <div x-show="$store.ceDashboardStore.indexError" class="error-state">
+                            <span x-text="$store.ceDashboardStore.indexError"></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+    </div>
+
+    <style>
+        /* Dashboard container */
+        .ce-dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 0.5rem;
+        }
+
+        /* Status bar */
+        .ce-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            flex-wrap: wrap;
+        }
+
+        .ce-status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .ce-status-indicator.status-connected {
+            color: #10b981;
+        }
+
+        .ce-status-indicator.status-disconnected {
+            color: #ef4444;
+        }
+
+        .ce-status-details {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--color-text);
+            opacity: 0.8;
+        }
+
+        .ce-status-error {
+            font-size: 0.8rem;
+            color: #ef4444;
+        }
+
+        .ce-refresh-btn {
+            margin-left: auto;
+        }
+
+        /* Tabs */
+        .ce-tabs {
+            display: flex;
+            gap: 0.25rem;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .ce-tab {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            background: none;
+            color: var(--color-text);
+            cursor: pointer;
+            font-size: 0.85rem;
+            border-bottom: 2px solid transparent;
+            opacity: 0.6;
+            transition: opacity 0.2s, border-color 0.2s;
+        }
+
+        .ce-tab:hover {
+            opacity: 0.8;
+        }
+
+        .ce-tab.active {
+            opacity: 1;
+            border-bottom-color: var(--color-primary);
+        }
+
+        .ce-tab .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        /* Tab content */
+        .ce-tab-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        /* Search header */
+        .ce-search-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .ce-search-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            font-size: 0.95rem;
+            background: var(--color-input);
+            color: var(--color-text);
+            box-sizing: border-box;
+        }
+
+        .ce-search-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            background: var(--color-input-focus);
+        }
+
+        .ce-search-filters {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .ce-filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .ce-filter-group label {
+            font-size: 0.8rem;
+            color: var(--color-text);
+            opacity: 0.7;
+            white-space: nowrap;
+        }
+
+        .ce-filter-group input {
+            padding: 0.4rem 0.6rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            font-size: 0.85rem;
+            background: var(--color-input);
+            color: var(--color-text);
+            width: 120px;
+        }
+
+        .ce-filter-group input[type="number"] {
+            width: 70px;
+        }
+
+        .ce-search-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Results */
+        .ce-results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .ce-results-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            font-size: 0.8rem;
+        }
+
+        .ce-results-bar .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .ce-results-bar .material-symbols-outlined {
+            font-size: 16px;
+        }
+
+        /* Result cards */
+        .ce-result-card {
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+
+        .ce-result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.6rem 0.75rem;
+            background: var(--color-panel);
+            border-bottom: 1px solid var(--color-border);
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .ce-result-file {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            min-width: 0;
+        }
+
+        .ce-result-file .material-symbols-outlined {
+            font-size: 16px;
+            opacity: 0.6;
+            flex-shrink: 0;
+        }
+
+        .ce-file-path {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--color-primary);
+            word-break: break-all;
+        }
+
+        .ce-result-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-shrink: 0;
+        }
+
+        .ce-lang-badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+        }
+
+        .ce-score-badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .score-high {
+            background: #10b981;
+        }
+
+        .score-medium {
+            background: #f59e0b;
+        }
+
+        .score-low {
+            background: #6b7280;
+        }
+
+        .ce-result-snippet {
+            position: relative;
+            padding: 0;
+        }
+
+        .ce-result-snippet pre {
+            margin: 0;
+            padding: 0.75rem;
+            overflow-x: auto;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            background: var(--color-bg);
+            max-height: 300px;
+        }
+
+        .ce-result-snippet code {
+            white-space: pre;
+            font-family: monospace;
+        }
+
+        .ce-copy-btn {
+            position: absolute;
+            top: 0.4rem;
+            right: 0.4rem;
+            opacity: 0.4;
+            transition: opacity 0.2s;
+        }
+
+        .ce-result-card:hover .ce-copy-btn {
+            opacity: 0.8;
+        }
+
+        .ce-result-line {
+            padding: 0.3rem 0.75rem;
+            font-size: 0.75rem;
+            color: var(--color-text);
+            opacity: 0.6;
+            border-top: 1px solid var(--color-border);
+            background: var(--color-panel);
+        }
+
+        /* Initial/empty state */
+        .ce-initial-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 1rem;
+            opacity: 0.5;
+            gap: 0.5rem;
+        }
+
+        .ce-initial-state .material-symbols-outlined {
+            font-size: 48px;
+        }
+
+        .ce-initial-state p {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        /* Index tab */
+        .ce-index-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 0.5rem;
+        }
+
+        .ce-index-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .ce-index-hint {
+            font-size: 0.8rem;
+            color: var(--color-text);
+            opacity: 0.7;
+            padding: 0.5rem 0.75rem;
+            background: var(--color-panel);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+        }
+
+        .ce-index-row label {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .ce-index-row input {
+            padding: 0.6rem 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            font-size: 0.9rem;
+            font-family: monospace;
+            background: var(--color-input);
+            color: var(--color-text);
+        }
+
+        .ce-index-row input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .ce-index-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .ce-index-actions .btn .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        /* Responsive */
+        @media (max-width: 870px) {
+            .ce-search-filters {
+                flex-direction: column;
+            }
+
+            .ce-filter-group {
+                width: 100%;
+            }
+
+            .ce-filter-group input {
+                flex: 1;
+                width: auto;
+            }
+
+            .ce-status-details {
+                display: none;
+            }
+
+            .ce-results-bar {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</body>
+
+</html>

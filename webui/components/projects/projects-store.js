@@ -297,7 +297,7 @@ const model = {
       const response = await api.callJsonApi("projects", {
         action: "delete",
         name: name,
-      });
+        });
       if (response.ok) {
         notifications.toastFrontendSuccess(
           "Project deleted successfully",
@@ -350,7 +350,6 @@ const model = {
       // prepare data
       const data = {
         ...this.selectedProject,
-        memory: this.selectedProject._ownMemory ? "own" : "global",
       };
       // remove internal fields
       for (const kvp of Object.entries(data))
@@ -402,7 +401,6 @@ const model = {
       _meta: {
         creating: true,
       },
-      _ownMemory: true,
       _cloning: false,
       name: ``,
       title: `Project #${this.projectList.length + 1}`,
@@ -425,7 +423,6 @@ const model = {
         creating: false,
       },
       ...projectData,
-      _ownMemory: projectData.memory == "own",
     };
   },
 

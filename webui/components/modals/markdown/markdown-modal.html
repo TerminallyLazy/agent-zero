@@ -1,0 +1,54 @@
+<html>
+<head>
+    <title>Document</title>
+    <script type="module">
+        import { store } from "/components/modals/markdown/markdown-store.js";
+    </script>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.markdownModal">
+            <div x-create="$el.closest('.modal')?.querySelector('.modal-title') && ($el.closest('.modal').querySelector('.modal-title').textContent = $store.markdownModal.title)"
+                 x-destroy="$store.markdownModal.cleanup()"
+                 class="md-modal-root">
+
+                <div x-show="$store.markdownModal.error" class="md-modal-error">
+                    <span class="material-symbols-outlined">error</span>
+                    <span x-text="$store.markdownModal.error"></span>
+                </div>
+
+                <div class="md-modal-body msg-content"
+                     x-show="!$store.markdownModal.error"
+                     x-html="$store.markdownModal.renderedHtml">
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div class="modal-footer" data-modal-footer>
+        <button class="btn btn-cancel" @click="window.closeModal?.()">Close</button>
+    </div>
+
+    <style>
+        .md-modal-root {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .md-modal-body {
+            padding: 1.25rem 1.5rem;
+            overflow-y: auto;
+            max-height: 72vh;
+        }
+
+        .md-modal-error {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--color-error, #e74c3c);
+            padding: 1rem 1.5rem;
+        }
+    </style>
+</body>
+</html>

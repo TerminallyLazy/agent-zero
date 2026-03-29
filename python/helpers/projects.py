@@ -34,9 +34,6 @@ class BasicProjectData(TypedDict):
     instructions: str
     color: str
     git_url: str
-    memory: Literal[
-        "own", "global"
-    ]  # in the future we can add cutom and point to another existing folder
     file_structure: FileStructureInjectionSettings
 
 class GitStatusData(TypedDict, total=False):
@@ -67,7 +64,7 @@ def get_project_folder(name: str):
     return files.get_abs_path(get_projects_parent_folder(), name)
 
 
-def get_project_meta_folder(name: str, *sub_dirs: str):
+def get_project_meta(name: str, *sub_dirs: str):
     return files.get_abs_path(get_project_folder(name), PROJECT_META_DIR, *sub_dirs)
 
 
@@ -158,7 +155,6 @@ def _normalizeBasicData(data: BasicProjectData) -> BasicProjectData:
         "instructions": data.get("instructions", ""),
         "color": data.get("color", ""),
         "git_url": data.get("git_url", ""),
-        "memory": data.get("memory", "own"),
         "file_structure": data.get(
             "file_structure",
             _default_file_structure_settings(),
@@ -179,7 +175,6 @@ def _normalizeEditData(data: EditProjectData) -> EditProjectData:
         "instruction_files_count": data.get("instruction_files_count", 0),
         "knowledge_files_count": data.get("knowledge_files_count", 0),
         "secrets": data.get("secrets", ""),
-        "memory": data.get("memory", "own"),
         "file_structure": data.get(
             "file_structure",
             _default_file_structure_settings(),
@@ -398,20 +393,20 @@ def get_context_project_name(context: "AgentContext") -> str | None:
 
 def load_project_variables(name: str):
     try:
-        abs_path = files.get_abs_path(get_project_meta_folder(name), "variables.env")
+        abs_path = files.get_abs_path(get_project_meta(name), "variables.env")
         return files.read_file(abs_path)
     except Exception:
         return ""
 
 
 def save_project_variables(name: str, variables: str):
-    abs_path = files.get_abs_path(get_project_meta_folder(name), "variables.env")
+    abs_path = files.get_abs_path(get_project_meta(name), "variables.env")
     files.write_file(abs_path, variables)
 
 
 def load_project_subagents(name: str) -> dict[str, SubAgentSettings]:
     try:
-        abs_path = files.get_abs_path(get_project_meta_folder(name), "agents.json")
+        abs_path = files.get_abs_path(get_project_meta(name), "agents.json")
         data = dirty_json.parse(files.read_file(abs_path))
         if isinstance(data, dict):
             return _normalize_subagents(data)  # type: ignore[arg-type,return-value]
@@ -421,7 +416,7 @@ def load_project_subagents(name: str) -> dict[str, SubAgentSettings]:
 
 
 def save_project_subagents(name: str, subagents_data: dict[str, SubAgentSettings]):
-    abs_path = files.get_abs_path(get_project_meta_folder(name), "agents.json")
+    abs_path = files.get_abs_path(get_project_meta(name), "agents.json")
     normalized = _normalize_subagents(subagents_data)
     content = dirty_json.stringify(normalized)
     files.write_file(abs_path, content)
@@ -463,33 +458,17 @@ def save_project_secrets(name: str, secrets: str):
     secrets_manager.save_secrets_with_merge(secrets)
 
 
-def get_context_memory_subdir(context: "AgentContext") -> str | None:
-    # if a project is active and has memory isolation set, return the project memory subdir
-    project_name = get_context_project_name(context)
-    if project_name:
-        project_data = load_basic_project_data(project_name)
-        if project_data["memory"] == "own":
-            return "projects/" + project_name
-    return None  # no memory override
-
-
 def create_project_meta_folders(name: str):
     # create instructions folder
-    files.create_dir(get_project_meta_folder(name, PROJECT_INSTRUCTIONS_DIR))
+    files.create_dir(get_project_meta(name, PROJECT_INSTRUCTIONS_DIR))
 
-    # create knowledge folders
-    files.create_dir(get_project_meta_folder(name, PROJECT_KNOWLEDGE_DIR))
-    from python.helpers import memory
-
-    for memory_type in memory.Memory.Area:
-        files.create_dir(
-            get_project_meta_folder(name, PROJECT_KNOWLEDGE_DIR, memory_type.value)
-        )
+    # create knowledge folders (plugins create their own subdirs lazily)
+    files.create_dir(get_project_meta(name, PROJECT_KNOWLEDGE_DIR))
 
 
 def get_knowledge_files_count(name: str):
     knowledge_folder = files.get_abs_path(
-        get_project_meta_folder(name, PROJECT_KNOWLEDGE_DIR)
+        get_project_meta(name, PROJECT_KNOWLEDGE_DIR)
     )
     return len(files.list_files_in_dir_recursively(knowledge_folder))
 

@@ -315,12 +315,6 @@ some classes like modal-header are shared between the old and the new system */
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
-  background-color: rgba(30, 30, 30, 0.95);
-  border-bottom: 1px solid var(--color-border);
-}
-.light-mode .editor-toolbar {
-  background-color: rgba(240, 240, 240, 0.95);
 }
 .toolbar-group {
   display: flex;

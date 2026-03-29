@@ -1,0 +1,381 @@
+<html>
+<head>
+    <title>Context Engine</title>
+    <style>
+        .docker-section { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--color-border, #333); }
+        .docker-status { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.9rem; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .dot-green { background: #4caf50; }
+        .dot-orange { background: #ff9800; }
+        .dot-red { background: #f44336; }
+        .dot-gray { background: #666; }
+        .docker-btn { margin-top: 0.75rem; padding: 0.4rem 1rem; border: 1px solid var(--color-border, #555); border-radius: 4px; background: var(--color-panel, #1e1e1e); color: var(--color-text, #ccc); cursor: pointer; font-size: 0.85rem; }
+        .docker-btn:hover { opacity: 0.85; }
+        .docker-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .docker-conn { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.85rem; }
+    </style>
+</head>
+
+<body>
+    <div x-data="{
+        dockerStatus: 'unknown',
+        dockerError: '',
+        dockerServiceCount: 0,
+        dockerRunningCount: 0,
+        dockerBusy: false,
+        connectionOk: null,
+        connectionError: '',
+        testingConnection: false,
+        _csrfToken: '',
+
+        async init() {
+            try {
+                const res = await fetch('/api/csrf_token', { credentials: 'same-origin' });
+                const data = await res.json();
+                if (data.ok) this._csrfToken = data.token;
+            } catch (e) { /* CSRF bootstrap failed, apiCall will return errors */ }
+            await this.checkDockerStatus();
+        },
+
+        async apiCall(endpoint, data) {
+            const res = await fetch('/api/plugins/context-engine/' + endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': this._csrfToken
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(data)
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || 'HTTP ' + res.status);
+            }
+            return await res.json();
+        },
+
+        async checkDockerStatus() {
+            try {
+                const result = await this.apiCall('docker', { action: 'ps' });
+                if (!result.ok) {
+                    this.dockerStatus = 'error';
+                    this.dockerError = result.error || 'Unknown error';
+                    this.dockerServiceCount = 0;
+                    this.dockerRunningCount = 0;
+                    return;
+                }
+                this.dockerServiceCount = result.service_count || 0;
+                this.dockerRunningCount = result.running_count || 0;
+                if (this.dockerServiceCount === 0) {
+                    this.dockerStatus = 'stopped';
+                } else if (result.running) {
+                    this.dockerStatus = 'running';
+                } else if (this.dockerRunningCount > 0) {
+                    this.dockerStatus = 'partial';
+                } else {
+                    this.dockerStatus = 'stopped';
+                }
+                this.dockerError = '';
+            } catch (e) {
+                this.dockerStatus = 'error';
+                this.dockerError = e.message || 'Failed to check status';
+            }
+        },
+
+        get dockerToggled() {
+            return ['running', 'partial', 'starting'].includes(this.dockerStatus);
+        },
+
+        async toggleDocker() {
+            if (this.dockerBusy) return;
+            this.dockerBusy = true;
+            this.dockerError = '';
+            const wantUp = ['stopped', 'error', 'unknown'].includes(this.dockerStatus);
+            this.dockerStatus = wantUp ? 'starting' : 'stopping';
+            try {
+                const result = await this.apiCall('docker', { action: wantUp ? 'up' : 'down' });
+                if (!result.ok) {
+                    this.dockerStatus = 'error';
+                    this.dockerError = result.error || 'Command failed';
+                } else {
+                    await this.checkDockerStatus();
+                }
+            } catch (e) {
+                this.dockerStatus = 'error';
+                this.dockerError = e.message || 'Request failed';
+            } finally {
+                this.dockerBusy = false;
+            }
+        },
+
+        async testConnection() {
+            this.testingConnection = true;
+            this.connectionOk = null;
+            this.connectionError = '';
+            try {
+                const result = await this.apiCall('status', {});
+                if (result.ok && result.connected) {
+                    this.connectionOk = true;
+                    this.connectionError = '';
+                } else {
+                    this.connectionOk = false;
+                    this.connectionError = result.error || 'Connection failed';
+                }
+            } catch (e) {
+                this.connectionOk = false;
+                this.connectionError = e.message || 'Request failed';
+            } finally {
+                this.testingConnection = false;
+            }
+        }
+    }">
+        <!-- Docker Services Section -->
+        <div class="docker-section">
+            <div class="section-title">Docker Services</div>
+            <div class="section-description">
+                Deploy and manage the Context Engine Docker stack. On first run, the plugin
+                automatically clones the repository and builds Docker images.
+            </div>
+
+            <div class="field">
+                <div class="field-label">
+                    <div class="field-title">Deploy</div>
+                    <div class="field-description">
+                        Start or stop all Context Engine containers. First deploy clones the
+                        repository and builds images (may take several minutes).
+                    </div>
+                </div>
+                <div class="field-control">
+                    <label class="toggle">
+                        <input type="checkbox"
+                            :checked="dockerToggled"
+                            @change="toggleDocker()"
+                            :disabled="dockerBusy" />
+                        <span class="toggler"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="docker-status">
+                <template x-if="dockerStatus === 'running'">
+                    <span><span class="dot dot-green"></span> Running (<span x-text="dockerRunningCount"></span>/<span x-text="dockerServiceCount"></span> services)</span>
+                </template>
+                <template x-if="dockerStatus === 'partial'">
+                    <span><span class="dot dot-orange"></span> Partial (<span x-text="dockerRunningCount"></span>/<span x-text="dockerServiceCount"></span> services)</span>
+                </template>
+                <template x-if="dockerStatus === 'starting'">
+                    <span><span class="dot dot-orange"></span> Deploying... (first run builds images, may take several minutes)</span>
+                </template>
+                <template x-if="dockerStatus === 'stopping'">
+                    <span><span class="dot dot-orange"></span> Stopping...</span>
+                </template>
+                <template x-if="dockerStatus === 'stopped'">
+                    <span><span class="dot dot-gray"></span> Stopped</span>
+                </template>
+                <template x-if="dockerStatus === 'error'">
+                    <span><span class="dot dot-red"></span> Error: <span x-text="dockerError"></span></span>
+                </template>
+                <template x-if="dockerStatus === 'unknown'">
+                    <span><span class="dot dot-gray"></span> Checking...</span>
+                </template>
+            </div>
+
+            <button class="docker-btn"
+                @click="testConnection()"
+                :disabled="testingConnection">
+                <span x-text="testingConnection ? 'Testing...' : 'Test Connection'"></span>
+            </button>
+
+            <template x-if="connectionOk === true">
+                <div class="docker-conn" style="color: #4caf50;">
+                    &#10003; MCP endpoints are responding
+                </div>
+            </template>
+            <template x-if="connectionOk === false">
+                <div class="docker-conn" style="color: #f44336;">
+                    &#10007; <span x-text="connectionError"></span>
+                </div>
+            </template>
+        </div>
+
+        <!-- Settings Section -->
+        <template x-if="$store.pluginSettings.settings">
+            <div>
+                <div class="section-title">Context Engine</div>
+                <div class="section-description">
+                    Integration with Context Engine for semantic code search, symbol graph queries, context-aware Q&A,
+                    and persistent developer memory.
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Indexer Endpoint</div>
+                        <div class="field-description">
+                            HTTP endpoint for the Context Engine Indexer MCP service (code search, symbol graph, context
+                            answer, indexing).
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.indexer_endpoint"
+                            placeholder="http://localhost:8003/mcp" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Memory Endpoint</div>
+                        <div class="field-description">
+                            HTTP endpoint for the Context Engine Memory MCP service (memory store and retrieval).
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.memory_endpoint"
+                            placeholder="http://localhost:8002/mcp" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Collection Name</div>
+                        <div class="field-description">
+                            Qdrant collection to search against. Typically matches the indexed repository name.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.collection_name"
+                            placeholder="codebase" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Search Result Limit</div>
+                        <div class="field-description">
+                            Maximum number of results returned by code search queries.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number" x-model.number="$store.pluginSettings.settings.search_limit" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Search Similarity Threshold</div>
+                        <div class="field-description">
+                            Minimum similarity score for search results (0 = no filter, 1 = exact match only).
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="range" min="0" max="1" step="0.01"
+                            x-model.number="$store.pluginSettings.settings.search_threshold" />
+                        <span class="range-value"
+                            x-text="$store.pluginSettings.settings.search_threshold"></span>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Auto-context injection enabled</div>
+                        <div class="field-description">
+                            Automatically inject relevant code context from Context Engine into agent conversations.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <label class="toggle">
+                            <input type="checkbox"
+                                x-model="$store.pluginSettings.settings.auto_context_enabled" />
+                            <span class="toggler"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Auto-context injection interval</div>
+                        <div class="field-description">
+                            During agent monologue, inject context every X turns. After each user message, context is
+                            always injected.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="range" min="1" max="10" step="1"
+                            x-model.number="$store.pluginSettings.settings.auto_context_interval" />
+                        <span class="range-value"
+                            x-text="$store.pluginSettings.settings.auto_context_interval"></span>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Auto-context max results</div>
+                        <div class="field-description">
+                            Maximum number of code snippets injected into the agent's context window per auto-context
+                            cycle.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number"
+                            x-model.number="$store.pluginSettings.settings.auto_context_max_results" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Auto-context history length</div>
+                        <div class="field-description">
+                            Length of conversation history (in characters) used to formulate auto-context queries.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number"
+                            x-model.number="$store.pluginSettings.settings.auto_context_history_len" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Connection Timeout</div>
+                        <div class="field-description">
+                            HTTP request timeout in seconds for Context Engine service calls.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number"
+                            x-model.number="$store.pluginSettings.settings.connection_timeout" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Context Engine Repository Path</div>
+                        <div class="field-description">
+                            Local path where the Context Engine repository is cloned. The plugin clones it
+                            automatically on first deploy if this directory is empty.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.context_engine_repo_path"
+                            placeholder="~/.context-engine/repo" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Host Index Path</div>
+                        <div class="field-description">
+                            Local directory to mount into the Context Engine containers for indexing.
+                            Point this to your project or codebase root.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text" x-model="$store.pluginSettings.settings.host_index_path"
+                            placeholder="~" />
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</body>
+
+</html>

@@ -8,6 +8,9 @@ import asyncio
 import threading
 import queue
 import sys
+import nest_asyncio
+
+nest_asyncio.apply()
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -138,7 +141,7 @@ def _get_rfc_url() -> str:
     if url.endswith("/"):
         url = url[:-1]
     url = url + ":" + str(set["rfc_port_http"])
-    url += "/rfc"
+    url += "/api/rfc"
     return url
 
 

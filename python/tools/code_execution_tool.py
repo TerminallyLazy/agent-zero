@@ -241,7 +241,7 @@ class CodeExecution(Tool):
         between_output_timeout=15,  # Wait up to x seconds between outputs
         dialog_timeout=5,  # potential dialog detection timeout
         max_exec_timeout=180,  # hard cap on total runtime
-        sleep_time=0.1,
+        sleep_time=0.5,
         prefix="",
         timeouts: dict | None = None,
     ):

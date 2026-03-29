@@ -64,6 +64,7 @@ const model = {
   adjustTextareaHeight() {
     const chatInput = document.getElementById("chat-input");
     if (chatInput) {
+      if (!this.message) chatInput.value = "";
       chatInput.style.height = "auto";
       chatInput.style.height = chatInput.scrollHeight + "px";
     }

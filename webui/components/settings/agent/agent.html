@@ -43,6 +43,21 @@
               </select>
             </div>
           </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="field-title">Inherit active project</div>
+              <div class="field-description">
+                When creating a new chat, automatically inherit the active project from the current chat.
+              </div>
+            </div>
+            <div class="field-control">
+              <label class="toggle">
+                <input type="checkbox" x-model="$store.settings.settings.chat_inherit_project">
+                <span class="toggler"> </span>
+              </label>
+            </div>
+          </div>
         </div>
       </template>
     </div>
