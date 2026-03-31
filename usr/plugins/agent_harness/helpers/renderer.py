@@ -90,12 +90,13 @@ def render_system_prompt(
                 "Completed: " + ", ".join(f"{t.title} ({t.result_summary})" for t in completed)
             )
         if dispatched:
-            graph_lines.append("In Progress: " + ", ".join(t.title for t in dispatched))
+            graph_lines.append("In Progress (parallel): " + ", ".join(t.title for t in dispatched))
+            graph_lines.append('Use harness_run action="collect" to check progress and harvest results.')
         if ready:
             graph_lines.append("Ready to Dispatch: " + ", ".join(t.title for t in ready))
+            graph_lines.append('Use harness_run action="dispatch" to spawn parallel sub-agents.')
         if blocked:
             graph_lines.append("Blocked: " + ", ".join(t.title for t in blocked))
-        graph_lines.append('Use harness_run action="dispatch" to dispatch ready tasks.')
         prompt.extend(graph_lines)
 
     return "\n\n".join(prompt)
@@ -114,6 +115,10 @@ def render_runtime_summary(run: RunRecord | None) -> str:
     pending = get_pending_checkpoint(run)
     if pending:
         lines.append(f"- pending_checkpoint: {pending.reason}")
+    if run.task_graph:
+        dispatched = sum(1 for t in run.task_graph.sub_tasks if t.status == "dispatched")
+        if dispatched > 0:
+            lines.append(f"- parallel_sub_agents: {dispatched} running")
     if run.verification:
         latest = run.verification[-1]
         lines.append(f"- latest_verification: {latest.status} ({latest.summary})")

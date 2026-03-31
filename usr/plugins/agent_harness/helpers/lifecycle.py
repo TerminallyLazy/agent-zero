@@ -195,6 +195,13 @@ def get_pending_checkpoint(run: RunRecord) -> CheckpointRecord | None:
 # --- Run control ---
 
 def stop_run(context: AgentContext) -> None:
+    run = get_current_run(context)
+    if run:
+        try:
+            from usr.plugins.agent_harness.helpers.parallel import kill_all
+            kill_all(run.run_id)
+        except ImportError:
+            pass
     clear_current_run(context)
 
 
