@@ -4,27 +4,43 @@
 </head>
 <body>
   <div
-    x-data="{ protectedPathsText: '' }"
+    x-data="{
+      buildSubagentLimit: config?.mode_policies?.build?.subagent_limit ?? 2,
+      buildRepairLimit: config?.mode_policies?.build?.repair_limit ?? 1,
+      surgeSubagentLimit: config?.mode_policies?.surge?.subagent_limit ?? 4,
+      surgeRepairLimit: config?.mode_policies?.surge?.repair_limit ?? 3,
+      protectedPathsText: Array.isArray(config?.protected_paths) ? config.protected_paths.join('\n') : 'agent.py\ninitialize.py',
+    }"
     x-init="
-      // Ensure nested config structure exists with defaults
-      if (!config.mode_policies) config.mode_policies = {};
-      if (!config.mode_policies.build) config.mode_policies.build = {};
-      if (!config.mode_policies.surge) config.mode_policies.surge = {};
-      if (config.mode_policies.build.subagent_limit == null) config.mode_policies.build.subagent_limit = 2;
-      if (config.mode_policies.build.repair_limit == null) config.mode_policies.build.repair_limit = 1;
-      if (config.mode_policies.surge.subagent_limit == null) config.mode_policies.surge.subagent_limit = 4;
-      if (config.mode_policies.surge.repair_limit == null) config.mode_policies.surge.repair_limit = 3;
+      // Ensure top-level defaults
       if (config.ambient_assist_enabled == null) config.ambient_assist_enabled = true;
       if (config.memory_curation_enabled == null) config.memory_curation_enabled = true;
       if (config.show_status_ui == null) config.show_status_ui = true;
       if (!config.default_deep_mode) config.default_deep_mode = 'build';
-      if (!config.protected_paths) config.protected_paths = ['agent.py', 'initialize.py'];
-      protectedPathsText = Array.isArray(config.protected_paths) ? config.protected_paths.join('\n') : '';
-      $watch('protectedPathsText', value => {
-        config.protected_paths = value
-          .split('\n')
-          .map(item => item.trim())
-          .filter(Boolean);
+
+      // Sync local flat vars back to nested config on change
+      $watch('buildSubagentLimit', v => {
+        if (!config.mode_policies) config.mode_policies = {};
+        if (!config.mode_policies.build) config.mode_policies.build = {};
+        config.mode_policies.build.subagent_limit = v;
+      });
+      $watch('buildRepairLimit', v => {
+        if (!config.mode_policies) config.mode_policies = {};
+        if (!config.mode_policies.build) config.mode_policies.build = {};
+        config.mode_policies.build.repair_limit = v;
+      });
+      $watch('surgeSubagentLimit', v => {
+        if (!config.mode_policies) config.mode_policies = {};
+        if (!config.mode_policies.surge) config.mode_policies.surge = {};
+        config.mode_policies.surge.subagent_limit = v;
+      });
+      $watch('surgeRepairLimit', v => {
+        if (!config.mode_policies) config.mode_policies = {};
+        if (!config.mode_policies.surge) config.mode_policies.surge = {};
+        config.mode_policies.surge.repair_limit = v;
+      });
+      $watch('protectedPathsText', v => {
+        config.protected_paths = v.split('\n').map(s => s.trim()).filter(Boolean);
       });
     "
   >
@@ -88,7 +104,7 @@
             <div class="field-description">Maximum concurrent subagents in Build mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="config.mode_policies.build.subagent_limit" />
+            <input type="number" min="0" x-model.number="buildSubagentLimit" />
           </div>
         </div>
 
@@ -98,7 +114,7 @@
             <div class="field-description">Maximum bounded repair loops in Build mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="config.mode_policies.build.repair_limit" />
+            <input type="number" min="0" x-model.number="buildRepairLimit" />
           </div>
         </div>
 
@@ -108,7 +124,7 @@
             <div class="field-description">Maximum concurrent subagents in Surge mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="config.mode_policies.surge.subagent_limit" />
+            <input type="number" min="0" x-model.number="surgeSubagentLimit" />
           </div>
         </div>
 
@@ -118,7 +134,7 @@
             <div class="field-description">Maximum bounded repair loops in Surge mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="config.mode_policies.surge.repair_limit" />
+            <input type="number" min="0" x-model.number="surgeRepairLimit" />
           </div>
         </div>
 
