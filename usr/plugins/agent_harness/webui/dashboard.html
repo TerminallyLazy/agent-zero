@@ -76,22 +76,32 @@
           <section class="agent-harness-card">
             <div class="agent-harness-card-header">
               <h3>Active Run</h3>
-              <span class="agent-harness-badge" x-text="$store.agentHarness.currentRun ? $store.agentHarness.currentRun.phase : 'idle'"></span>
+              <span class="agent-harness-badge"
+                    :class="'agent-harness-phase-' + ($store.agentHarness.currentRun?.status || 'idle')"
+                    x-text="({
+                      idle: 'Idle', inspect: 'Inspecting', plan: 'Planning',
+                      implement: 'Implementing', verify: 'Verifying', repair: 'Repairing',
+                      blocked: 'Blocked', summarize: 'Finishing', complete: 'Complete'
+                    })[$store.agentHarness.currentRun?.phase] || $store.agentHarness.currentRun?.phase || 'Idle'"></span>
             </div>
             <template x-if="$store.agentHarness.currentRun">
               <div class="agent-harness-run-body">
                 <div class="agent-harness-run-objective" x-text="$store.agentHarness.currentRun.objective"></div>
                 <div class="agent-harness-meta-row">
-                  <span class="agent-harness-meta-pill" x-text="$store.agentHarness.currentRun.mode"></span>
-                  <span class="agent-harness-meta-pill" x-text="$store.agentHarness.currentRun.status"></span>
-                  <span class="agent-harness-meta-pill" x-text="$store.agentHarness.currentRun.risk_level"></span>
+                  <span class="agent-harness-meta-pill agent-harness-pill-mode" x-text="$store.agentHarness.currentRun.mode"></span>
+                  <span class="agent-harness-meta-pill"
+                        :class="'agent-harness-pill-' + $store.agentHarness.currentRun.status"
+                        x-text="$store.agentHarness.currentRun.status"></span>
+                  <span class="agent-harness-meta-pill"
+                        :class="'agent-harness-pill-risk-' + $store.agentHarness.currentRun.risk_level"
+                        x-text="$store.agentHarness.currentRun.risk_level + ' risk'"></span>
                 </div>
                 <template x-if="$store.agentHarness.currentRun.tasks?.length">
                   <div class="agent-harness-subsection">
                     <div class="agent-harness-subtitle">Tracked Tasks</div>
                     <template x-for="task in $store.agentHarness.currentRun.tasks" :key="task.id">
                       <div class="agent-harness-list-row">
-                        <span x-text="task.title"></span>
+                        <span class="agent-harness-task-title" x-text="task.title"></span>
                         <span class="agent-harness-list-status" x-text="task.status"></span>
                       </div>
                     </template>
@@ -320,8 +330,20 @@
     }
 
     .agent-harness-run-objective {
-      font-size: 1rem;
+      font-size: 0.92rem;
       font-weight: 600;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .agent-harness-task-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 260px;
     }
 
     .agent-harness-meta-row {
@@ -329,6 +351,18 @@
       gap: 0.45rem;
       flex-wrap: wrap;
     }
+
+    .agent-harness-pill-mode { text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; }
+    .agent-harness-pill-active { background: color-mix(in srgb, #22c55e 18%, transparent); color: #86efac; }
+    .agent-harness-pill-completed { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #93c5fd; }
+    .agent-harness-pill-blocked { background: color-mix(in srgb, #ef4444 18%, transparent); color: #fca5a5; }
+    .agent-harness-pill-risk-low { opacity: 0.6; }
+    .agent-harness-pill-risk-elevated { background: color-mix(in srgb, #eab308 14%, transparent); color: #fde68a; }
+    .agent-harness-pill-risk-high { background: color-mix(in srgb, #f97316 18%, transparent); color: #fdba74; }
+    .agent-harness-pill-risk-critical { background: color-mix(in srgb, #ef4444 22%, transparent); color: #fca5a5; }
+
+    .agent-harness-phase-blocked { background: color-mix(in srgb, #ef4444 20%, transparent) !important; color: #fca5a5 !important; }
+    .agent-harness-phase-completed { background: color-mix(in srgb, #22c55e 18%, transparent) !important; color: #86efac !important; }
 
     .agent-harness-meta-pill {
       display: inline-flex;
