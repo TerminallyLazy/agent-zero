@@ -114,3 +114,21 @@ def test_record_tool_activity_parses_verification_with_structured_regex():
     )
     assert run2.phase == "repair"
     assert run2.verification[-1].status == "failed"
+
+
+def test_set_active_state_respects_task_graph():
+    from usr.plugins.agent_harness.helpers.lifecycle import _set_active_state
+    from usr.plugins.agent_harness.helpers.planner import submit_plan
+
+    # With task graph and pending tasks -> implement
+    run = _make_run(phase="blocked", status="blocked")
+    submit_plan(run, [{"title": "A", "description": "a", "role": "code"}])
+    _set_active_state(run)
+    assert run.phase == "implement"
+    assert run.status == "active"
+
+    # In plan phase with no graph -> stay in plan
+    run2 = _make_run(phase="plan", status="blocked")
+    _set_active_state(run2)
+    assert run2.phase == "plan"
+    assert run2.status == "active"

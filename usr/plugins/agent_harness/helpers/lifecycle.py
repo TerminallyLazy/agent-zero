@@ -133,8 +133,17 @@ def ensure_run(
 # --- Run state helpers ---
 
 def _set_active_state(run: RunRecord) -> None:
-    run.phase = "implement" if run.mode != "assist" else "idle"
     run.status = "active"
+    if run.mode == "assist":
+        run.phase = "idle"
+    elif run.task_graph and any(
+        t.status in ("pending", "dispatched") for t in run.task_graph.sub_tasks
+    ):
+        run.phase = "implement"
+    elif run.phase == "plan" and not run.task_graph:
+        pass  # Stay in plan phase if no graph submitted yet
+    else:
+        run.phase = "implement"
 
 
 def latest_verification_record(run: RunRecord) -> VerificationRecord | None:
