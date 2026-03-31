@@ -33,8 +33,13 @@ def spawn_parallel(
     run: RunRecord,
     sub_tasks: list[SubTask],
     settings: dict[str, Any],
+    parent_context: "AgentContext | None" = None,
 ) -> list[str]:
-    """Spawn background agents for each sub-task. Returns list of spawned IDs."""
+    """Spawn background agents for each sub-task. Returns list of spawned IDs.
+
+    parent_context: if provided, the model override and project settings are
+    copied to each child context so sub-agents use the same LLM as the parent.
+    """
     spawned_ids: list[str] = []
     for sub_task in sub_tasks:
         scoped_msg = build_scoped_context(sub_task, run)
@@ -46,6 +51,14 @@ def spawn_parallel(
             type=AgentContextType.BACKGROUND,
             set_current=False,
         )
+
+        # Inherit model configuration from parent so sub-agents use the same LLM
+        if parent_context:
+            for key in ("chat_model_override",):
+                val = parent_context.get_data(key)
+                if val is not None:
+                    ctx.set_data(key, val)
+
         agent = ctx.agent0
 
         # Seed the agent with the scoped task context

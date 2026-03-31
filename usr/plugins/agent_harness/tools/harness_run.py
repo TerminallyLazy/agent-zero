@@ -73,7 +73,7 @@ class HarnessRun(Tool):
                     )
                 return _response("No tasks ready to dispatch.")
 
-            spawned = spawn_parallel(run, dispatched, settings)
+            spawned = spawn_parallel(run, dispatched, settings, parent_context=self.agent.context)
             runtime.save_current_run(self.agent.context, run)
             titles = [t.title for t in dispatched]
             return _response(
