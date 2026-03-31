@@ -67,6 +67,7 @@ class CheckpointRecord(BaseModel):
     risk_level: RiskLevel = "high"
     status: CheckpointStatus = "pending"
     decision_comment: str = ""
+    sub_task_id: str = ""
     created_at: str
     decided_at: str = ""
 
@@ -99,6 +100,58 @@ class MemoryCandidate(BaseModel):
     decided_at: str = ""
 
 
+SubTaskRole = Literal["research", "code", "verify", "synthesize"]
+SubTaskStatus = Literal["pending", "dispatched", "completed", "failed"]
+
+
+class SubTask(BaseModel):
+    id: str
+    title: str
+    description: str
+    role: SubTaskRole
+    depends_on: list[str] = Field(default_factory=list)
+    status: SubTaskStatus = "pending"
+    result_summary: str = ""
+    result_files: list[str] = Field(default_factory=list)
+    dispatched_at: str = ""
+    completed_at: str = ""
+
+
+class TaskGraph(BaseModel):
+    objective: str
+    sub_tasks: list[SubTask] = Field(default_factory=list)
+    created_at: str
+
+    def ready_tasks(self) -> list[SubTask]:
+        completed = {t.id for t in self.sub_tasks if t.status == "completed"}
+        return [
+            t for t in self.sub_tasks
+            if t.status == "pending"
+            and all(dep in completed for dep in t.depends_on)
+        ]
+
+    def is_complete(self) -> bool:
+        return all(t.status in ("completed", "failed") for t in self.sub_tasks)
+
+    def has_cycle(self) -> bool:
+        adj: dict[str, list[str]] = {t.id: list(t.depends_on) for t in self.sub_tasks}
+        visited: set[str] = set()
+        in_stack: set[str] = set()
+
+        def dfs(node: str) -> bool:
+            visited.add(node)
+            in_stack.add(node)
+            for dep in adj.get(node, []):
+                if dep in in_stack:
+                    return True
+                if dep not in visited and dfs(dep):
+                    return True
+            in_stack.discard(node)
+            return False
+
+        return any(dfs(t.id) for t in self.sub_tasks if t.id not in visited)
+
+
 class RunRecord(BaseModel):
     run_id: str
     context_id: str
@@ -116,6 +169,7 @@ class RunRecord(BaseModel):
     touched_files: list[str] = Field(default_factory=list)
     allow_broad_edits: bool = False
     last_tool_name: str = ""
+    task_graph: TaskGraph | None = None
     created_at: str
     updated_at: str
     completed_at: str = ""
