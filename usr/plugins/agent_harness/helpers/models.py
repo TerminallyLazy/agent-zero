@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+import re
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+from helpers import files, plugins
+
+PLUGIN_NAME = "agent_harness"
+RUN_CONTEXT_KEY = "agent_harness.current_run"
+OUTPUT_CONTEXT_KEY = "agent_harness"
+
+HarnessMode = Literal["assist", "build", "surge"]
+HarnessPhase = Literal[
+    "idle",
+    "inspect",
+    "plan",
+    "implement",
+    "verify",
+    "repair",
+    "blocked",
+    "summarize",
+    "complete",
+]
+RiskLevel = Literal["low", "elevated", "high", "critical"]
+RunStatus = Literal["active", "blocked", "completed", "stopped"]
+CheckpointStatus = Literal["pending", "approved", "rejected"]
+MemoryScope = Literal["project", "agent", "global"]
+MemoryCandidateStatus = Literal["proposed", "accepted", "rejected"]
+VerificationStatus = Literal["passed", "failed", "unknown"]
+
+DEPENDENCY_INSTALL_RE = re.compile(
+    r"(^|\s)(pip|pip3|uv\s+pip|npm|pnpm|yarn|poetry|apt|apt-get|brew)\s+"
+    r"(install|add)\b",
+    re.IGNORECASE,
+)
+DESTRUCTIVE_COMMAND_RE = re.compile(
+    r"(rm\s+-[^\n]*\b[rRfF]+\b|git\s+reset\s+--hard|git\s+checkout\s+--|del\s+/f)",
+    re.IGNORECASE,
+)
+VERIFICATION_COMMAND_RE = re.compile(
+    r"\b(pytest|npm\s+test|pnpm\s+test|yarn\s+test|uv\s+run\s+pytest)\b",
+    re.IGNORECASE,
+)
+DEFAULT_RUN_OBJECTIVE = "Active coding task"
+DEFAULT_DEEP_MODE: HarnessMode = "build"
+
+
+class TaskRecord(BaseModel):
+    id: str
+    title: str
+    status: str = "active"
+    details: str = ""
+    updated_at: str
+
+
+class CheckpointRecord(BaseModel):
+    id: str
+    reason: str
+    proposed_action: str
+    tool_name: str = ""
+    tool_args: dict[str, Any] = Field(default_factory=dict)
+    risk_level: RiskLevel = "high"
+    status: CheckpointStatus = "pending"
+    decision_comment: str = ""
+    created_at: str
+    decided_at: str = ""
+
+
+class VerificationRecord(BaseModel):
+    id: str
+    name: str
+    status: VerificationStatus
+    summary: str
+    created_at: str
+
+
+class FailureRecord(BaseModel):
+    id: str
+    summary: str
+    location: str = ""
+    exception_type: str = ""
+    created_at: str
+
+
+class MemoryCandidate(BaseModel):
+    id: str
+    scope: MemoryScope
+    rule_text: str
+    reason: str
+    source: str
+    confidence: float = 0.7
+    status: MemoryCandidateStatus = "proposed"
+    created_at: str
+    decided_at: str = ""
+
+
+class RunRecord(BaseModel):
+    run_id: str
+    context_id: str
+    mode: HarnessMode
+    objective: str
+    constraints: list[str] = Field(default_factory=list)
+    phase: HarnessPhase
+    status: RunStatus
+    risk_level: RiskLevel
+    tasks: list[TaskRecord] = Field(default_factory=list)
+    checkpoints: list[CheckpointRecord] = Field(default_factory=list)
+    verification: list[VerificationRecord] = Field(default_factory=list)
+    failures: list[FailureRecord] = Field(default_factory=list)
+    memory_candidates: list[MemoryCandidate] = Field(default_factory=list)
+    touched_files: list[str] = Field(default_factory=list)
+    allow_broad_edits: bool = False
+    last_tool_name: str = ""
+    created_at: str
+    updated_at: str
+    completed_at: str = ""
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def _normalize_path(path: str) -> str:
+    return str(Path(path).as_posix()) if path else ""
+
+
+def _plugin_dir() -> str:
+    return plugins.find_plugin_dir(PLUGIN_NAME) or files.get_abs_path(
+        files.USER_DIR,
+        files.PLUGINS_DIR,
+        PLUGIN_NAME,
+    )
