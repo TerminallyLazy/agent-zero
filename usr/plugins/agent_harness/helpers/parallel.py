@@ -37,8 +37,9 @@ def spawn_parallel(
 ) -> list[str]:
     """Spawn background agents for each sub-task. Returns list of spawned IDs.
 
-    parent_context: if provided, the model override and project settings are
-    copied to each child context so sub-agents use the same LLM as the parent.
+    parent_context: if provided, all context data (model config, project settings,
+    plugin state) is copied to each child so sub-agents use the same LLM and
+    configuration as the parent. Each child still gets its own isolated history.
     """
     spawned_ids: list[str] = []
     for sub_task in sub_tasks:
@@ -46,18 +47,25 @@ def spawn_parallel(
 
         # Create an isolated background context and agent
         config = initialize_agent()
+
+        # Copy ALL parent context data so the child inherits model config,
+        # project settings, plugin state, etc. This ensures the sub-agent
+        # uses the same LLM provider the user selected — not the system default.
+        inherited_data = None
+        if parent_context and parent_context.data:
+            from copy import deepcopy
+            inherited_data = deepcopy(parent_context.data)
+            # Remove agent-specific keys that shouldn't be shared
+            for key in (Agent.DATA_NAME_SUPERIOR, Agent.DATA_NAME_SUBORDINATE,
+                        "agent_harness.current_run"):
+                inherited_data.pop(key, None)
+
         ctx = AgentContext(
             config=config,
             type=AgentContextType.BACKGROUND,
             set_current=False,
+            data=inherited_data,
         )
-
-        # Inherit model configuration from parent so sub-agents use the same LLM
-        if parent_context:
-            for key in ("chat_model_override",):
-                val = parent_context.get_data(key)
-                if val is not None:
-                    ctx.set_data(key, val)
 
         agent = ctx.agent0
 
