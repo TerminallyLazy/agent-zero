@@ -28,6 +28,13 @@ from usr.plugins.agent_harness.helpers.memory import (  # noqa: F401
 )
 # Renderer
 from usr.plugins.agent_harness.helpers.renderer import *  # noqa: F401,F403
+# Phase 2 modules
+from usr.plugins.agent_harness.helpers.planner import *  # noqa: F401,F403
+from usr.plugins.agent_harness.helpers.orchestrator import *  # noqa: F401,F403
+# Phase 3 modules
+from usr.plugins.agent_harness.helpers.context_engine import *  # noqa: F401,F403
+from usr.plugins.agent_harness.helpers.workspace import *  # noqa: F401,F403
+from usr.plugins.agent_harness.helpers.cost_tracker import *  # noqa: F401,F403
 
 # Re-import models needed for the accept_memory_candidate override
 from usr.plugins.agent_harness.helpers.models import MemoryCandidate, MemoryScope
