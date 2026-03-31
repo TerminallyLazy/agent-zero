@@ -105,6 +105,13 @@ class HarnessRun(Tool):
             runtime.save_current_run(self.agent.context, run)
             return _response(summary)
 
+        if action == "clean":
+            if run.workspace:
+                from usr.plugins.agent_harness.helpers.workspace import clean_workspace
+                clean_workspace(run.workspace)
+                return _response("Workspace cleaned. Outputs and run logs preserved.")
+            return _response("No workspace to clean.")
+
         if action == "complete":
             runtime.complete_run(run)
             runtime.save_current_run(self.agent.context, run)
