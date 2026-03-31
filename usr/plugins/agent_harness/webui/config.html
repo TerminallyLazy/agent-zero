@@ -11,38 +11,21 @@
       surgeRepairLimit: config?.mode_policies?.surge?.repair_limit ?? 3,
       protectedPathsText: Array.isArray(config?.protected_paths) ? config.protected_paths.join('\n') : 'agent.py\ninitialize.py',
     }"
-    x-init="
-      // Ensure top-level defaults
-      if (config.ambient_assist_enabled == null) config.ambient_assist_enabled = true;
-      if (config.memory_curation_enabled == null) config.memory_curation_enabled = true;
-      if (config.show_status_ui == null) config.show_status_ui = true;
-      if (!config.default_deep_mode) config.default_deep_mode = 'build';
+    x-init="(() => {
+      config.ambient_assist_enabled = config.ambient_assist_enabled ?? true;
+      config.memory_curation_enabled = config.memory_curation_enabled ?? true;
+      config.show_status_ui = config.show_status_ui ?? true;
+      config.default_deep_mode = config.default_deep_mode || 'build';
 
-      // Sync local flat vars back to nested config on change
-      $watch('buildSubagentLimit', v => {
-        if (!config.mode_policies) config.mode_policies = {};
-        if (!config.mode_policies.build) config.mode_policies.build = {};
-        config.mode_policies.build.subagent_limit = v;
-      });
-      $watch('buildRepairLimit', v => {
-        if (!config.mode_policies) config.mode_policies = {};
-        if (!config.mode_policies.build) config.mode_policies.build = {};
-        config.mode_policies.build.repair_limit = v;
-      });
-      $watch('surgeSubagentLimit', v => {
-        if (!config.mode_policies) config.mode_policies = {};
-        if (!config.mode_policies.surge) config.mode_policies.surge = {};
-        config.mode_policies.surge.subagent_limit = v;
-      });
-      $watch('surgeRepairLimit', v => {
-        if (!config.mode_policies) config.mode_policies = {};
-        if (!config.mode_policies.surge) config.mode_policies.surge = {};
-        config.mode_policies.surge.repair_limit = v;
-      });
-      $watch('protectedPathsText', v => {
-        config.protected_paths = v.split('\n').map(s => s.trim()).filter(Boolean);
-      });
-    "
+      const ensureBuild = () => { config.mode_policies = config.mode_policies || {}; config.mode_policies.build = config.mode_policies.build || {}; };
+      const ensureSurge = () => { config.mode_policies = config.mode_policies || {}; config.mode_policies.surge = config.mode_policies.surge || {}; };
+
+      $watch('buildSubagentLimit', v => { ensureBuild(); config.mode_policies.build.subagent_limit = v; });
+      $watch('buildRepairLimit', v => { ensureBuild(); config.mode_policies.build.repair_limit = v; });
+      $watch('surgeSubagentLimit', v => { ensureSurge(); config.mode_policies.surge.subagent_limit = v; });
+      $watch('surgeRepairLimit', v => { ensureSurge(); config.mode_policies.surge.repair_limit = v; });
+      $watch('protectedPathsText', v => { config.protected_paths = v.split('\n').map(s => s.trim()).filter(Boolean); });
+    })()"
   >
     <template x-if="config">
       <div class="agent-harness-config">
