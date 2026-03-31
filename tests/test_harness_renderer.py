@@ -35,7 +35,7 @@ def test_render_system_prompt_surge_mode():
     assert "SURGE MODE" in prompt
     assert "Ship it" in prompt
     assert "Always verify" in prompt
-    assert "max 4 concurrent subagents" in prompt
+    assert "4 parallel sub-agents" in prompt
 
 
 def test_render_system_prompt_ambient_assist():

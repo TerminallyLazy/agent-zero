@@ -38,12 +38,41 @@ def render_system_prompt(
         f"Current phase: {run.phase}",
         f"Run status: {run.status}",
         f"Risk level: {run.risk_level}",
-        "Deep harness behavior:",
-        "- Continue through inspect, implement, verify, and repair by default instead of stopping at analysis.",
-        f"- max {policy['subagent_limit']} concurrent subagents in this mode.",
-        f"- max {repair_limit} bounded repair loops before surfacing a blocker.",
-        "- Prefer composing existing Agent Zero tools and plugins over inventing alternate workflows.",
     ]
+
+    # Mode-specific workflow instructions
+    if run.mode == "surge":
+        prompt.extend([
+            "SURGE WORKFLOW (high autonomy):",
+            "- For simple single-file tasks: implement directly, verify, complete.",
+            "- For multi-file tasks (2+ files to create or modify): you MUST plan first.",
+            '  Use harness_run action="plan" to decompose into sub-tasks BEFORE writing any code.',
+            '  Then use action="dispatch" to spawn parallel sub-agents and action="collect" to harvest results.',
+            f"- Up to {policy['subagent_limit']} parallel sub-agents available. USE THEM for independent work.",
+            f"- {repair_limit} repair loops max before surfacing the blocker.",
+            "- Use harness_checkpoint before: pip/npm install, git push, rm -rf, or editing protected files.",
+        ])
+    elif run.mode == "build":
+        prompt.extend([
+            "BUILD WORKFLOW (structured, with guardrails):",
+            "- Phase 1 INSPECT: Read the repo structure and relevant files. Understand before acting.",
+            '- Phase 2 PLAN: Use harness_run action="plan" to decompose the objective into sub-tasks.',
+            "  Every build-mode task MUST have a plan. Do NOT skip to implementing.",
+            '- Phase 3 DISPATCH: Use action="dispatch" to spawn parallel sub-agents for ready tasks.',
+            '  Then use action="collect" to check progress and harvest results.',
+            "- Phase 4 VERIFY: Run tests. Record results with harness_run action=\"verification\".",
+            "- Phase 5 COMPLETE: Mark done with harness_run action=\"complete\".",
+            f"- Up to {policy['subagent_limit']} parallel sub-agents. Use them instead of doing everything sequentially.",
+            f"- {repair_limit} repair loops max before surfacing the blocker.",
+            "- MANDATORY checkpoints before: dependency installs, destructive commands, protected file edits, git push.",
+            "- Use harness_checkpoint proactively. Do NOT skip checkpoints.",
+        ])
+    else:
+        prompt.extend([
+            "ASSIST MODE (lightweight):",
+            "- Inspect before editing. Verify before claiming success.",
+            "- No planning required for simple tasks.",
+        ])
     if run.constraints:
         prompt.extend(["Constraints:", "\n".join(f"- {item}" for item in run.constraints)])
     if pending:
@@ -67,14 +96,24 @@ def render_system_prompt(
         prompt.extend(["Accepted rules:", rules_text])
 
     # Phase-aware task graph sections
-    if run.phase == "plan" and not run.task_graph:
-        prompt.extend([
-            "PLANNING PHASE",
-            "Decompose your objective into sub-tasks.",
-            "Each sub-task should be independently executable by a sub-agent.",
-            "Available roles: research, code, verify, synthesize.",
-            'Use harness_run action="plan" to submit your task graph.',
-        ])
+    if run.phase in ("inspect", "plan") and not run.task_graph:
+        if run.phase == "inspect":
+            prompt.extend([
+                "INSPECT PHASE — READ BEFORE ACTING",
+                "Examine the repo structure, read relevant files, and understand the codebase.",
+                'When ready, use harness_run action="phase" phase="plan" to move to planning.',
+                "Do NOT start writing code yet.",
+            ])
+        else:
+            prompt.extend([
+                "PLANNING PHASE — REQUIRED BEFORE IMPLEMENTING",
+                "You MUST decompose the objective into sub-tasks before writing any code.",
+                "Each sub-task should be independently executable by a parallel sub-agent.",
+                "Available roles: research (read docs/code), code (implement), verify (test), synthesize (combine).",
+                "Reference dependencies by index. Example: depends_on: [0] means depends on the first task.",
+                'Submit your plan: harness_run action="plan" sub_tasks=[...]',
+                "Do NOT use code_execution_tool or text_editor until the plan is submitted.",
+            ])
 
     if run.task_graph and run.phase in ("implement", "verify"):
         completed = [t for t in run.task_graph.sub_tasks if t.status == "completed"]
@@ -91,12 +130,15 @@ def render_system_prompt(
             )
         if dispatched:
             graph_lines.append("In Progress (parallel): " + ", ".join(t.title for t in dispatched))
-            graph_lines.append('Use harness_run action="collect" to check progress and harvest results.')
-        if ready:
+            graph_lines.append('>>> NEXT ACTION: harness_run action="collect" to harvest results <<<')
+        elif ready:
             graph_lines.append("Ready to Dispatch: " + ", ".join(t.title for t in ready))
-            graph_lines.append('Use harness_run action="dispatch" to spawn parallel sub-agents.')
+            graph_lines.append('>>> NEXT ACTION: harness_run action="dispatch" to spawn parallel sub-agents <<<')
         if blocked:
-            graph_lines.append("Blocked: " + ", ".join(t.title for t in blocked))
+            graph_lines.append("Blocked (waiting on dependencies): " + ", ".join(t.title for t in blocked))
+        if not dispatched and not ready and not blocked and completed:
+            graph_lines.append("All sub-tasks complete.")
+            graph_lines.append('>>> NEXT ACTION: Run tests to verify, then harness_run action="complete" <<<')
         prompt.extend(graph_lines)
 
     return "\n\n".join(prompt)
