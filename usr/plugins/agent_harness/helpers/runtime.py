@@ -35,6 +35,8 @@ from usr.plugins.agent_harness.helpers.orchestrator import *  # noqa: F401,F403
 from usr.plugins.agent_harness.helpers.context_engine import *  # noqa: F401,F403
 from usr.plugins.agent_harness.helpers.workspace import *  # noqa: F401,F403
 from usr.plugins.agent_harness.helpers.cost_tracker import *  # noqa: F401,F403
+# Parallel dispatch
+from usr.plugins.agent_harness.helpers.parallel import *  # noqa: F401,F403
 
 # Re-import models needed for the accept_memory_candidate override
 from usr.plugins.agent_harness.helpers.models import MemoryCandidate, MemoryScope
