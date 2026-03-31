@@ -152,6 +152,48 @@ class TaskGraph(BaseModel):
         return any(dfs(t.id) for t in self.sub_tasks if t.id not in visited)
 
 
+ContextStatus = Literal["normal", "elevated", "critical"]
+
+
+class ContextPressure(BaseModel):
+    estimated_tokens: int
+    threshold_pct: float
+    status: ContextStatus
+    last_assessed_at: str
+
+
+class OffloadRecord(BaseModel):
+    id: str
+    sub_task_id: str = ""
+    content_type: str
+    file_path: str
+    summary: str
+    created_at: str
+
+
+class TokenUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class CostRecord(BaseModel):
+    run_id: str
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    sub_task_usage: dict[str, TokenUsage] = Field(default_factory=dict)
+    budget_limit: int = 0
+    budget_remaining: int = 0
+    updated_at: str
+
+
+class WorkspacePaths(BaseModel):
+    root: str
+    workspace: str
+    outputs: str
+    offloads: str
+    runs: str
+
+
 class RunRecord(BaseModel):
     run_id: str
     context_id: str
@@ -170,6 +212,9 @@ class RunRecord(BaseModel):
     allow_broad_edits: bool = False
     last_tool_name: str = ""
     task_graph: TaskGraph | None = None
+    offloads: list[OffloadRecord] = Field(default_factory=list)
+    cost: CostRecord | None = None
+    workspace: WorkspacePaths | None = None
     created_at: str
     updated_at: str
     completed_at: str = ""
