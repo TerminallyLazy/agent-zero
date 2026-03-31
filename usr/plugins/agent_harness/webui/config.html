@@ -1,0 +1,174 @@
+<html>
+<head>
+  <title>Agent Harness Settings</title>
+</head>
+<body>
+  <div
+    x-data="{ protectedPathsText: '' }"
+    x-init="
+      // Ensure nested config structure exists with defaults
+      if (!config.mode_policies) config.mode_policies = {};
+      if (!config.mode_policies.build) config.mode_policies.build = {};
+      if (!config.mode_policies.surge) config.mode_policies.surge = {};
+      if (config.mode_policies.build.subagent_limit == null) config.mode_policies.build.subagent_limit = 2;
+      if (config.mode_policies.build.repair_limit == null) config.mode_policies.build.repair_limit = 1;
+      if (config.mode_policies.surge.subagent_limit == null) config.mode_policies.surge.subagent_limit = 4;
+      if (config.mode_policies.surge.repair_limit == null) config.mode_policies.surge.repair_limit = 3;
+      if (config.ambient_assist_enabled == null) config.ambient_assist_enabled = true;
+      if (config.memory_curation_enabled == null) config.memory_curation_enabled = true;
+      if (config.show_status_ui == null) config.show_status_ui = true;
+      if (!config.default_deep_mode) config.default_deep_mode = 'build';
+      if (!config.protected_paths) config.protected_paths = ['agent.py', 'initialize.py'];
+      protectedPathsText = Array.isArray(config.protected_paths) ? config.protected_paths.join('\n') : '';
+      $watch('protectedPathsText', value => {
+        config.protected_paths = value
+          .split('\n')
+          .map(item => item.trim())
+          .filter(Boolean);
+      });
+    "
+  >
+    <template x-if="config">
+      <div class="agent-harness-config">
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Ambient Assist</div>
+            <div class="field-description">Keep lightweight coding guidance active when the plugin is enabled.</div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox" x-model="config.ambient_assist_enabled" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Default Deep Mode</div>
+            <div class="field-description">Mode launched first when starting a deep harness workflow.</div>
+          </div>
+          <div class="field-control">
+            <select x-model="config.default_deep_mode">
+              <option value="build">Build</option>
+              <option value="surge">Surge</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Curated Memory</div>
+            <div class="field-description">Keep rule proposals reviewable instead of persisting them automatically.</div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox" x-model="config.memory_curation_enabled" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Show Status UI</div>
+            <div class="field-description">Display the harness status strip above the chat input.</div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox" x-model="config.show_status_ui" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Build Subagent Limit</div>
+            <div class="field-description">Maximum concurrent subagents in Build mode.</div>
+          </div>
+          <div class="field-control">
+            <input type="number" min="0" x-model.number="config.mode_policies.build.subagent_limit" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Build Repair Limit</div>
+            <div class="field-description">Maximum bounded repair loops in Build mode.</div>
+          </div>
+          <div class="field-control">
+            <input type="number" min="0" x-model.number="config.mode_policies.build.repair_limit" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Surge Subagent Limit</div>
+            <div class="field-description">Maximum concurrent subagents in Surge mode.</div>
+          </div>
+          <div class="field-control">
+            <input type="number" min="0" x-model.number="config.mode_policies.surge.subagent_limit" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Surge Repair Limit</div>
+            <div class="field-description">Maximum bounded repair loops in Surge mode.</div>
+          </div>
+          <div class="field-control">
+            <input type="number" min="0" x-model.number="config.mode_policies.surge.repair_limit" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Protected Paths</div>
+            <div class="field-description">One filename or path per line that should always trigger a checkpoint.</div>
+          </div>
+          <div class="field-control">
+            <textarea x-model="protectedPathsText" rows="4"></textarea>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <style>
+    .agent-harness-config {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+      gap: 0.8rem;
+      align-items: start;
+    }
+
+    .field-label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .field-title {
+      font-weight: 600;
+    }
+
+    .field-description {
+      font-size: 0.82rem;
+      opacity: 0.72;
+    }
+
+    .field-control > input,
+    .field-control > select,
+    .field-control > textarea {
+      width: 100%;
+    }
+  </style>
+</body>
+</html>
