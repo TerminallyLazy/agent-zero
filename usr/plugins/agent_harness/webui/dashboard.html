@@ -111,6 +111,7 @@
               <span class="agent-harness-badge"
                     x-text="($store.agentHarness.currentRun?.task_graph?.sub_tasks || []).length + ' tasks'"></span>
             </div>
+            <!-- Mermaid visual graph (loads async, may take a moment) -->
             <div class="agent-harness-graph-container"
                  x-ref="taskGraph"
                  x-effect="
@@ -119,6 +120,20 @@
                      if (def && $refs.taskGraph) window.__mermaidRender(def, $refs.taskGraph);
                    }
                  ">
+            </div>
+            <!-- Always-visible text fallback showing sub-task status -->
+            <div class="agent-harness-stack compact" style="margin-top: 0.5rem;">
+              <template x-for="task in ($store.agentHarness.currentRun?.task_graph?.sub_tasks || [])" :key="task.id">
+                <div class="agent-harness-list-row">
+                  <span>
+                    <span class="agent-harness-task-dot"
+                          :style="'background:' + ({completed:'#22c55e',dispatched:'#eab308',failed:'#ef4444',pending:'#64748b'}[task.status] || '#64748b')"></span>
+                    <span x-text="task.title"></span>
+                    <span style="opacity:0.5; font-size:0.8em;" x-text="'(' + task.role + ')'"></span>
+                  </span>
+                  <span class="agent-harness-list-status" x-text="task.status"></span>
+                </div>
+              </template>
             </div>
             <div class="agent-harness-graph-legend">
               <span class="agent-harness-legend-item"><span class="agent-harness-legend-dot" style="background:#22c55e"></span> Completed</span>
@@ -439,6 +454,15 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
+    }
+
+    .agent-harness-task-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
     }
 
     @media (max-width: 900px) {
