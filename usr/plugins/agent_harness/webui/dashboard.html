@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Agent Harness Dashboard</title>
+  <script type="module">
+    import { store } from "/plugins/agent_harness/webui/harness-store.js";
+  </script>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      themeVariables: {
+        darkMode: true,
+        background: "transparent",
+        primaryColor: "#334155",
+        primaryBorderColor: "#475569",
+        primaryTextColor: "#e2e8f0",
+        lineColor: "#64748b",
+        secondaryColor: "#1e293b",
+        tertiaryColor: "#0f172a",
+      },
+      flowchart: { curve: "basis", padding: 12 },
+    });
+    window.__mermaidRender = async function(graphDef, el) {
+      try {
+        const id = "harness-graph-" + Date.now();
+        const { svg } = await mermaid.render(id, graphDef);
+        el.innerHTML = svg;
+      } catch (e) {
+        el.innerHTML = '<span style="opacity:0.5">Graph unavailable</span>';
+      }
+    };
+    window.__taskGraphToMermaid = function(taskGraph) {
+      if (!taskGraph?.sub_tasks?.length) return "";
+      const statusClass = { completed: "completed", dispatched: "dispatched", failed: "failed", pending: "pending" };
+      let lines = ["graph LR"];
+      for (const t of taskGraph.sub_tasks) {
+        const label = t.title.replace(/"/g, "'");
+        const cls = statusClass[t.status] || "pending";
+        lines.push(`  ${t.id}["${label}"]:::${cls}`);
+      }
+      for (const t of taskGraph.sub_tasks) {
+        for (const dep of (t.depends_on || [])) {
+          lines.push(`  ${dep} --> ${t.id}`);
+        }
+      }
+      lines.push("  classDef completed fill:#166534,stroke:#22c55e,color:#f0fdf4");
+      lines.push("  classDef dispatched fill:#854d0e,stroke:#eab308,color:#fefce8");
+      lines.push("  classDef failed fill:#991b1b,stroke:#ef4444,color:#fef2f2");
+      lines.push("  classDef pending fill:#334155,stroke:#64748b,color:#e2e8f0");
+      return lines.join("\n");
+    };
+  </script>
+</head>
+<body>
+  <div x-data>
+    <template x-if="$store.agentHarness">
+      <div x-create="$store.agentHarness.onMount()" class="agent-harness-dashboard">
+        <div class="agent-harness-hero">
+          <div>
+            <div class="agent-harness-kicker">Agent Harness</div>
+            <h2 class="agent-harness-title">Coding-first orchestration for Agent Zero</h2>
+            <p class="agent-harness-copy">
+              Drive deep coding workflows, surface checkpoints, and curate reusable rules without leaving the chat.
+            </p>
+          </div>
+          <div class="agent-harness-actions">
+            <button class="button confirm" @click="$store.agentHarness.startRun('build')">Start Build</button>
+            <button class="button" @click="$store.agentHarness.startRun('surge')">Start Surge</button>
+            <button class="button" x-show="$store.agentHarness.currentRun" @click="$store.agentHarness.stopRun()">Stop Run</button>
+          </div>
+        </div>
+
+        <div class="agent-harness-grid">
+          <section class="agent-harness-card">
+            <div class="agent-harness-card-header">
+              <h3>Active Run</h3>
+              <span class="agent-harness-badge" x-text="$store.agentHarness.currentRun ? $store.agentHarness.currentRun.phase : 'idle'"></span>
+            </div>
+            <template x-if="$store.agentHarness.currentRun">
+              <div class="agent-harness-run-body">
+                <div class="agent-harness-run-objective" x-text="$store.agentHarness.currentRun.objective"></div>
+                <div class="agent-harness-meta-row">
+                  <span class="agent-harness-meta-pill" x-text="$store.agentHarness.currentRun.mode"></span>
+                  <span class="agent-harness-meta-pill" x-text="$store.agentHarness.currentRun.status"></span>
+                  <span class="agent-harness-meta-pill" x-text="$store.agentHarness.currentRun.risk_level"></span>
+                </div>
+                <template x-if="$store.agentHarness.currentRun.tasks?.length">
+                  <div class="agent-harness-subsection">
+                    <div class="agent-harness-subtitle">Tracked Tasks</div>
+                    <template x-for="task in $store.agentHarness.currentRun.tasks" :key="task.id">
+                      <div class="agent-harness-list-row">
+                        <span x-text="task.title"></span>
+                        <span class="agent-harness-list-status" x-text="task.status"></span>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!$store.agentHarness.currentRun">
+              <p class="agent-harness-empty-state">No deep harness run is active for the selected chat.</p>
+            </template>
+          </section>
+
+          <section class="agent-harness-card agent-harness-card-wide"
+                   x-show="$store.agentHarness.currentRun?.task_graph?.sub_tasks?.length">
+            <div class="agent-harness-card-header">
+              <h3>Task Graph</h3>
+              <span class="agent-harness-badge"
+                    x-text="($store.agentHarness.currentRun?.task_graph?.sub_tasks || []).length + ' tasks'"></span>
+            </div>
+            <div class="agent-harness-graph-container"
+                 x-ref="taskGraph"
+                 x-effect="
+                   if ($store.agentHarness.currentRun?.task_graph && window.__taskGraphToMermaid && window.__mermaidRender) {
+                     const def = window.__taskGraphToMermaid($store.agentHarness.currentRun.task_graph);
+                     if (def && $refs.taskGraph) window.__mermaidRender(def, $refs.taskGraph);
+                   }
+                 ">
+            </div>
+            <div class="agent-harness-graph-legend">
+              <span class="agent-harness-legend-item"><span class="agent-harness-legend-dot" style="background:#22c55e"></span> Completed</span>
+              <span class="agent-harness-legend-item"><span class="agent-harness-legend-dot" style="background:#eab308"></span> In Progress</span>
+              <span class="agent-harness-legend-item"><span class="agent-harness-legend-dot" style="background:#64748b"></span> Pending</span>
+              <span class="agent-harness-legend-item"><span class="agent-harness-legend-dot" style="background:#ef4444"></span> Failed</span>
+            </div>
+          </section>
+
+          <section class="agent-harness-card">
+            <div class="agent-harness-card-header">
+              <h3>Pending Checkpoints</h3>
+              <span class="agent-harness-badge" x-text="$store.agentHarness.pendingCheckpoints.length"></span>
+            </div>
+            <template x-if="$store.agentHarness.pendingCheckpoints.length">
+              <div class="agent-harness-stack">
+                <template x-for="checkpoint in $store.agentHarness.pendingCheckpoints" :key="checkpoint.id">
+                  <div class="agent-harness-list-panel">
+                    <div class="agent-harness-list-title" x-text="checkpoint.reason"></div>
+                    <div class="agent-harness-list-copy" x-text="checkpoint.proposed_action"></div>
+                    <div class="agent-harness-inline-actions">
+                      <button class="button confirm" @click="$store.agentHarness.decideCheckpoint(checkpoint.id, 'approved')">Approve</button>
+                      <button class="button" @click="$store.agentHarness.decideCheckpoint(checkpoint.id, 'rejected')">Reject</button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!$store.agentHarness.pendingCheckpoints.length">
+              <p class="agent-harness-empty-state">No checkpoints are waiting for review.</p>
+            </template>
+          </section>
+
+          <section class="agent-harness-card">
+            <div class="agent-harness-card-header">
+              <h3>Memory Queue</h3>
+              <span class="agent-harness-badge" x-text="$store.agentHarness.memoryQueue.length"></span>
+            </div>
+            <template x-if="$store.agentHarness.memoryQueue.length">
+              <div class="agent-harness-stack">
+                <template x-for="candidate in $store.agentHarness.memoryQueue" :key="candidate.id">
+                  <div class="agent-harness-list-panel">
+                    <div class="agent-harness-list-title" x-text="candidate.rule_text"></div>
+                    <div class="agent-harness-list-copy" x-text="candidate.reason"></div>
+                    <div class="agent-harness-inline-actions">
+                      <button class="button confirm" @click="$store.agentHarness.acceptCandidate(candidate.id, candidate.scope)">Accept</button>
+                      <button class="button" @click="$store.agentHarness.rejectCandidate(candidate.id)">Reject</button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!$store.agentHarness.memoryQueue.length">
+              <p class="agent-harness-empty-state">No curated memory proposals are waiting for review.</p>
+            </template>
+          </section>
+
+          <section class="agent-harness-card">
+            <div class="agent-harness-card-header">
+              <h3>Recent Rules</h3>
+              <span class="agent-harness-badge" x-text="$store.agentHarness.recentRules.length"></span>
+            </div>
+            <template x-if="$store.agentHarness.recentRules.length">
+              <div class="agent-harness-stack compact">
+                <template x-for="rule in $store.agentHarness.recentRules" :key="rule.rule_text + '-' + (rule.accepted_at || '')">
+                  <div class="agent-harness-rule-row">
+                    <div class="agent-harness-list-title" x-text="rule.rule_text"></div>
+                    <div class="agent-harness-list-copy" x-text="rule.reason"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!$store.agentHarness.recentRules.length">
+              <p class="agent-harness-empty-state">Accepted harness rules will appear here once you curate them.</p>
+            </template>
+
+            <template x-if="$store.agentHarness.latestVerification">
+              <div class="agent-harness-subsection">
+                <div class="agent-harness-subtitle">Latest Verification</div>
+                <div class="agent-harness-list-panel soft">
+                  <div class="agent-harness-list-title" x-text="$store.agentHarness.latestVerification.name"></div>
+                  <div class="agent-harness-list-copy" x-text="$store.agentHarness.latestVerification.summary"></div>
+                </div>
+              </div>
+            </template>
+          </section>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <style>
+    .agent-harness-dashboard {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 0.4rem;
+    }
+
+    .agent-harness-hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: flex-start;
+      padding: 1rem;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--color-highlight) 18%, transparent), transparent 42%),
+        linear-gradient(135deg, color-mix(in srgb, var(--color-panel) 92%, #0f172a 8%), var(--color-panel));
+      border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+    }
+
+    .agent-harness-kicker {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      opacity: 0.68;
+    }
+
+    .agent-harness-title {
+      margin: 0.25rem 0 0.4rem;
+      font-size: 1.25rem;
+      line-height: 1.2;
+    }
+
+    .agent-harness-copy {
+      margin: 0;
+      max-width: 54ch;
+      opacity: 0.8;
+    }
+
+    .agent-harness-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .agent-harness-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .agent-harness-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      border-radius: 14px;
+      padding: 1rem;
+      background: color-mix(in srgb, var(--color-panel) 94%, transparent);
+      border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+      min-height: 220px;
+    }
+
+    .agent-harness-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .agent-harness-card-header h3 {
+      margin: 0;
+      font-size: 0.98rem;
+    }
+
+    .agent-harness-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2rem;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--color-highlight) 12%, transparent);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .agent-harness-empty-state {
+      margin: 0;
+      opacity: 0.72;
+    }
+
+    .agent-harness-run-objective {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .agent-harness-meta-row {
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }
+
+    .agent-harness-meta-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+      background: color-mix(in srgb, var(--color-background) 70%, transparent);
+      font-size: 0.72rem;
+      text-transform: capitalize;
+    }
+
+    .agent-harness-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .agent-harness-list-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      padding: 0.8rem;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--color-background) 68%, transparent);
+      border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+    }
+
+    .agent-harness-list-panel.soft {
+      background: color-mix(in srgb, var(--color-highlight) 10%, transparent);
+    }
+
+    .agent-harness-list-title {
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .agent-harness-list-copy {
+      opacity: 0.78;
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .agent-harness-inline-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .agent-harness-subsection {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+
+    .agent-harness-subtitle {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+      opacity: 0.7;
+    }
+
+    .agent-harness-list-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--color-border) 55%, transparent);
+    }
+
+    .agent-harness-list-row:last-child {
+      border-bottom: none;
+    }
+
+    .agent-harness-list-status {
+      opacity: 0.72;
+      text-transform: capitalize;
+      white-space: nowrap;
+    }
+
+    .agent-harness-rule-row {
+      padding: 0.2rem 0;
+    }
+
+    .agent-harness-card-wide {
+      grid-column: 1 / -1;
+    }
+
+    .agent-harness-graph-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 80px;
+      padding: 0.5rem;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--color-background) 50%, transparent);
+      overflow-x: auto;
+    }
+
+    .agent-harness-graph-container svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .agent-harness-graph-legend {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 0 0.25rem;
+    }
+
+    .agent-harness-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.72rem;
+      opacity: 0.8;
+    }
+
+    .agent-harness-legend-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    @media (max-width: 900px) {
+      .agent-harness-hero {
+        flex-direction: column;
+      }
+
+      .agent-harness-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</body>
+</html>
