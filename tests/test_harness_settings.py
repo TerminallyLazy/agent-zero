@@ -63,3 +63,21 @@ def test_dashboard_settings_extracts_ui_keys():
         "default_deep_mode": "surge",
         "memory_curation_enabled": True,
     }
+
+
+def test_check_config_version_detects_outdated():
+    from usr.plugins.agent_harness.helpers.settings import (
+        check_config_version, CURRENT_CONFIG_VERSION,
+    )
+    assert check_config_version({"config_version": CURRENT_CONFIG_VERSION}) is True
+    assert check_config_version({"config_version": 0}) is False
+    assert check_config_version({}) is False
+
+
+def test_auto_upgrade_config_adds_missing_fields():
+    from usr.plugins.agent_harness.helpers.settings import auto_upgrade_config
+    old_config = {"ambient_assist_enabled": False, "config_version": 1}
+    upgraded = auto_upgrade_config(old_config)
+    assert upgraded["ambient_assist_enabled"] is False  # preserved
+    assert "context_pressure_threshold" in upgraded
+    assert "workspace_enabled" in upgraded

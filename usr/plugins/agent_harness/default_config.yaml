@@ -1,0 +1,27 @@
+config_version: 2
+ambient_assist_enabled: true
+default_deep_mode: build
+memory_curation_enabled: true
+show_status_ui: true
+max_auto_edit_files: 8
+dependency_install_requires_checkpoint: true
+destructive_actions_require_checkpoint: true
+protected_paths:
+  - agent.py
+  - initialize.py
+accepted_rules: []
+mode_policies:
+  assist:
+    subagent_limit: 0
+    repair_limit: 0
+  build:
+    subagent_limit: 2
+    repair_limit: 1
+  surge:
+    subagent_limit: 4
+    repair_limit: 3
+context_pressure_threshold: 0.7
+context_model_window: 128000
+workspace_enabled: true
+token_budget: 0
+cost_tracking_enabled: true

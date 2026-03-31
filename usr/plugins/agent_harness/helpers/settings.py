@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 from typing import Any
 
+CURRENT_CONFIG_VERSION = 2
+
 from agent import Agent, AgentContext
 from helpers import files, plugins, projects, yaml as yaml_helper
 
@@ -200,3 +202,21 @@ def persist_scope_settings(
         plugins.save_plugin_config(PLUGIN_NAME, "", agent_profile, settings)
         return
     plugins.save_plugin_config(PLUGIN_NAME, project_name, "", settings)
+
+
+def check_config_version(settings: dict[str, Any]) -> bool:
+    return int(settings.get("config_version", 0)) >= CURRENT_CONFIG_VERSION
+
+
+def auto_upgrade_config(settings: dict[str, Any], settings_path: str = "") -> dict[str, Any]:
+    if settings_path:
+        import shutil
+        from pathlib import Path
+        path = Path(settings_path)
+        if path.exists():
+            shutil.copy2(str(path), str(path) + ".bak")
+
+    defaults = load_default_settings()
+    upgraded = _deep_merge_settings(defaults, settings)
+    upgraded["config_version"] = CURRENT_CONFIG_VERSION
+    return upgraded
