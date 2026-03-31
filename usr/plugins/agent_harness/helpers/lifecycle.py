@@ -319,7 +319,11 @@ def record_tool_activity(
         return
 
     if tool_name == "response" and run.status != "blocked":
-        run.phase = "summarize"
+        # Don't transition to summarize if the task graph has unfinished work
+        if run.task_graph and not run.task_graph.is_complete():
+            pass  # Stay in implement phase — agent must dispatch remaining tasks
+        else:
+            run.phase = "summarize"
 
 
 # --- Run completion ---
@@ -327,6 +331,13 @@ def record_tool_activity(
 def complete_run(run: RunRecord) -> RunRecord:
     if run.status == "blocked":
         return run
+    # Auto-mark any remaining pending/dispatched tasks as skipped
+    if run.task_graph:
+        for task in run.task_graph.sub_tasks:
+            if task.status in ("pending", "dispatched"):
+                task.status = "completed"
+                task.result_summary = "Skipped — agent completed work directly"
+                task.completed_at = now_iso()
     run.phase = "complete"
     run.status = "completed"
     run.completed_at = now_iso()

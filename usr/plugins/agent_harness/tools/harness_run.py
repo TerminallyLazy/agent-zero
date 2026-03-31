@@ -171,6 +171,15 @@ class HarnessRun(Tool):
             return _response("No workspace to clean.")
 
         if action == "complete":
+            # Refuse to complete if task graph has unfinished work
+            if run.task_graph and not run.task_graph.is_complete():
+                pending = [t for t in run.task_graph.sub_tasks if t.status in ("pending", "dispatched")]
+                pending_names = ", ".join(t.title for t in pending[:5])
+                runtime.save_current_run(self.agent.context, run)
+                return _response(
+                    f"Cannot complete: {len(pending)} task(s) still unfinished: {pending_names}. "
+                    f'Use harness_run action="dispatch" and action="collect" to finish them first.'
+                )
             runtime.complete_run(run)
             runtime.save_current_run(self.agent.context, run)
             return _response(f"Harness run completed for: {run.objective}")

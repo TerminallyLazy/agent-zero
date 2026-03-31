@@ -115,7 +115,7 @@ def render_system_prompt(
                 "Do NOT use code_execution_tool or text_editor until the plan is submitted.",
             ])
 
-    if run.task_graph and run.phase in ("implement", "verify"):
+    if run.task_graph:
         completed = [t for t in run.task_graph.sub_tasks if t.status == "completed"]
         dispatched = [t for t in run.task_graph.sub_tasks if t.status == "dispatched"]
         ready = run.task_graph.ready_tasks()
@@ -123,10 +123,16 @@ def render_system_prompt(
             t for t in run.task_graph.sub_tasks
             if t.status == "pending" and t not in ready
         ]
-        graph_lines = ["TASK GRAPH STATUS", f"Objective: {run.task_graph.objective}"]
+        has_remaining = bool(dispatched or ready or blocked)
+
+        graph_lines = [
+            "TASK GRAPH STATUS",
+            f"Objective: {run.task_graph.objective}",
+            f"Progress: {len(completed)}/{len(run.task_graph.sub_tasks)} complete",
+        ]
         if completed:
             graph_lines.append(
-                "Completed: " + ", ".join(f"{t.title} ({t.result_summary})" for t in completed)
+                "Completed: " + ", ".join(f"{t.title}" for t in completed)
             )
         if dispatched:
             graph_lines.append("In Progress (parallel): " + ", ".join(t.title for t in dispatched))
@@ -136,7 +142,16 @@ def render_system_prompt(
             graph_lines.append('>>> NEXT ACTION: harness_run action="dispatch" to spawn parallel sub-agents <<<')
         if blocked:
             graph_lines.append("Blocked (waiting on dependencies): " + ", ".join(t.title for t in blocked))
-        if not dispatched and not ready and not blocked and completed:
+
+        if has_remaining:
+            graph_lines.extend([
+                "",
+                "!!! WARNING: There are unfinished tasks in the graph. !!!",
+                "Do NOT use code_execution_tool or text_editor to implement remaining tasks yourself.",
+                "Do NOT use harness_run action=\"complete\" until all tasks are done.",
+                "You MUST continue the dispatch → collect cycle until all tasks are completed.",
+            ])
+        elif completed and not has_remaining:
             graph_lines.append("All sub-tasks complete.")
             graph_lines.append('>>> NEXT ACTION: Run tests to verify, then harness_run action="complete" <<<')
         prompt.extend(graph_lines)
