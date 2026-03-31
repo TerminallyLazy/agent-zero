@@ -65,6 +65,39 @@ def render_system_prompt(
         )
     if rules_text:
         prompt.extend(["Accepted rules:", rules_text])
+
+    # Phase-aware task graph sections
+    if run.phase == "plan" and not run.task_graph:
+        prompt.extend([
+            "PLANNING PHASE",
+            "Decompose your objective into sub-tasks.",
+            "Each sub-task should be independently executable by a sub-agent.",
+            "Available roles: research, code, verify, synthesize.",
+            'Use harness_run action="plan" to submit your task graph.',
+        ])
+
+    if run.task_graph and run.phase in ("implement", "verify"):
+        completed = [t for t in run.task_graph.sub_tasks if t.status == "completed"]
+        dispatched = [t for t in run.task_graph.sub_tasks if t.status == "dispatched"]
+        ready = run.task_graph.ready_tasks()
+        blocked = [
+            t for t in run.task_graph.sub_tasks
+            if t.status == "pending" and t not in ready
+        ]
+        graph_lines = ["TASK GRAPH STATUS", f"Objective: {run.task_graph.objective}"]
+        if completed:
+            graph_lines.append(
+                "Completed: " + ", ".join(f"{t.title} ({t.result_summary})" for t in completed)
+            )
+        if dispatched:
+            graph_lines.append("In Progress: " + ", ".join(t.title for t in dispatched))
+        if ready:
+            graph_lines.append("Ready to Dispatch: " + ", ".join(t.title for t in ready))
+        if blocked:
+            graph_lines.append("Blocked: " + ", ".join(t.title for t in blocked))
+        graph_lines.append('Use harness_run action="dispatch" to dispatch ready tasks.')
+        prompt.extend(graph_lines)
+
     return "\n\n".join(prompt)
 
 

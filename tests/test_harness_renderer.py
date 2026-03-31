@@ -65,3 +65,28 @@ def test_render_runtime_summary():
 def test_render_runtime_summary_returns_empty_for_none():
     from usr.plugins.agent_harness.helpers.renderer import render_runtime_summary
     assert render_runtime_summary(None) == ""
+
+
+def test_render_system_prompt_plan_phase():
+    from usr.plugins.agent_harness.helpers.renderer import render_system_prompt
+    run = _make_run(phase="plan")
+    prompt = render_system_prompt(
+        settings=_default_settings(), run=run, accepted_rules=[],
+    )
+    assert "PLANNING PHASE" in prompt
+    assert "harness_run" in prompt
+
+
+def test_render_system_prompt_implement_with_task_graph():
+    from usr.plugins.agent_harness.helpers.renderer import render_system_prompt
+    from usr.plugins.agent_harness.helpers.planner import submit_plan
+    run = _make_run(phase="implement")
+    submit_plan(run, [
+        {"title": "Research", "description": "Look up docs", "role": "research"},
+        {"title": "Code", "description": "Write it", "role": "code", "depends_on": [0]},
+    ])
+    prompt = render_system_prompt(
+        settings=_default_settings(), run=run, accepted_rules=[],
+    )
+    assert "TASK GRAPH STATUS" in prompt
+    assert "Research" in prompt
