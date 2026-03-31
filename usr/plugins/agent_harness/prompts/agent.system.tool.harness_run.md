@@ -11,7 +11,9 @@ use to start a deep run or keep its phase, tasks, verification, and completion s
 - `complete`: mark the current run complete after verification and summary
 - `status`: read back the current run state
 - `plan`: submit a task graph for the current objective with `sub_tasks` list
-- `dispatch`: get dispatch instructions for ready sub-tasks (reads from task graph)
+- `dispatch`: spawn parallel sub-agents for ready tasks (up to mode's subagent_limit)
+- `collect`: check progress and harvest results from parallel sub-agents
+- `clean`: remove temporary workspace files (keeps outputs and run logs)
 
 usage:
 ~~~json

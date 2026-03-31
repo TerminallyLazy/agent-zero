@@ -55,24 +55,82 @@ class HarnessRun(Tool):
             return _response(f"Plan accepted with {len(titles)} tasks: {', '.join(titles)}")
 
         if action == "dispatch":
-            from usr.plugins.agent_harness.helpers.orchestrator import (
-                dispatch_ready_tasks, build_scoped_context,
-            )
+            from usr.plugins.agent_harness.helpers.orchestrator import dispatch_ready_tasks
+            from usr.plugins.agent_harness.helpers.parallel import spawn_parallel, active_count
+
             dispatched = dispatch_ready_tasks(run, settings)
-            runtime.save_current_run(self.agent.context, run)
             if not dispatched:
                 if run.task_graph and run.task_graph.is_complete():
                     run.phase = "verify"
                     runtime.save_current_run(self.agent.context, run)
                     return _response("All sub-tasks complete. Moving to verification phase.")
+                in_flight = active_count(run.run_id)
+                if in_flight > 0:
+                    runtime.save_current_run(self.agent.context, run)
+                    return _response(
+                        f"No new tasks ready to dispatch. {in_flight} sub-agent(s) still running. "
+                        f'Use harness_run action="collect" to check progress.'
+                    )
                 return _response("No tasks ready to dispatch.")
-            instructions = []
-            for task in dispatched:
-                ctx = build_scoped_context(task, run)
-                instructions.append(
-                    f"Dispatch '{task.title}' (id={task.id}) via call_subordinate with message:\n{ctx}"
+
+            spawned = spawn_parallel(run, dispatched, settings)
+            runtime.save_current_run(self.agent.context, run)
+            titles = [t.title for t in dispatched]
+            return _response(
+                f"{len(spawned)} sub-agent(s) spawned in parallel: {', '.join(titles)}. "
+                f'Use harness_run action="collect" to check progress and harvest results.'
+            )
+
+        if action == "collect":
+            from usr.plugins.agent_harness.helpers.parallel import (
+                poll_status, collect_completed, active_count,
+            )
+            from usr.plugins.agent_harness.helpers.planner import (
+                mark_sub_task_completed, mark_sub_task_failed,
+            )
+
+            results = collect_completed(run)
+            for task_id, summary, error in results:
+                if error:
+                    mark_sub_task_failed(run, task_id, error=error)
+                else:
+                    mark_sub_task_completed(run, task_id, summary=summary or "")
+
+            in_flight = active_count(run.run_id)
+            status_map = poll_status(run.run_id)
+            runtime.save_current_run(self.agent.context, run)
+
+            if run.task_graph and run.task_graph.is_complete():
+                run.phase = "verify"
+                runtime.save_current_run(self.agent.context, run)
+                completed_count = len(results)
+                return _response(
+                    f"Collected {completed_count} result(s). All sub-tasks complete. "
+                    f"Moving to verification phase."
                 )
-            return _response("\n\n".join(instructions))
+
+            lines = []
+            if results:
+                for task_id, summary, error in results:
+                    status = "failed" if error else "completed"
+                    detail = error if error else (summary[:80] if summary else "")
+                    lines.append(f"  - {task_id}: {status} — {detail}")
+            if in_flight > 0:
+                running = [tid for tid, s in status_map.items() if s == "running"]
+                lines.append(f"  Still running: {', '.join(running)}")
+                lines.append('  Call harness_run action="collect" again to check progress.')
+            else:
+                ready = run.task_graph.ready_tasks() if run.task_graph else []
+                if ready:
+                    lines.append(
+                        f"  {len(ready)} task(s) now ready to dispatch. "
+                        f'Use harness_run action="dispatch" to continue.'
+                    )
+
+            return _response(
+                f"Collected {len(results)} result(s), {in_flight} still running.\n"
+                + "\n".join(lines)
+            )
 
         if action == "task":
             title = str(kwargs.get("task_title", "")).strip() or "Harness task"
