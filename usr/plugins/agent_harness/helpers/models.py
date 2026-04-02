@@ -14,7 +14,7 @@ PLUGIN_NAME = "agent_harness"
 RUN_CONTEXT_KEY = "agent_harness.current_run"
 OUTPUT_CONTEXT_KEY = "agent_harness"
 
-HarnessMode = Literal["assist", "build", "surge"]
+HarnessMode = Literal["flash", "standard", "pro", "ultra"]
 HarnessPhase = Literal[
     "idle",
     "inspect",
@@ -47,7 +47,12 @@ VERIFICATION_COMMAND_RE = re.compile(
     re.IGNORECASE,
 )
 DEFAULT_RUN_OBJECTIVE = "Active coding task"
-DEFAULT_DEEP_MODE: HarnessMode = "build"
+DEFAULT_DEEP_MODE: HarnessMode = "pro"
+LEGACY_MODE_ALIASES: dict[str, HarnessMode] = {
+    "assist": "flash",
+    "build": "pro",
+    "surge": "ultra",
+}
 
 
 class TaskRecord(BaseModel):
@@ -190,8 +195,11 @@ class WorkspacePaths(BaseModel):
     root: str
     workspace: str
     outputs: str
+    uploads: str = ""
     offloads: str
     runs: str
+    thread_root: str = ""
+    user_data: str = ""
 
 
 class RunRecord(BaseModel):
@@ -230,6 +238,13 @@ def new_id(prefix: str) -> str:
 
 def _normalize_path(path: str) -> str:
     return str(Path(path).as_posix()) if path else ""
+
+
+def normalize_harness_mode(value: str | None) -> HarnessMode:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"flash", "standard", "pro", "ultra"}:
+        return normalized  # type: ignore[return-value]
+    return LEGACY_MODE_ALIASES.get(normalized, DEFAULT_DEEP_MODE)
 
 
 def _plugin_dir() -> str:

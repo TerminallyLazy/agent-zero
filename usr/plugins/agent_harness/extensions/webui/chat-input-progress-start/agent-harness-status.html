@@ -1,0 +1,17 @@
+<div
+  x-data="{ ready: false }"
+  x-init="import('/plugins/agent_harness/webui/harness-store.js').then(() => { ready = true; return $store.agentHarness.onMount(); })"
+  x-destroy="if (ready && $store.agentHarness) { $store.agentHarness.cleanup(); }"
+  class="agent-harness-status-chip"
+>
+  <template x-if="ready && $store.agentHarness && $store.agentHarness.dashboard.show_status_ui !== false">
+    <button
+      class="btn btn-secondary btn-sm"
+      type="button"
+      @click="openModal('/plugins/agent_harness/webui/main.html')"
+      x-text="$store.agentHarness.statusButtonLabel()"
+    >
+      Harness
+    </button>
+  </template>
+</div>

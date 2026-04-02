@@ -16,7 +16,9 @@ class HarnessRun(Tool):
         run = runtime.get_current_run(self.agent)
 
         if action == "start":
-            mode = str(kwargs.get("mode", settings.get("default_deep_mode", "build"))).strip().lower()
+            mode = str(
+                kwargs.get("mode", settings.get("default_deep_mode", runtime.DEFAULT_DEEP_MODE))
+            ).strip().lower()
             run = runtime.create_run_record(
                 context_id=self.agent.context.id,
                 mode=mode,  # type: ignore[arg-type]
@@ -56,8 +58,13 @@ class HarnessRun(Tool):
 
         if action == "dispatch":
             from usr.plugins.agent_harness.helpers.orchestrator import dispatch_ready_tasks
-            from usr.plugins.agent_harness.helpers.parallel import spawn_parallel, active_count
+            from usr.plugins.agent_harness.helpers.parallel import (
+                spawn_parallel,
+                active_count,
+                reconcile_run_graph,
+            )
 
+            restored = reconcile_run_graph(run)
             dispatched = dispatch_ready_tasks(run, settings)
             if not dispatched:
                 if run.task_graph and run.task_graph.is_complete():
@@ -71,9 +78,32 @@ class HarnessRun(Tool):
                         f"No new tasks ready to dispatch. {in_flight} sub-agent(s) still running. "
                         f'Use harness_run action="collect" to check progress.'
                     )
+                if restored:
+                    runtime.save_current_run(self.agent.context, run)
+                    return _response(
+                        f"Recovered {len(restored)} orphaned sub-task(s). "
+                        f'Use harness_run action="dispatch" again to retry them.'
+                    )
                 return _response("No tasks ready to dispatch.")
 
-            spawned = spawn_parallel(run, dispatched, settings, parent_context=self.agent.context)
+            try:
+                spawned = spawn_parallel(
+                    run,
+                    dispatched,
+                    settings,
+                    parent_context=self.agent.context,
+                )
+            except Exception as exc:
+                runtime.record_failure(
+                    run,
+                    summary=f"Sub-agent dispatch failed: {exc}",
+                    settings=settings,
+                )
+                runtime.save_current_run(self.agent.context, run)
+                return _response(
+                    f"Sub-agent dispatch failed: {exc}. "
+                    "Ready tasks stayed pending so the graph can be retried."
+                )
             runtime.save_current_run(self.agent.context, run)
             titles = [t.title for t in dispatched]
             return _response(
@@ -83,12 +113,13 @@ class HarnessRun(Tool):
 
         if action == "collect":
             from usr.plugins.agent_harness.helpers.parallel import (
-                poll_status, collect_completed, active_count,
+                poll_status, collect_completed, active_count, reconcile_run_graph,
             )
             from usr.plugins.agent_harness.helpers.planner import (
                 mark_sub_task_completed, mark_sub_task_failed,
             )
 
+            restored = reconcile_run_graph(run)
             results = collect_completed(run)
             for task_id, summary, error in results:
                 if error:
@@ -122,6 +153,10 @@ class HarnessRun(Tool):
             else:
                 ready = run.task_graph.ready_tasks() if run.task_graph else []
                 if ready:
+                    if restored:
+                        lines.append(
+                            f"  Recovered {len(restored)} orphaned dispatched task(s)."
+                        )
                     lines.append(
                         f"  {len(ready)} task(s) now ready to dispatch. "
                         f'Use harness_run action="dispatch" to continue.'
@@ -139,6 +174,31 @@ class HarnessRun(Tool):
             runtime.upsert_task(run, title=title, status=status, details=details)
             runtime.save_current_run(self.agent.context, run)
             return _response(f"Tracked harness task: {title} ({status}).")
+
+        if action == "adopt":
+            from usr.plugins.agent_harness.helpers.planner import mark_sub_task_completed
+
+            sub_task_id = str(kwargs.get("sub_task_id", "")).strip()
+            if not run.task_graph or not sub_task_id:
+                return _response("adopt action requires an active task graph and a 'sub_task_id'.")
+
+            result_files = kwargs.get("result_files", [])
+            if not isinstance(result_files, list):
+                result_files = [result_files] if str(result_files).strip() else []
+            task = mark_sub_task_completed(
+                run,
+                sub_task_id,
+                summary=str(kwargs.get("summary", "")).strip() or "Completed manually by the main agent.",
+                files=[str(item).strip() for item in result_files if str(item).strip()],
+            )
+            if run.task_graph.is_complete():
+                run.phase = "verify"
+            else:
+                run.phase = "implement"
+            runtime.save_current_run(self.agent.context, run)
+            return _response(
+                f"Sub-task {task.title} adopted into the main agent flow as completed."
+            )
 
         if action == "verification":
             name = str(kwargs.get("verification_name", "")).strip() or "Verification"

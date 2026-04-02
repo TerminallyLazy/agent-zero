@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from usr.plugins.agent_harness.helpers.models import (
-    RunRecord, SubTask, now_iso,
+    RunRecord, SubTask,
 )
 from usr.plugins.agent_harness.helpers.settings import get_mode_policy
 from usr.plugins.agent_harness.helpers.planner import mark_sub_task_completed, mark_sub_task_failed
@@ -45,6 +45,9 @@ def dispatch_ready_tasks(
 ) -> list[SubTask]:
     if not run.task_graph:
         return []
+    from usr.plugins.agent_harness.helpers.parallel import reconcile_run_graph
+
+    reconcile_run_graph(run)
     policy = get_mode_policy(settings, run.mode)
     limit = policy["subagent_limit"]
     dispatched_count = sum(
@@ -52,11 +55,7 @@ def dispatch_ready_tasks(
     )
     available_slots = max(0, limit - dispatched_count)
     ready = run.task_graph.ready_tasks()
-    to_dispatch = ready[:available_slots]
-    for task in to_dispatch:
-        task.status = "dispatched"
-        task.dispatched_at = now_iso()
-    return to_dispatch
+    return ready[:available_slots]
 
 
 def record_dispatch_result(

@@ -4,14 +4,15 @@ import json
 from copy import deepcopy
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 2
-
 from agent import Agent, AgentContext
 from helpers import files, plugins, projects, yaml as yaml_helper
 
 from usr.plugins.agent_harness.helpers.models import (
     PLUGIN_NAME, HarnessMode, MemoryScope, DEFAULT_DEEP_MODE, _plugin_dir,
+    normalize_harness_mode,
 )
+
+CURRENT_CONFIG_VERSION = 3
 
 
 def load_default_settings() -> dict[str, Any]:
@@ -20,18 +21,19 @@ def load_default_settings() -> dict[str, Any]:
         return yaml_helper.loads(files.read_file(default_path))
     return {
         "ambient_assist_enabled": True,
-        "default_deep_mode": "build",
+        "default_deep_mode": "pro",
         "memory_curation_enabled": True,
         "show_status_ui": True,
         "max_auto_edit_files": 8,
         "dependency_install_requires_checkpoint": True,
         "destructive_actions_require_checkpoint": True,
-        "protected_paths": ["agent.py", "initialize.py"],
+        "protected_paths": ["agent.py", "initialize.py", "usr/plugins/"],
         "accepted_rules": [],
         "mode_policies": {
-            "assist": {"subagent_limit": 0, "repair_limit": 0},
-            "build": {"subagent_limit": 2, "repair_limit": 1},
-            "surge": {"subagent_limit": 4, "repair_limit": 3},
+            "flash": {"subagent_limit": 0, "repair_limit": 0},
+            "standard": {"subagent_limit": 0, "repair_limit": 1},
+            "pro": {"subagent_limit": 0, "repair_limit": 1},
+            "ultra": {"subagent_limit": 3, "repair_limit": 3},
         },
     }
 
@@ -168,7 +170,11 @@ def get_mode_policy(
     mode: HarnessMode,
 ) -> dict[str, int]:
     policies = settings.get("mode_policies", {})
-    policy = policies.get(mode, {}) if isinstance(policies, dict) else {}
+    policy = (
+        policies.get(normalize_harness_mode(mode), {})
+        if isinstance(policies, dict)
+        else {}
+    )
     return {
         "subagent_limit": int(policy.get("subagent_limit", 0)),
         "repair_limit": int(policy.get("repair_limit", 0)),
@@ -176,8 +182,7 @@ def get_mode_policy(
 
 
 def get_default_mode(settings: dict[str, Any]) -> HarnessMode:
-    mode = str(settings.get("default_deep_mode", DEFAULT_DEEP_MODE)).strip().lower()
-    return mode if mode in {"assist", "build", "surge"} else DEFAULT_DEEP_MODE
+    return normalize_harness_mode(settings.get("default_deep_mode", DEFAULT_DEEP_MODE))
 
 
 def dashboard_settings(settings: dict[str, Any]) -> dict[str, Any]:

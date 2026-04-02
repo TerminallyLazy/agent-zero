@@ -41,9 +41,9 @@ def render_system_prompt(
     ]
 
     # Mode-specific workflow instructions
-    if run.mode == "surge":
+    if run.mode == "ultra":
         prompt.extend([
-            "SURGE WORKFLOW (high autonomy):",
+            "ULTRA WORKFLOW (plan + subagents):",
             "- For simple single-file tasks: implement directly, verify, complete.",
             "- For multi-file tasks (2+ files to create or modify): you MUST plan first.",
             '  Use harness_run action="plan" to decompose into sub-tasks BEFORE writing any code.',
@@ -52,26 +52,35 @@ def render_system_prompt(
             f"- {repair_limit} repair loops max before surfacing the blocker.",
             "- Use harness_checkpoint before: pip/npm install, git push, rm -rf, or editing protected files.",
         ])
-    elif run.mode == "build":
+    elif run.mode == "pro":
         prompt.extend([
-            "BUILD WORKFLOW (structured, with guardrails):",
+            "PRO WORKFLOW (planned, single-agent):",
             "- Phase 1 INSPECT: Read the repo structure and relevant files. Understand before acting.",
-            '- Phase 2 PLAN: Use harness_run action="plan" to decompose the objective into sub-tasks.',
-            "  Every build-mode task MUST have a plan. Do NOT skip to implementing.",
-            '- Phase 3 DISPATCH: Use action="dispatch" to spawn parallel sub-agents for ready tasks.',
-            '  Then use action="collect" to check progress and harvest results.',
+            "- Phase 2 PLAN: Outline the implementation before editing when the task is multi-step or risky.",
+            "- Subagents stay disabled in pro mode. Execute the work yourself after planning.",
+            "- Phase 3 IMPLEMENT: Make focused changes sequentially.",
+            "- Skip dispatch/collect unless you explicitly switch to ultra mode.",
+            "- Do NOT use harness_run action=\"plan\" unless you also intend to switch to ultra mode.",
             "- Phase 4 VERIFY: Run tests. Record results with harness_run action=\"verification\".",
             "- Phase 5 COMPLETE: Mark done with harness_run action=\"complete\".",
-            f"- Up to {policy['subagent_limit']} parallel sub-agents. Use them instead of doing everything sequentially.",
             f"- {repair_limit} repair loops max before surfacing the blocker.",
             "- MANDATORY checkpoints before: dependency installs, destructive commands, protected file edits, git push.",
             "- Use harness_checkpoint proactively. Do NOT skip checkpoints.",
         ])
+    elif run.mode == "standard":
+        prompt.extend([
+            "STANDARD WORKFLOW (thoughtful single-agent):",
+            "- Inspect before editing and keep the work in one agent.",
+            "- Planning is optional for simple tasks and recommended for larger ones.",
+            "- Subagents stay disabled in standard mode.",
+            "- Verify before claiming success.",
+        ])
     else:
         prompt.extend([
-            "ASSIST MODE (lightweight):",
+            "FLASH MODE (fastest path):",
             "- Inspect before editing. Verify before claiming success.",
-            "- No planning required for simple tasks.",
+            "- Skip formal planning unless the task turns out to be larger than expected.",
+            "- Subagents stay disabled in flash mode.",
         ])
     if run.constraints:
         prompt.extend(["Constraints:", "\n".join(f"- {item}" for item in run.constraints)])
@@ -151,6 +160,13 @@ def render_system_prompt(
                 "Do NOT use harness_run action=\"complete\" until all tasks are done.",
                 "You MUST continue the dispatch → collect cycle until all tasks are completed.",
             ])
+            if any(t.status == "failed" for t in run.task_graph.sub_tasks):
+                graph_lines.extend([
+                    "",
+                    "MANUAL TAKEOVER EXCEPTION:",
+                    "If sub-agent execution is unavailable or repeatedly failing, you may complete the remaining work yourself.",
+                    "After manual completion, reconcile the graph with harness_run action=\"adopt\" for each finished sub-task.",
+                ])
         elif completed and not has_remaining:
             graph_lines.append("All sub-tasks complete.")
             graph_lines.append('>>> NEXT ACTION: Run tests to verify, then harness_run action="complete" <<<')

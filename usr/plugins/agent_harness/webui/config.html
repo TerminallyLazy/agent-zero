@@ -5,25 +5,28 @@
 <body>
   <div
     x-data="{
-      buildSubagentLimit: config?.mode_policies?.build?.subagent_limit ?? 2,
-      buildRepairLimit: config?.mode_policies?.build?.repair_limit ?? 1,
-      surgeSubagentLimit: config?.mode_policies?.surge?.subagent_limit ?? 4,
-      surgeRepairLimit: config?.mode_policies?.surge?.repair_limit ?? 3,
+      standardSubagentLimit: config?.mode_policies?.standard?.subagent_limit ?? 0,
+      standardRepairLimit: config?.mode_policies?.standard?.repair_limit ?? 1,
+      proSubagentLimit: config?.mode_policies?.pro?.subagent_limit ?? 0,
+      proRepairLimit: config?.mode_policies?.pro?.repair_limit ?? 1,
+      ultraSubagentLimit: config?.mode_policies?.ultra?.subagent_limit ?? 3,
+      ultraRepairLimit: config?.mode_policies?.ultra?.repair_limit ?? 3,
       protectedPathsText: Array.isArray(config?.protected_paths) ? config.protected_paths.join('\n') : 'agent.py\ninitialize.py',
     }"
     x-init="(() => {
       config.ambient_assist_enabled = config.ambient_assist_enabled ?? true;
       config.memory_curation_enabled = config.memory_curation_enabled ?? true;
       config.show_status_ui = config.show_status_ui ?? true;
-      config.default_deep_mode = config.default_deep_mode || 'build';
+      config.default_deep_mode = config.default_deep_mode || 'pro';
 
-      const ensureBuild = () => { config.mode_policies = config.mode_policies || {}; config.mode_policies.build = config.mode_policies.build || {}; };
-      const ensureSurge = () => { config.mode_policies = config.mode_policies || {}; config.mode_policies.surge = config.mode_policies.surge || {}; };
+      const ensureMode = (mode) => { config.mode_policies = config.mode_policies || {}; config.mode_policies[mode] = config.mode_policies[mode] || {}; };
 
-      $watch('buildSubagentLimit', v => { ensureBuild(); config.mode_policies.build.subagent_limit = v; });
-      $watch('buildRepairLimit', v => { ensureBuild(); config.mode_policies.build.repair_limit = v; });
-      $watch('surgeSubagentLimit', v => { ensureSurge(); config.mode_policies.surge.subagent_limit = v; });
-      $watch('surgeRepairLimit', v => { ensureSurge(); config.mode_policies.surge.repair_limit = v; });
+      $watch('standardSubagentLimit', v => { ensureMode('standard'); config.mode_policies.standard.subagent_limit = v; });
+      $watch('standardRepairLimit', v => { ensureMode('standard'); config.mode_policies.standard.repair_limit = v; });
+      $watch('proSubagentLimit', v => { ensureMode('pro'); config.mode_policies.pro.subagent_limit = v; });
+      $watch('proRepairLimit', v => { ensureMode('pro'); config.mode_policies.pro.repair_limit = v; });
+      $watch('ultraSubagentLimit', v => { ensureMode('ultra'); config.mode_policies.ultra.subagent_limit = v; });
+      $watch('ultraRepairLimit', v => { ensureMode('ultra'); config.mode_policies.ultra.repair_limit = v; });
       $watch('protectedPathsText', v => { config.protected_paths = v.split('\n').map(s => s.trim()).filter(Boolean); });
     })()"
   >
@@ -49,8 +52,10 @@
           </div>
           <div class="field-control">
             <select x-model="config.default_deep_mode">
-              <option value="build">Build</option>
-              <option value="surge">Surge</option>
+              <option value="flash">Flash</option>
+              <option value="standard">Standard</option>
+              <option value="pro">Pro</option>
+              <option value="ultra">Ultra</option>
             </select>
           </div>
         </div>
@@ -83,41 +88,61 @@
 
         <div class="field">
           <div class="field-label">
-            <div class="field-title">Build Subagent Limit</div>
-            <div class="field-description">Maximum concurrent subagents in Build mode.</div>
+            <div class="field-title">Standard Subagent Limit</div>
+            <div class="field-description">Maximum concurrent subagents in Standard mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="buildSubagentLimit" />
+            <input type="number" min="0" x-model.number="standardSubagentLimit" />
           </div>
         </div>
 
         <div class="field">
           <div class="field-label">
-            <div class="field-title">Build Repair Limit</div>
-            <div class="field-description">Maximum bounded repair loops in Build mode.</div>
+            <div class="field-title">Standard Repair Limit</div>
+            <div class="field-description">Maximum bounded repair loops in Standard mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="buildRepairLimit" />
+            <input type="number" min="0" x-model.number="standardRepairLimit" />
           </div>
         </div>
 
         <div class="field">
           <div class="field-label">
-            <div class="field-title">Surge Subagent Limit</div>
-            <div class="field-description">Maximum concurrent subagents in Surge mode.</div>
+            <div class="field-title">Pro Subagent Limit</div>
+            <div class="field-description">Maximum concurrent subagents in Pro mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="surgeSubagentLimit" />
+            <input type="number" min="0" x-model.number="proSubagentLimit" />
           </div>
         </div>
 
         <div class="field">
           <div class="field-label">
-            <div class="field-title">Surge Repair Limit</div>
-            <div class="field-description">Maximum bounded repair loops in Surge mode.</div>
+            <div class="field-title">Pro Repair Limit</div>
+            <div class="field-description">Maximum bounded repair loops in Pro mode.</div>
           </div>
           <div class="field-control">
-            <input type="number" min="0" x-model.number="surgeRepairLimit" />
+            <input type="number" min="0" x-model.number="proRepairLimit" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Ultra Subagent Limit</div>
+            <div class="field-description">Maximum concurrent subagents in Ultra mode.</div>
+          </div>
+          <div class="field-control">
+            <input type="number" min="0" x-model.number="ultraSubagentLimit" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Ultra Repair Limit</div>
+            <div class="field-description">Maximum bounded repair loops in Ultra mode.</div>
+          </div>
+          <div class="field-control">
+            <input type="number" min="0" x-model.number="ultraRepairLimit" />
           </div>
         </div>
 

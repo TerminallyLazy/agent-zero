@@ -10,7 +10,8 @@ For any task that requires creating or modifying 2+ files:
 5. Run tests and use `action="verification"` to record results
 6. Use `action="complete"` to finish the run
 
-Do NOT skip planning and implement everything yourself. Sub-agents run in parallel and are faster.
+Do NOT skip planning and implement everything yourself under normal conditions. Sub-agents run in parallel and are faster.
+If sub-agent execution is unavailable or repeatedly failing, you may take over the work yourself and then use `action="adopt"` to reconcile the completed sub-task back into the graph.
 
 #### harness_run actions
 - `start`: begin a harness run with `mode`, `objective`, and optional `constraints`
@@ -18,6 +19,7 @@ Do NOT skip planning and implement everything yourself. Sub-agents run in parall
 - `plan`: submit a task graph — REQUIRED before implementing multi-file work
 - `dispatch`: spawn parallel sub-agents for ready tasks (up to mode's subagent_limit)
 - `collect`: check progress and harvest results from parallel sub-agents
+- `adopt`: mark a planned sub-task as completed manually using `sub_task_id`, optional `summary`, and optional `result_files`
 - `task`: track a subtask using `task_title`, optional `task_status`, and optional `task_details`
 - `verification`: record a verification result with `verification_name`, `verification_status` (must be "passed", "failed", or "unknown"), and `verification_summary`
 - `failure`: note a failure summary when a repair loop needs context

@@ -39,6 +39,13 @@ usr/**
 usr/**/*
 # But allow .gitkeep files
 !usr/**/.gitkeep
+# Track the DeerFlow-style Agent Harness plugin explicitly
+!usr/plugins/
+!usr/plugins/agent_harness/
+!usr/plugins/agent_harness/**/
+!usr/plugins/agent_harness/**
+usr/plugins/agent_harness/**/__pycache__/
+usr/plugins/agent_harness/**/*.py[cod]
 
 
 # Global rule to include .gitkeep files anywhere

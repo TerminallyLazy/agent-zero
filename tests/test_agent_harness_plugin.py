@@ -15,10 +15,22 @@ if str(PROJECT_ROOT) not in sys.path:
 from agent import AgentContext
 from api.load_webui_extensions import LoadWebuiExtensions
 from helpers import plugins
+from helpers.errors import RepairableException
 from initialize import initialize_agent
+from usr.plugins.agent_harness.api.deerflow_core import DeerflowCore
 from usr.plugins.agent_harness.api.memory_queue import MemoryQueue
 from usr.plugins.agent_harness.api.run import Run
+from usr.plugins.agent_harness.api.state import State
+from usr.plugins.agent_harness.api.thread_data import ThreadData
+from usr.plugins.agent_harness.extensions.python.tool_execute_before._20_harness_guardrails import (
+    HarnessGuardrails,
+)
 from usr.plugins.agent_harness.helpers import runtime as harness_runtime
+from usr.plugins.agent_harness.helpers.deerflow_sync import (
+    list_public_skills,
+    resolve_public_skills_root,
+)
+from usr.plugins.agent_harness.helpers.models import WorkspacePaths
 
 
 def _new_app() -> Flask:
@@ -61,18 +73,68 @@ def test_agent_harness_plugin_metadata_and_defaults_are_present() -> None:
 
     defaults = harness_runtime.load_default_settings()
     assert defaults["ambient_assist_enabled"] is True
-    assert defaults["default_deep_mode"] == "build"
+    assert defaults["default_deep_mode"] == "pro"
     assert defaults["memory_curation_enabled"] is True
     assert defaults["show_status_ui"] is True
-    assert defaults["protected_paths"] == ["agent.py", "initialize.py"]
-    assert harness_runtime.get_mode_policy(defaults, "build") == {
-        "subagent_limit": 2,
+    assert defaults["protected_paths"] == ["agent.py", "initialize.py", "usr/plugins/"]
+    assert harness_runtime.get_mode_policy(defaults, "pro") == {
+        "subagent_limit": 0,
         "repair_limit": 1,
     }
-    assert harness_runtime.get_mode_policy(defaults, "surge") == {
-        "subagent_limit": 4,
+    assert harness_runtime.get_mode_policy(defaults, "ultra") == {
+        "subagent_limit": 3,
         "repair_limit": 3,
     }
+
+
+def test_agent_harness_deerflow_assets_are_present() -> None:
+    plugin_root = PROJECT_ROOT / "usr/plugins/agent_harness"
+
+    assert (plugin_root / "plugin.yaml").is_file()
+    assert (plugin_root / "README.md").is_file()
+    assert (plugin_root / "Install.md").is_file()
+    assert (plugin_root / "scripts/check_deerflow_harness.py").is_file()
+    assert (plugin_root / "scripts/import_deerflow_public_skills.py").is_file()
+    assert (plugin_root / "api/deerflow_core.py").is_file()
+    assert (plugin_root / "api/state.py").is_file()
+    assert (plugin_root / "api/thread_data.py").is_file()
+    assert (plugin_root / "api/thread_uploads.py").is_file()
+    assert (plugin_root / "api/thread_artifacts.py").is_file()
+    assert (plugin_root / "tools/harness_checkpoint.py").is_file()
+    assert (plugin_root / "tools/harness_memory_propose.py").is_file()
+    assert (plugin_root / "extensions/python/chat_model_call_after/_20_harness_cost.py").is_file()
+    assert (plugin_root / "extensions/python/message_loop_prompts_after/_20_harness_runtime.py").is_file()
+    assert (plugin_root / "extensions/python/monologue_start/_20_harness_workspace.py").is_file()
+    assert (plugin_root / "extensions/python/tool_execute_after/_20_harness_tool_events.py").is_file()
+    assert (plugin_root / "extensions/python/tool_execute_before/_20_harness_guardrails.py").is_file()
+    assert (plugin_root / "extensions/webui/chat-input-progress-start/agent-harness-status.html").is_file()
+    assert (plugin_root / "extensions/webui/sidebar-quick-actions-main-end/agent-harness-entry.html").is_file()
+    assert (plugin_root / "helpers/deerflow_core.py").is_file()
+    assert (plugin_root / "helpers/deerflow_client.py").is_file()
+    assert (plugin_root / "webui/harness-store.js").is_file()
+    assert (plugin_root / "webui/main.html").is_file()
+    assert (plugin_root / "skills/public/bootstrap/SKILL.md").is_file()
+    assert (plugin_root / "skills/public/find-skills/SKILL.md").is_file()
+
+
+def test_deerflow_sync_resolves_public_skill_root_and_lists_skills(tmp_path: Path) -> None:
+    repo_root = tmp_path / "deer-flow"
+    public_root = repo_root / "skills" / "public"
+    (public_root / "bootstrap").mkdir(parents=True)
+    (public_root / "bootstrap" / "SKILL.md").write_text(
+        "---\nname: bootstrap\ndescription: Bootstrap\n---\n",
+        encoding="utf-8",
+    )
+    (public_root / "find-skills").mkdir(parents=True)
+    (public_root / "find-skills" / "SKILL.md").write_text(
+        "---\nname: find-skills\ndescription: Find Skills\n---\n",
+        encoding="utf-8",
+    )
+
+    resolved = resolve_public_skills_root(repo_root)
+
+    assert resolved == public_root
+    assert list_public_skills(repo_root) == ["bootstrap", "find-skills"]
 
 
 def test_create_run_record_uses_expected_phase_and_structure() -> None:
@@ -80,14 +142,14 @@ def test_create_run_record_uses_expected_phase_and_structure() -> None:
 
     run = harness_runtime.create_run_record(
         context_id="ctx-1234",
-        mode="build",
+        mode="pro",
         objective="Implement a new Agent Zero plugin",
         constraints=["No core framework edits"],
         settings=defaults,
     )
 
     assert run.context_id == "ctx-1234"
-    assert run.mode == "build"
+    assert run.mode == "pro"
     assert run.phase == "inspect"
     assert run.status == "active"
     assert run.risk_level == "elevated"
@@ -105,7 +167,7 @@ def test_create_run_record_uses_expected_phase_and_structure() -> None:
         (
             harness_runtime.create_run_record(
                 context_id="ctx-deps",
-                mode="build",
+                mode="pro",
                 objective="Install toolchain",
                 constraints=[],
                 settings=harness_runtime.load_default_settings(),
@@ -120,7 +182,7 @@ def test_create_run_record_uses_expected_phase_and_structure() -> None:
         (
             harness_runtime.create_run_record(
                 context_id="ctx-protected",
-                mode="build",
+                mode="pro",
                 objective="Patch protected file",
                 constraints=[],
                 settings=harness_runtime.load_default_settings(),
@@ -134,7 +196,7 @@ def test_create_run_record_uses_expected_phase_and_structure() -> None:
         (
             harness_runtime.create_run_record(
                 context_id="ctx-breadth",
-                mode="build",
+                mode="pro",
                 objective="Rewrite many files",
                 constraints=[],
                 settings=harness_runtime.load_default_settings(),
@@ -180,7 +242,7 @@ def test_run_api_start_status_checkpoint_and_stop_flow() -> None:
         {
             "action": "start",
             "context_id": context.id,
-            "mode": "build",
+            "mode": "pro",
             "objective": "Ship the harness plugin",
             "constraints": ["Stay inside plugin seams"],
         },
@@ -188,7 +250,7 @@ def test_run_api_start_status_checkpoint_and_stop_flow() -> None:
 
     assert start["success"] is True
     assert start["context_id"] == context.id
-    assert start["run"]["mode"] == "build"
+    assert start["run"]["mode"] == "pro"
     assert start["run"]["phase"] == "inspect"
 
     status = _call_api(
@@ -241,7 +303,7 @@ def test_memory_queue_accept_persists_rule_and_updates_candidate_status(
     context = _new_context()
     run = harness_runtime.create_run_record(
         context_id=context.id,
-        mode="build",
+        mode="pro",
         objective="Learn repo conventions",
         constraints=[],
         settings=harness_runtime.load_default_settings(),
@@ -296,11 +358,150 @@ def test_memory_queue_accept_persists_rule_and_updates_candidate_status(
     )
 
 
+def test_state_api_returns_dashboard_run_and_pending_items() -> None:
+    context = _new_context()
+    defaults = harness_runtime.load_default_settings()
+    run = harness_runtime.create_run_record(
+        context_id=context.id,
+        mode="ultra",
+        objective="Harden the harness",
+        constraints=[],
+        settings=defaults,
+    )
+    harness_runtime.request_checkpoint(
+        run,
+        reason="Checkpoint required for dependency install in deep harness mode.",
+        proposed_action="pip install rich",
+        tool_name="code_execution_tool",
+        tool_args={"runtime": "terminal", "code": "pip install rich"},
+        risk_level="high",
+    )
+    harness_runtime.propose_memory_candidate(
+        run=run,
+        rule_text="Run focused tests before the whole suite.",
+        reason="Keeps verification loops tight.",
+        source="agent_harness",
+        scope="project",
+        confidence=0.88,
+    )
+    harness_runtime.record_verification(
+        run,
+        name="pytest",
+        status="passed",
+        summary="2 passed",
+    )
+    harness_runtime.save_current_run(context, run)
+
+    handler = State(_new_app(), threading.RLock())
+    response = _call_api(handler, {"context_id": context.id})
+
+    assert response["success"] is True
+    assert response["dashboard"]["default_deep_mode"] == "pro"
+    assert response["run"]["objective"] == "Harden the harness"
+    assert len(response["pending_checkpoints"]) == 1
+    assert len(response["pending_memory_candidates"]) == 1
+    assert response["latest_verification"]["status"] == "passed"
+
+
+def test_guardrail_extension_blocks_risky_tool_execution_and_creates_checkpoint() -> None:
+    context = _new_context()
+    run = harness_runtime.create_run_record(
+        context_id=context.id,
+        mode="pro",
+        objective="Protect the repo",
+        constraints=[],
+        settings=harness_runtime.load_default_settings(),
+    )
+    harness_runtime.save_current_run(context, run)
+
+    extension = HarnessGuardrails(agent=context.get_agent())
+
+    with pytest.raises(RepairableException):
+        _run(
+            extension.execute(
+                tool_name="code_execution_tool",
+                tool_args={"runtime": "terminal", "code": "pip install rich"},
+            )
+        )
+
+    refreshed = harness_runtime.get_current_run(context)
+    assert refreshed is not None
+    checkpoint = harness_runtime.get_pending_checkpoint(refreshed)
+    assert checkpoint is not None
+    assert "dependency install" in checkpoint.reason.lower()
+
+
+def test_deerflow_core_api_returns_gateway_like_state(monkeypatch) -> None:
+    context = _new_context()
+    workspace = WorkspacePaths(
+        root="/tmp/.harness",
+        workspace="/tmp/.harness/threads/ctx/user-data/workspace",
+        outputs="/tmp/.harness/threads/ctx/user-data/outputs",
+        uploads="/tmp/.harness/threads/ctx/user-data/uploads",
+        offloads="/tmp/.harness/offloads",
+        runs="/tmp/.harness/runs",
+        thread_root="/tmp/.harness/threads/ctx",
+        user_data="/tmp/.harness/threads/ctx/user-data",
+    )
+
+    from usr.plugins.agent_harness.helpers import deerflow_core
+
+    monkeypatch.setattr(deerflow_core, "ensure_context_workspace", lambda _context: workspace)
+    monkeypatch.setattr(
+        deerflow_core,
+        "list_configured_models",
+        lambda _agent: [{"kind": "chat", "provider": "openai", "name": "gpt-test"}],
+    )
+    monkeypatch.setattr(
+        deerflow_core,
+        "list_skill_entries",
+        lambda _agent, limit=50: [{"name": "bootstrap", "description": "Setup", "path": "/tmp/bootstrap"}],
+    )
+
+    async def fake_memory_status(_context):
+        return {
+            "enabled": True,
+            "current_subdir": "default",
+            "available_subdirs": ["default"],
+            "storage_path": "/tmp/memory/default",
+        }
+
+    monkeypatch.setattr(deerflow_core, "get_memory_status", fake_memory_status)
+
+    payload = _call_api(DeerflowCore(_new_app(), threading.Lock()), {"context_id": context.id})
+
+    assert payload["success"] is True
+    assert payload["thread"]["thread_root"] == workspace.thread_root
+    assert payload["models"][0]["name"] == "gpt-test"
+    assert payload["skills"][0]["name"] == "bootstrap"
+    assert payload["memory"]["enabled"] is True
+
+
+def test_thread_data_api_can_cleanup_workspace(monkeypatch) -> None:
+    context = _new_context()
+
+    from usr.plugins.agent_harness.helpers.deerflow_client import DeerFlowClient
+
+    monkeypatch.setattr(
+        DeerFlowClient,
+        "cleanup_thread",
+        lambda self: {"thread_root": "/tmp/thread", "artifact_count": 0, "upload_count": 0},
+    )
+
+    payload = _call_api(
+        ThreadData(_new_app(), threading.Lock()),
+        {"context_id": context.id, "action": "cleanup"},
+    )
+
+    assert payload["success"] is True
+    assert payload["thread"]["thread_root"] == "/tmp/thread"
+
+
 def test_render_system_prompt_includes_mode_policy_and_accepted_rules() -> None:
     defaults = harness_runtime.load_default_settings()
     run = harness_runtime.create_run_record(
         context_id="ctx-prompt",
-        mode="surge",
+        mode="ultra",
         objective="Implement and verify the harness",
         constraints=["No core rewrites"],
         settings=defaults,
@@ -317,10 +518,10 @@ def test_render_system_prompt_includes_mode_policy_and_accepted_rules() -> None:
         ],
     )
 
-    assert "SURGE MODE" in prompt
+    assert "ULTRA MODE" in prompt
     assert "Implement and verify the harness" in prompt
     assert "Run file-scoped pytest first before the full suite." in prompt
-    assert "4 parallel sub-agents" in prompt
+    assert "3 parallel sub-agents" in prompt
 
 
 def test_agent_harness_webui_extensions_are_discoverable() -> None:

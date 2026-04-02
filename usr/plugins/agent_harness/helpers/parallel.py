@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +18,11 @@ from usr.plugins.agent_harness.helpers.orchestrator import build_scoped_context
 # DeferredTask objects are not serializable, so they live here instead of on RunRecord.
 _active_tasks: dict[str, "BackgroundSubAgent"] = {}
 _lock = threading.Lock()
+_INHERITED_CONTEXT_SKIP_KEYS = {
+    Agent.DATA_NAME_SUPERIOR,
+    Agent.DATA_NAME_SUBORDINATE,
+    "agent_harness.current_run",
+}
 
 
 @dataclass
@@ -27,6 +33,47 @@ class BackgroundSubAgent:
     agent: Agent
     deferred: DeferredTask
     spawned_at: str = field(default_factory=now_iso)
+
+
+def _clone_parent_context_data(parent_context: "AgentContext | None") -> dict[str, Any] | None:
+    if not parent_context or not parent_context.data:
+        return None
+
+    inherited: dict[str, Any] = {}
+    for key, value in parent_context.data.items():
+        if key in _INHERITED_CONTEXT_SKIP_KEYS:
+            continue
+        try:
+            inherited[key] = deepcopy(value)
+        except Exception:
+            continue
+    return inherited or None
+
+
+def registered_task_ids(run_id: str) -> set[str]:
+    with _lock:
+        return {
+            task_id
+            for task_id, bg in _active_tasks.items()
+            if bg.run_id == run_id
+        }
+
+
+def reconcile_run_graph(run: RunRecord) -> list[str]:
+    if not run.task_graph:
+        return []
+
+    known_task_ids = registered_task_ids(run.run_id)
+    restored: list[str] = []
+    for task in run.task_graph.sub_tasks:
+        if task.status != "dispatched":
+            continue
+        if task.id in known_task_ids:
+            continue
+        task.status = "pending"
+        task.dispatched_at = ""
+        restored.append(task.id)
+    return restored
 
 
 def spawn_parallel(
@@ -51,14 +98,7 @@ def spawn_parallel(
         # Copy ALL parent context data so the child inherits model config,
         # project settings, plugin state, etc. This ensures the sub-agent
         # uses the same LLM provider the user selected — not the system default.
-        inherited_data = None
-        if parent_context and parent_context.data:
-            from copy import deepcopy
-            inherited_data = deepcopy(parent_context.data)
-            # Remove agent-specific keys that shouldn't be shared
-            for key in (Agent.DATA_NAME_SUPERIOR, Agent.DATA_NAME_SUBORDINATE,
-                        "agent_harness.current_run"):
-                inherited_data.pop(key, None)
+        inherited_data = _clone_parent_context_data(parent_context)
 
         ctx = AgentContext(
             config=config,

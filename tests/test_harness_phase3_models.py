@@ -26,7 +26,7 @@ def test_run_record_has_phase3_fields():
     from usr.plugins.agent_harness.helpers.models import RunRecord, now_iso, new_id
     ts = now_iso()
     run = RunRecord(
-        run_id=new_id("run"), context_id="ctx", mode="build", objective="test",
+        run_id=new_id("run"), context_id="ctx", mode="pro", objective="test",
         phase="implement", status="active", risk_level="elevated",
         created_at=ts, updated_at=ts,
     )

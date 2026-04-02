@@ -1,6 +1,6 @@
-config_version: 2
+config_version: 3
 ambient_assist_enabled: true
-default_deep_mode: build
+default_deep_mode: pro
 memory_curation_enabled: true
 show_status_ui: true
 max_auto_edit_files: 8
@@ -9,16 +9,20 @@ destructive_actions_require_checkpoint: true
 protected_paths:
   - agent.py
   - initialize.py
+  - usr/plugins/
 accepted_rules: []
 mode_policies:
-  assist:
+  flash:
     subagent_limit: 0
     repair_limit: 0
-  build:
-    subagent_limit: 2
+  standard:
+    subagent_limit: 0
     repair_limit: 1
-  surge:
-    subagent_limit: 4
+  pro:
+    subagent_limit: 0
+    repair_limit: 1
+  ultra:
+    subagent_limit: 3
     repair_limit: 3
 context_pressure_threshold: 0.7
 context_model_window: 128000

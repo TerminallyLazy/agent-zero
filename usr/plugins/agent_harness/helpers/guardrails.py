@@ -29,10 +29,19 @@ def _is_protected_path(path: str, settings: dict[str, Any]) -> bool:
     normalized = _normalize_path(path)
     basename = Path(path).name
     for pattern in settings.get("protected_paths", []):
-        pattern = str(pattern).strip()
-        if not pattern:
+        raw_pattern = str(pattern).strip()
+        if not raw_pattern:
             continue
-        if fnmatch(normalized, pattern) or fnmatch(basename, pattern):
+        normalized_pattern = _normalize_path(raw_pattern)
+        has_glob = any(token in raw_pattern for token in "*?[]")
+        looks_like_directory = raw_pattern.endswith("/") or (
+            "/" in normalized_pattern and not has_glob and Path(raw_pattern).suffix == ""
+        )
+        if looks_like_directory:
+            directory = normalized_pattern.rstrip("/")
+            if normalized == directory or normalized.startswith(normalized_pattern):
+                return True
+        if fnmatch(normalized, raw_pattern) or fnmatch(basename, raw_pattern):
             return True
     return False
 
@@ -82,7 +91,7 @@ def _set_blocked_state(run: RunRecord, risk_level: RiskLevel) -> None:
 
 
 def _set_active_state(run: RunRecord) -> None:
-    run.phase = "implement" if run.mode != "assist" else "idle"
+    run.phase = "implement" if run.mode != "flash" else "idle"
     run.status = "active"
 
 

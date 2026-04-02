@@ -75,6 +75,28 @@ def mark_sub_task_completed(
     raise ValueError(f"Sub-task '{sub_task_id}' not found")
 
 
+def _cascade_failed_dependencies(run: RunRecord) -> None:
+    if not run.task_graph:
+        return
+
+    changed = True
+    while changed:
+        changed = False
+        failed_tasks = {task.id: task for task in run.task_graph.sub_tasks if task.status == "failed"}
+        for task in run.task_graph.sub_tasks:
+            if task.status not in ("pending", "dispatched"):
+                continue
+            blocking = [failed_tasks[dep] for dep in task.depends_on if dep in failed_tasks]
+            if not blocking:
+                continue
+            dependency_labels = ", ".join(dep.title for dep in blocking)
+            task.status = "failed"
+            task.result_summary = f"Blocked by failed dependency: {dependency_labels}"
+            task.completed_at = now_iso()
+            task.dispatched_at = ""
+            changed = True
+
+
 def mark_sub_task_failed(run: RunRecord, sub_task_id: str, error: str = "") -> SubTask:
     if not run.task_graph:
         raise ValueError("No task graph on run")
@@ -83,5 +105,7 @@ def mark_sub_task_failed(run: RunRecord, sub_task_id: str, error: str = "") -> S
             task.status = "failed"
             task.result_summary = error
             task.completed_at = now_iso()
+            task.dispatched_at = ""
+            _cascade_failed_dependencies(run)
             return task
     raise ValueError(f"Sub-task '{sub_task_id}' not found")

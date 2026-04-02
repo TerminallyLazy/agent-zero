@@ -50,7 +50,7 @@ def test_run_record_round_trips_through_model_dump():
     run = RunRecord(
         run_id=new_id("run"),
         context_id="ctx-test",
-        mode="build",
+        mode="pro",
         objective="Test objective",
         phase="inspect",
         status="active",
@@ -61,7 +61,7 @@ def test_run_record_round_trips_through_model_dump():
     data = run.model_dump()
     restored = RunRecord.model_validate(data)
     assert restored.run_id == run.run_id
-    assert restored.mode == "build"
+    assert restored.mode == "pro"
 
 
 def test_sub_task_and_task_graph_models():
@@ -99,7 +99,7 @@ def test_run_record_has_task_graph_field():
     from usr.plugins.agent_harness.helpers.models import RunRecord, now_iso, new_id
     ts = now_iso()
     run = RunRecord(
-        run_id=new_id("run"), context_id="ctx", mode="build", objective="test",
+        run_id=new_id("run"), context_id="ctx", mode="pro", objective="test",
         phase="plan", status="active", risk_level="elevated",
         created_at=ts, updated_at=ts,
     )

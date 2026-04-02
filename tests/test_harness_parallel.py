@@ -1,19 +1,22 @@
 from __future__ import annotations
 import sys
 import time
+import threading
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from agent import AgentContext
+from initialize import initialize_agent
 from usr.plugins.agent_harness.helpers.models import RunRecord, SubTask, TaskGraph, now_iso, new_id
 
 
 def _make_run_with_graph() -> RunRecord:
     ts = now_iso()
     run = RunRecord(
-        run_id=new_id("run"), context_id="ctx-test", mode="build",
+        run_id=new_id("run"), context_id="ctx-test", mode="ultra",
         objective="Build feature", phase="implement", status="active",
         risk_level="elevated", created_at=ts, updated_at=ts,
     )
@@ -94,4 +97,26 @@ def test_collect_completed_harvests_finished_tasks():
     assert isinstance(results, list)
 
     # Clean up any remaining
+    kill_all(run.run_id)
+
+
+def test_spawn_parallel_tolerates_noncopyable_parent_context_data():
+    from usr.plugins.agent_harness.helpers.parallel import (
+        spawn_parallel, poll_status, kill_all,
+    )
+    from usr.plugins.agent_harness.helpers.settings import load_default_settings
+
+    run = _make_run_with_graph()
+    settings = load_default_settings()
+    ready = [run.task_graph.sub_tasks[0]]
+    parent_context = AgentContext(config=initialize_agent(), set_current=False)
+    parent_context.set_data("chat_model_override", {"provider": "openrouter", "name": "test"})
+    parent_context.set_data("uncopyable", threading.Lock())
+
+    spawned = spawn_parallel(run, ready, settings, parent_context=parent_context)
+    assert spawned == ["st_1"]
+
+    status = poll_status(run.run_id)
+    assert status["st_1"] in ("running", "completed", "failed")
+
     kill_all(run.run_id)

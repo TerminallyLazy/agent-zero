@@ -11,9 +11,10 @@ def test_load_default_settings_returns_expected_keys():
     from usr.plugins.agent_harness.helpers.settings import load_default_settings
     defaults = load_default_settings()
     assert defaults["ambient_assist_enabled"] is True
-    assert defaults["default_deep_mode"] == "build"
+    assert defaults["default_deep_mode"] == "pro"
     assert "mode_policies" in defaults
-    assert "build" in defaults["mode_policies"]
+    assert "pro" in defaults["mode_policies"]
+    assert "ultra" in defaults["mode_policies"]
 
 
 def test_get_mode_policy_returns_limits():
@@ -21,8 +22,8 @@ def test_get_mode_policy_returns_limits():
         load_default_settings, get_mode_policy,
     )
     defaults = load_default_settings()
-    policy = get_mode_policy(defaults, "build")
-    assert policy == {"subagent_limit": 2, "repair_limit": 1}
+    policy = get_mode_policy(defaults, "pro")
+    assert policy == {"subagent_limit": 0, "repair_limit": 1}
 
 
 def test_deep_merge_settings_merges_nested_dicts():
@@ -42,25 +43,25 @@ def test_deep_merge_settings_deduplicates_accepted_rules():
     assert texts == ["Use rg", "New rule"]
 
 
-def test_get_default_mode_falls_back_to_build():
+def test_get_default_mode_falls_back_to_pro():
     from usr.plugins.agent_harness.helpers.settings import get_default_mode
-    assert get_default_mode({"default_deep_mode": "surge"}) == "surge"
-    assert get_default_mode({"default_deep_mode": "invalid"}) == "build"
-    assert get_default_mode({}) == "build"
+    assert get_default_mode({"default_deep_mode": "ultra"}) == "ultra"
+    assert get_default_mode({"default_deep_mode": "invalid"}) == "pro"
+    assert get_default_mode({}) == "pro"
 
 
 def test_dashboard_settings_extracts_ui_keys():
     from usr.plugins.agent_harness.helpers.settings import dashboard_settings
     settings = {
         "show_status_ui": False,
-        "default_deep_mode": "surge",
+        "default_deep_mode": "ultra",
         "memory_curation_enabled": True,
         "unrelated_key": 42,
     }
     result = dashboard_settings(settings)
     assert result == {
         "show_status_ui": False,
-        "default_deep_mode": "surge",
+        "default_deep_mode": "ultra",
         "memory_curation_enabled": True,
     }
 

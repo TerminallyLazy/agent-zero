@@ -12,7 +12,7 @@ from usr.plugins.agent_harness.helpers.models import RunRecord, now_iso, new_id
 def _make_run(**overrides) -> RunRecord:
     ts = now_iso()
     defaults = {
-        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "surge",
+        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "ultra",
         "objective": "Ship it", "phase": "implement", "status": "active",
         "risk_level": "high", "created_at": ts, "updated_at": ts,
     }
@@ -25,17 +25,17 @@ def _default_settings():
     return load_default_settings()
 
 
-def test_render_system_prompt_surge_mode():
+def test_render_system_prompt_ultra_mode():
     from usr.plugins.agent_harness.helpers.renderer import render_system_prompt
     run = _make_run()
     prompt = render_system_prompt(
         settings=_default_settings(), run=run,
         accepted_rules=[{"rule_text": "Always verify"}],
     )
-    assert "SURGE MODE" in prompt
+    assert "ULTRA MODE" in prompt
     assert "Ship it" in prompt
     assert "Always verify" in prompt
-    assert "4 parallel sub-agents" in prompt
+    assert "3 parallel sub-agents" in prompt
 
 
 def test_render_system_prompt_ambient_assist():
@@ -58,7 +58,7 @@ def test_render_runtime_summary():
     from usr.plugins.agent_harness.helpers.renderer import render_runtime_summary
     run = _make_run()
     summary = render_runtime_summary(run)
-    assert "mode: surge" in summary
+    assert "mode: ultra" in summary
     assert "objective: Ship it" in summary
 
 

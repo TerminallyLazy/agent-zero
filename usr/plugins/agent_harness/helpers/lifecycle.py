@@ -24,6 +24,7 @@ from usr.plugins.agent_harness.helpers.models import (
     OUTPUT_CONTEXT_KEY,
     DEFAULT_RUN_OBJECTIVE,
     DEFAULT_DEEP_MODE,
+    normalize_harness_mode,
 )
 from usr.plugins.agent_harness.helpers.settings import get_mode_policy, get_default_mode
 
@@ -50,13 +51,13 @@ def parse_verification_status(output: str) -> VerificationStatus:
 # --- Phase and risk helpers ---
 
 def _initial_phase_for_mode(mode: HarnessMode) -> HarnessPhase:
-    return "idle" if mode == "assist" else "inspect"
+    return "idle" if mode == "flash" else "inspect"
 
 
 def _initial_risk_for_mode(mode: HarnessMode) -> RiskLevel:
-    if mode == "surge":
+    if mode == "ultra":
         return "high"
-    if mode == "build":
+    if mode in {"standard", "pro"}:
         return "elevated"
     return "low"
 
@@ -73,15 +74,16 @@ def create_run_record(
     allow_broad_edits: bool = False,
 ) -> RunRecord:
     timestamp = now_iso()
+    normalized_mode = normalize_harness_mode(mode)
     return RunRecord(
         run_id=new_id("run"),
         context_id=context_id,
-        mode=mode,
+        mode=normalized_mode,
         objective=objective.strip() or DEFAULT_RUN_OBJECTIVE,
         constraints=constraints,
-        phase=_initial_phase_for_mode(mode),
+        phase=_initial_phase_for_mode(normalized_mode),
         status="active",
-        risk_level=_initial_risk_for_mode(mode),
+        risk_level=_initial_risk_for_mode(normalized_mode),
         allow_broad_edits=allow_broad_edits,
         created_at=timestamp,
         updated_at=timestamp,
@@ -134,7 +136,7 @@ def ensure_run(
 
 def _set_active_state(run: RunRecord) -> None:
     run.status = "active"
-    if run.mode == "assist":
+    if run.mode == "flash":
         run.phase = "idle"
     elif run.task_graph and any(
         t.status in ("pending", "dispatched") for t in run.task_graph.sub_tasks

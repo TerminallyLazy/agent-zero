@@ -54,9 +54,11 @@
   </script>
 </head>
 <body>
-  <div x-data>
+      <div x-data>
     <template x-if="$store.agentHarness">
-      <div x-create="$store.agentHarness.onMount()" class="agent-harness-dashboard">
+      <div x-create="$store.agentHarness.onMount()"
+           x-destroy="$store.agentHarness.cleanup()"
+           class="agent-harness-dashboard">
         <div class="agent-harness-hero">
           <div>
             <div class="agent-harness-kicker">Agent Harness</div>
@@ -66,8 +68,9 @@
             </p>
           </div>
           <div class="agent-harness-actions">
-            <button class="button confirm" @click="$store.agentHarness.startRun('build')">Start Build</button>
-            <button class="button" @click="$store.agentHarness.startRun('surge')">Start Surge</button>
+            <button class="button" @click="$store.agentHarness.refresh()">Refresh</button>
+            <button class="button confirm" @click="$store.agentHarness.startRun('pro')">Start Pro</button>
+            <button class="button" @click="$store.agentHarness.startRun('ultra')">Start Ultra</button>
             <button class="button" x-show="$store.agentHarness.currentRun" @click="$store.agentHarness.stopRun()">Stop Run</button>
           </div>
         </div>

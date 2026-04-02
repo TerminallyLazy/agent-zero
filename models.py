@@ -228,28 +228,75 @@ def get_rate_limiter(
 
 
 def _is_transient_litellm_error(exc: Exception) -> bool:
-    """Uses status_code when available, else falls back to exception types"""
-    # Prefer explicit status codes if present
-    status_code = getattr(exc, "status_code", None)
-    if isinstance(status_code, int):
-        if status_code in (408, 429, 500, 502, 503, 504):
-            return True
-        # Treat other 5xx as retriable
-        if status_code >= 500:
-            return True
-        return False
+    """Uses status_code when available, else falls back to exception types."""
 
-    # Fallback to exception classes mapped by LiteLLM/OpenAI
+    def _walk(current: Exception):
+        queue: list[BaseException] = [current]
+        seen: set[int] = set()
+        while queue:
+            item = queue.pop(0)
+            if not isinstance(item, BaseException):
+                continue
+            item_id = id(item)
+            if item_id in seen:
+                continue
+            seen.add(item_id)
+            yield item
+            for nested in (
+                getattr(item, "original_exception", None),
+                getattr(item, "__cause__", None),
+                getattr(item, "__context__", None),
+            ):
+                if isinstance(nested, BaseException):
+                    queue.append(nested)
+
+    aiohttp_transient: tuple[type[BaseException], ...] = ()
+    try:
+        from aiohttp.client_exceptions import (
+            ServerDisconnectedError,
+            ClientConnectionError,
+            ClientOSError,
+        )
+
+        aiohttp_transient = (
+            ServerDisconnectedError,
+            ClientConnectionError,
+            ClientOSError,
+        )
+    except Exception:
+        aiohttp_transient = ()
+
     transient_types = (
         getattr(openai, "APITimeoutError", Exception),
         getattr(openai, "APIConnectionError", Exception),
         getattr(openai, "RateLimitError", Exception),
         getattr(openai, "APIError", Exception),
         getattr(openai, "InternalServerError", Exception),
-        # Some providers map overloads to ServiceUnavailable-like errors
         getattr(openai, "APIStatusError", Exception),
+        TimeoutError,
+        ConnectionError,
+        ConnectionResetError,
+        *aiohttp_transient,
     )
-    return isinstance(exc, transient_types)
+
+    for current in _walk(exc):
+        status_code = getattr(current, "status_code", None)
+        if isinstance(status_code, int):
+            if status_code in (408, 429, 500, 502, 503, 504):
+                return True
+            if status_code >= 500:
+                return True
+            if status_code < 500:
+                continue
+
+        if isinstance(current, transient_types):
+            return True
+
+        message = str(current).lower()
+        if "server disconnected" in message or "connection reset" in message:
+            return True
+
+    return False
 
 
 async def apply_rate_limiter(
@@ -509,12 +556,11 @@ class LiteLLMChatWrapper(SimpleChatModel):
         retry_delay_s: float = float(call_kwargs.pop("a0_retry_delay_seconds", 1.5))
         stream = reasoning_callback is not None or response_callback is not None or tokens_callback is not None
 
-        # results
-        result = ChatGenerationResult()
-
         attempt = 0
         while True:
-            got_any_chunk = False
+            got_any_reasoning_chunk = False
+            got_any_response_chunk = False
+            result = ChatGenerationResult()
             try:
                 # call model
                 _completion = await acompletion(
@@ -527,13 +573,13 @@ class LiteLLMChatWrapper(SimpleChatModel):
                 if stream:
                     # iterate over chunks
                     async for chunk in _completion:  # type: ignore
-                        got_any_chunk = True
                         # parse chunk
                         parsed = _parse_chunk(chunk)
                         output = result.add_chunk(parsed)
 
                         # collect reasoning delta and call callbacks
                         if output["reasoning_delta"]:
+                            got_any_reasoning_chunk = True
                             if reasoning_callback:
                                 await reasoning_callback(output["reasoning_delta"], result.reasoning)
                             if tokens_callback:
@@ -546,6 +592,7 @@ class LiteLLMChatWrapper(SimpleChatModel):
                                 limiter.add(output=approximate_tokens(output["reasoning_delta"]))
                         # collect response delta and call callbacks
                         if output["response_delta"]:
+                            got_any_response_chunk = True
                             if response_callback:
                                 await response_callback(output["response_delta"], result.response)
                             if tokens_callback:
@@ -573,8 +620,13 @@ class LiteLLMChatWrapper(SimpleChatModel):
             except Exception as e:
                 import asyncio
 
-                # Retry only if no chunks received and error is transient
-                if got_any_chunk or not _is_transient_litellm_error(e) or attempt >= max_retries:
+                # Retry transient streaming failures until the first real response chunk appears.
+                # Gemini/Vertex can emit reasoning first and then disconnect, which should still
+                # be treated like a pre-response failure from Agent Zero's point of view.
+                should_retry = _is_transient_litellm_error(e)
+                if stream:
+                    should_retry = should_retry and not got_any_response_chunk
+                if not should_retry or attempt >= max_retries:
                     raise
                 attempt += 1
                 await asyncio.sleep(retry_delay_s)

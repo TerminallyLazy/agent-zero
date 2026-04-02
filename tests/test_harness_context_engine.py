@@ -14,7 +14,7 @@ from usr.plugins.agent_harness.helpers.models import (
 def _make_run(**overrides) -> RunRecord:
     ts = now_iso()
     defaults = {
-        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "build",
+        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "pro",
         "objective": "Test", "phase": "implement", "status": "active",
         "risk_level": "elevated", "created_at": ts, "updated_at": ts,
     }

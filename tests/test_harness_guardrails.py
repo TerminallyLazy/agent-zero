@@ -12,7 +12,7 @@ from usr.plugins.agent_harness.helpers.models import RunRecord, now_iso, new_id
 def _make_run(**overrides) -> RunRecord:
     ts = now_iso()
     defaults = {
-        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "build",
+        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "pro",
         "objective": "Test", "phase": "inspect", "status": "active",
         "risk_level": "elevated", "created_at": ts, "updated_at": ts,
     }
@@ -31,6 +31,14 @@ def test_protected_path_matches_glob_pattern():
     assert _is_protected_path("agent.py", settings) is True
     assert _is_protected_path("usr/plugins/my_plugin.py", settings) is True
     assert _is_protected_path("helpers/utils.py", settings) is False
+
+
+def test_protected_path_matches_directory_pattern():
+    from usr.plugins.agent_harness.helpers.guardrails import _is_protected_path
+    settings = {"protected_paths": ["usr/plugins/"]}
+    assert _is_protected_path("usr/plugins/agent_harness/plugin.yaml", settings) is True
+    assert _is_protected_path("usr/plugins", settings) is True
+    assert _is_protected_path("usr/skills/custom/SKILL.md", settings) is False
 
 
 def test_dependency_install_triggers_checkpoint():

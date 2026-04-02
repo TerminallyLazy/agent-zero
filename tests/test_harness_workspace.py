@@ -12,15 +12,30 @@ def test_ensure_workspace_creates_directories(tmp_path):
     paths = ensure_workspace(str(tmp_path))
     assert Path(paths.workspace).exists()
     assert Path(paths.outputs).exists()
+    assert Path(paths.uploads).exists()
     assert Path(paths.offloads).exists()
     assert Path(paths.runs).exists()
 
 
 def test_ensure_workspace_is_idempotent(tmp_path):
     from usr.plugins.agent_harness.helpers.workspace import ensure_workspace
-    paths1 = ensure_workspace(str(tmp_path))
-    paths2 = ensure_workspace(str(tmp_path))
+    paths1 = ensure_workspace(str(tmp_path), context_id="ctx-1")
+    paths2 = ensure_workspace(str(tmp_path), context_id="ctx-1")
     assert paths1.root == paths2.root
+    assert paths1.thread_root == paths2.thread_root
+
+
+def test_ensure_workspace_with_context_creates_thread_data_dirs(tmp_path):
+    from usr.plugins.agent_harness.helpers.workspace import ensure_workspace
+    paths = ensure_workspace(str(tmp_path), context_id="ctx:thread")
+    assert Path(paths.thread_root).exists()
+    assert Path(paths.user_data).exists()
+    assert Path(paths.workspace).exists()
+    assert Path(paths.outputs).exists()
+    assert Path(paths.uploads).exists()
+    assert Path(paths.workspace).as_posix().endswith(
+        "/threads/ctx_thread/user-data/workspace"
+    )
 
 
 def test_ensure_gitignore_adds_entries(tmp_path):
@@ -29,6 +44,7 @@ def test_ensure_gitignore_adds_entries(tmp_path):
     gitignore = (tmp_path / ".gitignore").read_text()
     assert ".harness/workspace/" in gitignore
     assert ".harness/offloads/" in gitignore
+    assert ".harness/threads/" in gitignore
     # Idempotent — should not duplicate
     ensure_gitignore(str(tmp_path))
     gitignore2 = (tmp_path / ".gitignore").read_text()
@@ -53,4 +69,39 @@ def test_clean_workspace_removes_temp_dirs(tmp_path):
     assert not Path(paths.workspace).exists()
     assert not Path(paths.offloads).exists()
     assert Path(paths.outputs).exists()
+    assert Path(paths.runs).exists()
+
+
+def test_upload_and_artifact_helpers_respect_thread_boundaries(tmp_path):
+    from usr.plugins.agent_harness.helpers.workspace import (
+        delete_upload,
+        ensure_workspace,
+        list_artifacts,
+        list_uploads,
+        resolve_artifact,
+        save_upload,
+    )
+
+    paths = ensure_workspace(str(tmp_path), context_id="ctx-uploads")
+    save_upload(paths, "notes.txt", b"hello")
+    uploads = list_uploads(paths)
+    assert uploads[0]["path"] == "notes.txt"
+    assert delete_upload(paths, "notes.txt") is True
+    assert list_uploads(paths) == []
+
+    artifact = Path(paths.outputs) / "report.txt"
+    artifact.write_text("artifact")
+    artifacts = list_artifacts(paths)
+    assert artifacts[0]["path"] == "report.txt"
+    assert resolve_artifact(paths, "report.txt") == artifact.resolve()
+
+
+def test_cleanup_thread_data_removes_only_thread_root(tmp_path):
+    from usr.plugins.agent_harness.helpers.workspace import cleanup_thread_data, ensure_workspace
+
+    paths = ensure_workspace(str(tmp_path), context_id="ctx-cleanup")
+    (Path(paths.workspace) / "scratch.txt").write_text("temp")
+    cleanup_thread_data(paths)
+    assert not Path(paths.thread_root).exists()
+    assert Path(paths.offloads).exists()
     assert Path(paths.runs).exists()

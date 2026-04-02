@@ -12,7 +12,7 @@ from usr.plugins.agent_harness.helpers.models import RunRecord, now_iso, new_id
 def _make_run(**overrides) -> RunRecord:
     ts = now_iso()
     defaults = {
-        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "build",
+        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "pro",
         "objective": "Test", "phase": "inspect", "status": "active",
         "risk_level": "elevated", "created_at": ts, "updated_at": ts,
     }
@@ -24,15 +24,15 @@ def test_create_run_record_sets_correct_phase_per_mode():
     from usr.plugins.agent_harness.helpers.lifecycle import create_run_record
     from usr.plugins.agent_harness.helpers.settings import load_default_settings
     settings = load_default_settings()
-    build = create_run_record(context_id="ctx", mode="build", objective="test", constraints=[], settings=settings)
-    assert build.phase == "inspect"
-    assert build.risk_level == "elevated"
-    assist = create_run_record(context_id="ctx", mode="assist", objective="test", constraints=[], settings=settings)
-    assert assist.phase == "idle"
-    assert assist.risk_level == "low"
-    surge = create_run_record(context_id="ctx", mode="surge", objective="test", constraints=[], settings=settings)
-    assert surge.phase == "inspect"
-    assert surge.risk_level == "high"
+    pro = create_run_record(context_id="ctx", mode="pro", objective="test", constraints=[], settings=settings)
+    assert pro.phase == "inspect"
+    assert pro.risk_level == "elevated"
+    flash = create_run_record(context_id="ctx", mode="flash", objective="test", constraints=[], settings=settings)
+    assert flash.phase == "idle"
+    assert flash.risk_level == "low"
+    ultra = create_run_record(context_id="ctx", mode="ultra", objective="test", constraints=[], settings=settings)
+    assert ultra.phase == "inspect"
+    assert ultra.risk_level == "high"
 
 
 def test_record_verification_passed_transitions_to_summarize():

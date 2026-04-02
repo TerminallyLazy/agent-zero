@@ -13,7 +13,7 @@ from usr.plugins.agent_harness.helpers.models import RunRecord, now_iso, new_id
 def _make_run(**overrides) -> RunRecord:
     ts = now_iso()
     defaults = {
-        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "build",
+        "run_id": new_id("run"), "context_id": "ctx-test", "mode": "pro",
         "objective": "Build feature", "phase": "plan", "status": "active",
         "risk_level": "elevated", "created_at": ts, "updated_at": ts,
     }
@@ -84,6 +84,25 @@ def test_mark_sub_task_failed():
     submit_plan(run, [{"title": "A", "description": "first", "role": "research"}])
     task = mark_sub_task_failed(run, "st_1", error="API unavailable")
     assert task.status == "failed"
+
+
+def test_mark_sub_task_failed_cascades_to_dependent_tasks():
+    from usr.plugins.agent_harness.helpers.planner import submit_plan, mark_sub_task_failed
+
+    run = _make_run()
+    submit_plan(run, [
+        {"title": "A", "description": "first", "role": "research"},
+        {"title": "B", "description": "second", "role": "code", "depends_on": [0]},
+        {"title": "C", "description": "third", "role": "verify", "depends_on": [1]},
+    ])
+
+    failed = mark_sub_task_failed(run, "st_1", error="API unavailable")
+
+    assert failed.status == "failed"
+    assert run.task_graph.sub_tasks[1].status == "failed"
+    assert "Blocked by failed dependency" in run.task_graph.sub_tasks[1].result_summary
+    assert run.task_graph.sub_tasks[2].status == "failed"
+    assert run.task_graph.is_complete() is True
 
 
 def test_validate_task_graph_catches_bad_dependency_ref():
