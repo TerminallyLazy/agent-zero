@@ -1,6 +1,19 @@
 import type { AttachmentPayload, BridgeCommand, BrowserTabSummary, PageContext } from "../lib/types";
 import { dataUrlToBase64 } from "../lib/compose";
 
+const NON_CAPTURABLE_SCHEMES = [
+  "about:",
+  "brave:",
+  "chrome-extension:",
+  "chrome:",
+  "devtools:",
+  "edge:",
+  "moz-extension:",
+  "opera:",
+  "vivaldi:",
+  "view-source:",
+];
+
 const tabSummary = (tab: chrome.tabs.Tab, windowFocused: boolean): BrowserTabSummary => ({
   tab_id: tab.id || -1,
   window_id: tab.windowId,
@@ -23,6 +36,14 @@ export async function getActiveTab(): Promise<BrowserTabSummary | null> {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   return tab && typeof tab.id === "number" ? tabSummary(tab, true) : null;
 }
+
+const isCapturableUrl = (url: string): boolean => {
+  const normalized = (url || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return !NON_CAPTURABLE_SCHEMES.some((scheme) => normalized.startsWith(scheme));
+};
 
 async function imageDimensionsFromDataUrl(dataUrl: string): Promise<{ width: number; height: number }> {
   try {
@@ -139,21 +160,25 @@ export async function captureActiveTabAsAttachment(filename = "tab-screenshot.pn
   if (!activeTab) {
     return null;
   }
-  const result = await executeBridgeCommand({
-    command_id: "local-capture",
-    browser_session_id: "local",
-    verb: "capture_visible_tab",
-    payload: { format: "png", quality: 90 },
-    target_tab_id: activeTab.tab_id,
-    timeout_seconds: 5,
-    status: "queued",
-    attempts: 0,
-  });
-  const dataUrl = String(result.image_data_url || "");
-  if (!dataUrl) {
-    return null;
+
+  if (!isCapturableUrl(activeTab.url)) {
+    throw new Error("Screenshots only work on normal web pages, not browser or extension pages.");
   }
-  return { filename, base64: dataUrlToBase64(dataUrl) };
+
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(activeTab.window_id ?? undefined, {
+      format: "png",
+      quality: 90,
+    });
+    if (!dataUrl) {
+      return null;
+    }
+    return { filename, base64: dataUrlToBase64(dataUrl) };
+  } catch (error) {
+    throw new Error(
+      `Chrome could not capture this tab. ${String(error || "").trim() || "Make sure the page is visible and try again."}`,
+    );
+  }
 }
 
 export async function openCurrentWindowSidePanel(): Promise<void> {

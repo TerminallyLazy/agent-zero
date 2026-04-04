@@ -4,6 +4,7 @@ import type {
   BrowserTabSummary,
   ExtensionConfig,
   LogItem,
+  ModelStateSummary,
   ProjectSummary,
   SessionSnapshot,
 } from "./types";
@@ -60,11 +61,58 @@ export class AgentZeroClient {
     });
   }
 
-  getLogs(contextId: string): Promise<{ context_id: string; log: { items: LogItem[] } }> {
+  getLogs(contextId: string): Promise<{
+    context_id: string;
+    log: { items: LogItem[]; progress?: string; progress_active?: boolean };
+  }> {
     return requestJson(this.config.baseUrl, this.config.apiKey, "/api/api_log_get", {
       method: "POST",
       headers: jsonHeaders(this.config.apiKey),
       body: JSON.stringify({ context_id: contextId, length: 200 }),
+    });
+  }
+
+  getModelState(options: {
+    contextId?: string;
+    projectName?: string;
+    agentProfile?: string;
+  } = {}): Promise<{ ok: boolean; context_id: string; allow_override: boolean } & ModelStateSummary> {
+    return requestJson(this.config.baseUrl, this.config.apiKey, "/api/plugins/chrome_extension/model_state", {
+      method: "POST",
+      headers: jsonHeaders(this.config.apiKey),
+      body: JSON.stringify({
+        context_id: options.contextId || undefined,
+        project_name: options.projectName || undefined,
+        agent_profile: options.agentProfile || undefined,
+      }),
+    });
+  }
+
+  bootstrapChat(payload: {
+    browserSessionId: string;
+    contextId?: string;
+    projectName?: string;
+    presetName?: string;
+    clearOverride?: boolean;
+    capabilities?: Record<string, unknown>;
+  }): Promise<{
+    ok: boolean;
+    context_id: string;
+    project_name: string;
+    preset_name: string;
+    session: SessionSnapshot;
+  }> {
+    return requestJson(this.config.baseUrl, this.config.apiKey, "/api/plugins/chrome_extension/chat_bootstrap", {
+      method: "POST",
+      headers: jsonHeaders(this.config.apiKey),
+      body: JSON.stringify({
+        browser_session_id: payload.browserSessionId,
+        context_id: payload.contextId || undefined,
+        project_name: payload.projectName || undefined,
+        preset_name: payload.presetName || undefined,
+        clear_override: payload.clearOverride || undefined,
+        capabilities: payload.capabilities || {},
+      }),
     });
   }
 

@@ -86,6 +86,51 @@ export interface LogItem {
   agentno?: number;
 }
 
+export interface ModelSummary {
+  provider: string;
+  provider_label: string;
+  name: string;
+  display_name: string;
+}
+
+export interface ModelPresetSummary {
+  name: string;
+  summary: string;
+  chat: ModelSummary;
+  utility: ModelSummary;
+}
+
+export interface ModelStateSummary {
+  allow_override: boolean;
+  override: Record<string, unknown> | null;
+  active_preset: string | null;
+  models: {
+    chat: ModelSummary;
+    utility: ModelSummary;
+    embedding: ModelSummary;
+  };
+  presets: ModelPresetSummary[];
+}
+
+export interface ConversationItem {
+  id: string;
+  logNo: number;
+  role: "user" | "assistant";
+  text: string;
+  attachments: string[];
+  pending?: boolean;
+  timestamp?: number;
+}
+
+export interface ActivityItem {
+  id: string;
+  logNo: number;
+  type: string;
+  title: string;
+  detail: string;
+  timestamp?: number;
+}
+
 export interface BackgroundState {
   ready: boolean;
   connectionError: string;
@@ -96,6 +141,12 @@ export interface BackgroundState {
   activeTabId: number | null;
   tabs: BrowserTabSummary[];
   messages: LogItem[];
+  conversation: ConversationItem[];
+  activity: ActivityItem[];
+  progress: string;
+  isResponding: boolean;
+  modelState: ModelStateSummary | null;
+  pendingPresetName: string;
   projects: ProjectSummary[];
   composeDraft: string;
   config: ExtensionConfig;

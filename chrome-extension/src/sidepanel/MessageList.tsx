@@ -1,38 +1,30 @@
 import { marked } from "marked";
-import type { LogItem } from "../lib/types";
 
-const renderText = (value: unknown): string => {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  return JSON.stringify(value, null, 2);
-};
+import type { ConversationItem } from "../lib/types";
 
-const bubbleClass = (item: LogItem): string => {
-  if (item.type === "user") return "message user";
-  if (item.type === "response" || item.type === "agent") return "message agent";
-  return "message tool";
-};
+const renderAssistantHtml = (value: string): string => (marked.parse(value || "") as string);
 
-export function MessageList({ items }: { items: LogItem[] }) {
+export function MessageList({ items }: { items: ConversationItem[] }) {
   return (
     <div className="message-list">
-      {items.map((item) => {
-        const html = marked.parse(renderText(item.content)) as string;
-        const imageDataUrl = typeof item.kvps?.image_data_url === "string" ? item.kvps.image_data_url : "";
-        return (
-          <article key={`${item.no}-${item.id || "log"}`} className={bubbleClass(item)}>
-            <div className="message-heading">{item.heading || item.type}</div>
-            <div className="message-body" dangerouslySetInnerHTML={{ __html: html }} />
-            {imageDataUrl ? <img className="message-image" src={imageDataUrl} alt="Chrome bridge capture" /> : null}
-            {item.type !== "user" && item.kvps ? (
-              <details className="message-meta">
-                <summary>Details</summary>
-                <pre>{JSON.stringify(item.kvps, null, 2)}</pre>
-              </details>
-            ) : null}
-          </article>
-        );
-      })}
+      {items.map((item) => (
+        <article key={item.id} className={`chat-bubble ${item.role} ${item.pending ? "pending" : ""}`}>
+          {item.role === "assistant" ? (
+            <div className="chat-bubble-body markdown-body" dangerouslySetInnerHTML={{ __html: renderAssistantHtml(item.text) }} />
+          ) : (
+            <div className="chat-bubble-body user-copy">{item.text}</div>
+          )}
+          {item.attachments.length ? (
+            <div className="chat-attachments">
+              {item.attachments.map((attachment) => (
+                <span key={attachment} className="attachment-tag">
+                  {attachment}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ))}
     </div>
   );
 }

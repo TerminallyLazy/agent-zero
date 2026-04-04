@@ -1,22 +1,40 @@
-import type { BackgroundState, BrowserTabSummary, ExtensionConfig, LogItem, ProjectSummary } from "../lib/types";
+import type {
+  ActivityItem,
+  BackgroundState,
+  BrowserTabSummary,
+  ConversationItem,
+  ExtensionConfig,
+  LogItem,
+  ModelStateSummary,
+  ProjectSummary,
+} from "../lib/types";
 import { DEFAULT_CONFIG } from "../lib/types";
 
 const STORAGE_KEY = "agent-zero-chrome-background";
 
-type PersistedState = Pick<BackgroundState, "browserSessionId" | "composeDraft" | "contextId" | "activeTabId" | "config">;
+type PersistedState = Pick<
+  BackgroundState,
+  "browserSessionId" | "composeDraft" | "contextId" | "activeTabId" | "config" | "pendingPresetName"
+>;
 
 const ports = new Set<chrome.runtime.Port>();
 
 let state: BackgroundState = {
   ready: false,
   connectionError: "",
-  lastStatus: "Idle",
+  lastStatus: "Ready when you are",
   panelConnected: false,
   browserSessionId: "",
   contextId: "",
   activeTabId: null,
   tabs: [],
   messages: [],
+  conversation: [],
+  activity: [],
+  progress: "",
+  isResponding: false,
+  modelState: null,
+  pendingPresetName: "",
   projects: [],
   composeDraft: "",
   config: DEFAULT_CONFIG,
@@ -35,6 +53,7 @@ const persistedShape = (): PersistedState => ({
   contextId: state.contextId,
   activeTabId: state.activeTabId,
   config: state.config,
+  pendingPresetName: state.pendingPresetName,
 });
 
 async function persistState(): Promise<void> {
@@ -85,6 +104,24 @@ export async function setMessages(messages: LogItem[]): Promise<void> {
   broadcast();
 }
 
+export async function setChatState(payload: {
+  messages?: LogItem[];
+  conversation?: ConversationItem[];
+  activity?: ActivityItem[];
+  progress?: string;
+  isResponding?: boolean;
+}): Promise<void> {
+  state = {
+    ...state,
+    messages: payload.messages ?? state.messages,
+    conversation: payload.conversation ?? state.conversation,
+    activity: payload.activity ?? state.activity,
+    progress: payload.progress ?? state.progress,
+    isResponding: payload.isResponding ?? state.isResponding,
+  };
+  broadcast();
+}
+
 export async function setTabs(tabs: BrowserTabSummary[], activeTabId: number | null): Promise<void> {
   state = { ...state, tabs, activeTabId };
   await persistState();
@@ -93,6 +130,11 @@ export async function setTabs(tabs: BrowserTabSummary[], activeTabId: number | n
 
 export async function setProjects(projects: ProjectSummary[]): Promise<void> {
   state = { ...state, projects };
+  broadcast();
+}
+
+export async function setModelState(modelState: ModelStateSummary | null): Promise<void> {
+  state = { ...state, modelState };
   broadcast();
 }
 
