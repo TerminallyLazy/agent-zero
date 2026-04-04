@@ -1,0 +1,302 @@
+:root {
+  color-scheme: dark;
+  font-family: "Avenir Next", "Segoe UI Variable", "Segoe UI", sans-serif;
+  color: #eef6f7;
+  --bg-top: #0b1016;
+  --bg-bottom: #131a22;
+  --surface: rgba(20, 27, 36, 0.9);
+  --surface-strong: rgba(24, 33, 43, 0.96);
+  --border: rgba(174, 202, 215, 0.14);
+  --border-strong: rgba(174, 202, 215, 0.24);
+  --shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+  --primary: #2ba89a;
+  --primary-strong: #78e0d1;
+  --text: #eef6f7;
+  --text-soft: rgba(238, 246, 247, 0.78);
+  --danger: #ff8b73;
+  --danger-soft: rgba(255, 139, 115, 0.14);
+  --input: rgba(10, 15, 22, 0.92);
+  --input-focus: rgba(7, 12, 18, 0.98);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(28, 132, 125, 0.22), transparent 30%),
+    radial-gradient(circle at top right, rgba(232, 159, 88, 0.1), transparent 24%),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+input,
+select,
+summary {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgba(120, 224, 209, 0.26);
+  outline-offset: 2px;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.options-shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+  display: grid;
+  gap: 18px;
+}
+
+.hero,
+.panel,
+.status-card {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+.hero {
+  padding: 26px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  background:
+    radial-gradient(circle at top right, rgba(120, 224, 209, 0.14), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(232, 159, 88, 0.1), transparent 24%),
+    linear-gradient(140deg, #153642, #164551 58%, #16515b);
+  color: #f8fbfb;
+}
+
+.hero h1 {
+  margin: 8px 0;
+  font-size: 38px;
+  line-height: 1.05;
+  color: #f5fbfb;
+}
+
+.hero p,
+.eyebrow {
+  margin: 0;
+  color: rgba(248, 251, 251, 0.8);
+}
+
+.eyebrow,
+.section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.status-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.status-card,
+.panel {
+  padding: 20px;
+}
+
+.status-card {
+  display: flex;
+  gap: 14px;
+  align-items: start;
+  background: var(--surface-strong);
+}
+
+.status-card span {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.status-card.ok {
+  border-color: rgba(120, 224, 209, 0.26);
+  background: linear-gradient(180deg, rgba(20, 54, 59, 0.96), rgba(18, 39, 45, 0.94));
+}
+
+.status-card strong,
+.panel h2 {
+  color: var(--text);
+}
+
+.status-card p,
+.field small,
+.status-banner {
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.panel {
+  display: grid;
+  gap: 14px;
+}
+
+.panel-heading h2 {
+  margin: 6px 0 0;
+  font-size: 24px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--input);
+  color: var(--text);
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--primary);
+  background: var(--input-focus);
+}
+
+.input-with-action {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.primary-button,
+.secondary-button {
+  padding: 11px 14px;
+  border-radius: 16px;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, #229082, #2fbaaa);
+  color: #f8fbfb;
+  box-shadow: 0 12px 28px rgba(43, 168, 154, 0.24);
+}
+
+.secondary-button {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.primary-button:hover:not(:disabled),
+.secondary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hero .secondary-button {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fbfb;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.status-banner {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+
+.status-banner.ok {
+  background: rgba(43, 168, 154, 0.12);
+  border-color: rgba(120, 224, 209, 0.24);
+  color: var(--primary-strong);
+}
+
+.advanced-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 14px;
+}
+
+.advanced-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary-strong);
+}
+
+.advanced-panel pre {
+  overflow: auto;
+  margin: 14px 0 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(6, 10, 16, 0.96);
+  color: #f8fbfb;
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .hero {
+    display: grid;
+  }
+
+  .input-with-action {
+    grid-template-columns: 1fr;
+  }
+}

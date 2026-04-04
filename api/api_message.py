@@ -37,6 +37,7 @@ class ApiMessage(ApiHandler):
         lifetime_hours = input.get("lifetime_hours", 24)  # Default 24 hours
         project_name = input.get("project_name", None)
         agent_profile = input.get("agent_profile", None)
+        wait_for_response = input.get("wait_for_response", True)
         
         # Set an agent if profile provided
         override_settings = {}
@@ -146,14 +147,24 @@ class ApiMessage(ApiHandler):
 
             # Send message to agent
             task = context.communicate(UserMessage(message=message, attachments=attachment_paths, id=msg_id))
-            result = await task.result()
+            if wait_for_response:
+                result = await task.result()
+            else:
+                result = ""
 
             # Clean up expired chats
             self._cleanup_expired_chats()
 
+            if wait_for_response:
+                return {
+                    "context_id": context_id,
+                    "response": result
+                }
+
             return {
                 "context_id": context_id,
-                "response": result
+                "accepted": True,
+                "status": "processing",
             }
 
         except Exception as e:

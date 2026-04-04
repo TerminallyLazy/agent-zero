@@ -4,6 +4,7 @@ import threading
 from functools import wraps
 from pathlib import Path
 from typing import Union, Dict, Any
+from urllib.parse import urlparse
 from flask import (
     Request,
     Response,
@@ -28,6 +29,10 @@ cache.toggle_area(CACHE_AREA, False)  # cache off for now
 
 Input = dict
 Output = Union[Dict[str, Any], Response]
+
+_CORS_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+_CORS_HEADERS = "Content-Type, X-API-KEY, X-CSRF-Token"
+_CORS_ORIGIN_SCHEMES = ("chrome-extension", "moz-extension")
 
 
 class ApiHandler:
@@ -165,14 +170,48 @@ def csrf_protect(f):
     return decorated
 
 
+def _allowed_extension_origin(raw_origin: str | None) -> str | None:
+    if not isinstance(raw_origin, str) or not raw_origin.strip():
+        return None
+    parsed = urlparse(raw_origin.strip())
+    if parsed.scheme not in _CORS_ORIGIN_SCHEMES or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _apply_extension_cors(response: BaseResponse) -> BaseResponse:
+    origin = _allowed_extension_origin(request.headers.get("Origin"))
+    if not origin:
+        return response
+
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Methods"] = _CORS_METHODS
+    response.headers["Access-Control-Allow-Headers"] = _CORS_HEADERS
+    response.headers["Access-Control-Max-Age"] = "600"
+    vary = response.headers.get("Vary", "")
+    response.headers["Vary"] = "Origin" if not vary else f"{vary}, Origin"
+    return response
+
+
 def register_api_route(app: Flask, lock: ThreadLockType) -> None:
     from helpers.modules import load_classes_from_file
     from helpers import plugins
+
+    if not getattr(app, "_a0_extension_cors_registered", False):
+        @app.after_request
+        def _extension_cors_after_request(response: BaseResponse) -> BaseResponse:
+            if request.path.startswith("/api/"):
+                return _apply_extension_cors(response)
+            return response
+
+        setattr(app, "_a0_extension_cors_registered", True)
 
     async def _dispatch(path: str) -> BaseResponse:
         # Return cached wrapped handler if available
         cached = cache.get(CACHE_AREA, path)
         if cached is not None:
+            if request.method == "OPTIONS":
+                return _apply_extension_cors(Response(status=204))
             return await cached()
 
         # Resolve file path for the handler
@@ -204,6 +243,9 @@ def register_api_route(app: Flask, lock: ThreadLockType) -> None:
         if handler_cls is None:
             return Response(f"API endpoint not found: {path}", 404)
 
+        if request.method == "OPTIONS":
+            return _apply_extension_cors(Response(status=204))
+
         # Check method is allowed
         if request.method not in handler_cls.get_methods():
             return Response(f"Method {request.method} not allowed for: {path}", 405)
@@ -230,7 +272,7 @@ def register_api_route(app: Flask, lock: ThreadLockType) -> None:
         "/api/<path:path>",
         "api_dispatch",
         _dispatch,
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     )
 
 

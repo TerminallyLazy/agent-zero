@@ -1,0 +1,28 @@
+{
+  "name": "agent-zero-chrome-extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "marked": "^15.0.0",
+    "preact": "^10.26.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@crxjs/vite-plugin": "^2.0.0-beta.25",
+    "@preact/preset-vite": "^2.10.1",
+    "@types/chrome": "^0.0.292",
+    "@types/node": "^22.13.10",
+    "playwright": "^1.52.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.2",
+    "vitest": "^3.0.8"
+  }
+}
