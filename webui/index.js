@@ -171,22 +171,26 @@ globalThis.toastFetchError = toastFetchError;
 
 export function updateChatInput(text) {
   const chatInputEl = document.getElementById("chat-input");
-  if (!chatInputEl) {
-    console.warn("`chatInput` element not found, cannot update.");
-    return;
-  }
   console.log("updateChatInput called with:", text);
 
   // Append text with proper spacing
-  const currentValue = chatInputEl.value;
+  const currentValue = inputStore.message || chatInputEl?.value || "";
   const needsSpace = currentValue.length > 0 && !currentValue.endsWith(" ");
-  chatInputEl.value = currentValue + (needsSpace ? " " : "") + text + " ";
+  const nextValue = currentValue + (needsSpace ? " " : "") + text + " ";
+  inputStore.message = nextValue;
+
+  if (!chatInputEl) {
+    console.warn("`chatInput` element not found, updated input store only.");
+    return;
+  }
+
+  chatInputEl.value = nextValue;
 
   // Adjust height and trigger input event
   adjustTextareaHeight();
   chatInputEl.dispatchEvent(new Event("input"));
 
-  console.log("Updated chat input value:", chatInputEl.value);
+  console.log("Updated chat input value:", nextValue);
 }
 
 async function updateUserTime() {
