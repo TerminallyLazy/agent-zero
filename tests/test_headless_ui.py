@@ -194,3 +194,53 @@ async def test_dependency_status_partial_failure():
     failed = [r for r in result["results"] if not r["ok"]]
     assert len(failed) == 1
     assert failed[0]["name"] == "Framework Imports"
+
+
+@pytest.mark.asyncio
+async def test_run_message_returns_response():
+    from usr.plugins.headless_mode.api.run_message import RunMessage
+
+    handler = RunMessage.__new__(RunMessage)
+    subprocess_json = json.dumps({"response": "hello back", "context": "ctx-abc", "log": {}})
+
+    with patch(
+        "usr.plugins.headless_mode.api.run_message.run_cli_subprocess",
+        new_callable=AsyncMock,
+        return_value=(True, subprocess_json, ""),
+    ):
+        result = await handler.process({"message": "hello"}, MagicMock())
+
+    assert result["ok"] is True
+    assert result["response"] == "hello back"
+    assert result["context_id"] == "ctx-abc"
+    assert result["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_message_rejects_empty_input():
+    from usr.plugins.headless_mode.api.run_message import RunMessage
+
+    handler = RunMessage.__new__(RunMessage)
+    result = await handler.process({"message": ""}, MagicMock())
+
+    assert result["ok"] is False
+    assert "empty" in result["error"].lower() or "required" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_run_message_caps_timeout():
+    from usr.plugins.headless_mode.api.run_message import RunMessage
+
+    handler = RunMessage.__new__(RunMessage)
+    subprocess_json = json.dumps({"response": "ok", "context": "c1", "log": {}})
+
+    with patch(
+        "usr.plugins.headless_mode.api.run_message.run_cli_subprocess",
+        new_callable=AsyncMock,
+        return_value=(True, subprocess_json, ""),
+    ) as mock_run:
+        await handler.process({"message": "test", "timeout": 9999}, MagicMock())
+
+    # Verify timeout was clamped to 300
+    call_kwargs = mock_run.call_args
+    assert call_kwargs[1]["timeout"] == 300 or call_kwargs[0][1] == 300
