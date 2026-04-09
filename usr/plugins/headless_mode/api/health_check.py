@@ -39,7 +39,14 @@ class HealthCheck(ApiHandler):
         if ok:
             details = "CLI loadable, ephemeral run succeeded"
         else:
-            details = f"Ephemeral run failed: {eph_stderr}"
+            # Extract first meaningful error line for a readable summary
+            first_err = ""
+            for line in eph_stderr.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith(("Traceback", "File ", "  ")):
+                    first_err = stripped
+                    break
+            details = f"CLI OK, runtime failed: {first_err}" if first_err else f"Ephemeral run failed: {eph_stderr[:200]}"
 
         result = {
             "ok": ok,

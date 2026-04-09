@@ -61,6 +61,8 @@ window.createHeadlessConfigModel = (context, config) => ({
       this.healthResult = result;
       if (result.ok) {
         globalThis.toastFrontendSuccess("Health check passed", "Headless Mode");
+      } else if (result.cli_help_ok) {
+        globalThis.toastFrontendWarning("CLI loads OK but runtime has issues — check environment config", "Headless Mode");
       } else {
         globalThis.toastFrontendError(result.details || "Health check failed", "Headless Mode");
       }

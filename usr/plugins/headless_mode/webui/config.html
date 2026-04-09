@@ -92,7 +92,7 @@
       <template x-if="healthResult">
         <div>
           <div class="hm-value" :class="healthResult.ok ? 'hm-ok' : 'hm-fail'"
-               x-text="healthResult.ok ? 'Passed' : 'Failed'"></div>
+               x-text="healthResult.ok ? 'Passed' : (healthResult.cli_help_ok ? 'Partial (CLI OK, Runtime Failed)' : 'Failed')"></div>
           <div class="hm-dep-detail" x-text="relativeTime(healthResult.timestamp)"></div>
           <div class="hm-dep-detail" x-text="healthResult.details" x-show="healthResult.details"></div>
         </div>
