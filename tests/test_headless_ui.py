@@ -140,3 +140,57 @@ async def test_health_check_handler_timeout():
 
     assert result["ok"] is False
     assert "Timed out" in result["details"]
+
+
+@pytest.mark.asyncio
+async def test_dependency_status_all_passing():
+    from usr.plugins.headless_mode.api.dependency_status import DependencyStatus
+
+    handler = DependencyStatus.__new__(DependencyStatus)
+
+    with patch(
+        "usr.plugins.headless_mode.api.dependency_status.plugins"
+    ) as mock_plugins, patch(
+        "usr.plugins.headless_mode.api.dependency_status._check_framework_imports",
+        return_value={"name": "Framework Imports", "ok": True, "detail": "all 3 modules importable"},
+    ), patch(
+        "usr.plugins.headless_mode.api.dependency_status._check_environment",
+        return_value={"name": "Environment", "ok": True, "detail": ".env loaded, 2 keys present"},
+    ), patch(
+        "usr.plugins.headless_mode.api.dependency_status._check_mcp",
+        return_value={"name": "MCP Servers", "ok": True, "detail": "2 servers configured"},
+    ):
+        mock_plugins.get_plugin_config.return_value = {}
+        result = await handler.process({}, MagicMock())
+
+    assert result["ok"] is True
+    assert len(result["results"]) == 4
+    assert all(r["ok"] for r in result["results"])
+    assert "timestamp" in result
+
+
+@pytest.mark.asyncio
+async def test_dependency_status_partial_failure():
+    from usr.plugins.headless_mode.api.dependency_status import DependencyStatus
+
+    handler = DependencyStatus.__new__(DependencyStatus)
+
+    with patch(
+        "usr.plugins.headless_mode.api.dependency_status.plugins"
+    ) as mock_plugins, patch(
+        "usr.plugins.headless_mode.api.dependency_status._check_framework_imports",
+        return_value={"name": "Framework Imports", "ok": False, "detail": "initialize not importable"},
+    ), patch(
+        "usr.plugins.headless_mode.api.dependency_status._check_environment",
+        return_value={"name": "Environment", "ok": True, "detail": ".env loaded"},
+    ), patch(
+        "usr.plugins.headless_mode.api.dependency_status._check_mcp",
+        return_value={"name": "MCP Servers", "ok": True, "detail": "0 servers"},
+    ):
+        mock_plugins.get_plugin_config.return_value = {}
+        result = await handler.process({}, MagicMock())
+
+    assert result["ok"] is False
+    failed = [r for r in result["results"] if not r["ok"]]
+    assert len(failed) == 1
+    assert failed[0]["name"] == "Framework Imports"
