@@ -62,3 +62,81 @@ async def test_run_cli_subprocess_handles_timeout():
     assert ok is False
     assert "Timed out" in stderr
     mock_proc.kill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_health_check_handler_returns_structured_result():
+    from usr.plugins.headless_mode.api.health_check import HealthCheck
+
+    handler = HealthCheck.__new__(HealthCheck)
+
+    with patch(
+        "usr.plugins.headless_mode.api.health_check.run_cli_subprocess",
+        new_callable=AsyncMock,
+        side_effect=[
+            (True, "usage: cli ...", ""),
+            (True, '{"response":"pong","context":"c1","log":{}}', ""),
+        ],
+    ), patch(
+        "usr.plugins.headless_mode.api.health_check.plugins"
+    ) as mock_plugins:
+        mock_plugins.get_plugin_config.return_value = {}
+        result = await handler.process({}, MagicMock())
+
+    assert result["ok"] is True
+    assert result["cli_help_ok"] is True
+    assert result["ephemeral_ok"] is True
+    assert "timestamp" in result
+    mock_plugins.save_plugin_config.assert_called_once()
+    call_args = mock_plugins.save_plugin_config.call_args[0]
+    assert call_args[0] == "headless_mode"
+    assert call_args[1] == ""
+    assert call_args[2] == ""
+    assert "last_health_check" in call_args[3]
+
+
+@pytest.mark.asyncio
+async def test_health_check_handler_persists_to_config():
+    from usr.plugins.headless_mode.api.health_check import HealthCheck
+
+    handler = HealthCheck.__new__(HealthCheck)
+    existing_cfg = {"interactive_prompt": "> ", "exit_commands": ["exit"]}
+
+    with patch(
+        "usr.plugins.headless_mode.api.health_check.run_cli_subprocess",
+        new_callable=AsyncMock,
+        side_effect=[
+            (True, "ok", ""),
+            (True, '{"response":"ok","context":"c1","log":{}}', ""),
+        ],
+    ), patch(
+        "usr.plugins.headless_mode.api.health_check.plugins"
+    ) as mock_plugins:
+        mock_plugins.get_plugin_config.return_value = existing_cfg.copy()
+        result = await handler.process({}, MagicMock())
+
+    saved = mock_plugins.save_plugin_config.call_args[0][3]
+    assert saved["last_health_check"]["ok"] is True
+    assert saved["interactive_prompt"] == "> "
+
+
+@pytest.mark.asyncio
+async def test_health_check_handler_timeout():
+    from usr.plugins.headless_mode.api.health_check import HealthCheck
+
+    handler = HealthCheck.__new__(HealthCheck)
+
+    with patch(
+        "usr.plugins.headless_mode.api.health_check.run_cli_subprocess",
+        new_callable=AsyncMock,
+        side_effect=[
+            (False, "", "Timed out after 60s"),
+        ],
+    ), patch(
+        "usr.plugins.headless_mode.api.health_check.plugins"
+    ) as mock_plugins:
+        mock_plugins.get_plugin_config.return_value = {}
+        result = await handler.process({}, MagicMock())
+
+    assert result["ok"] is False
+    assert "Timed out" in result["details"]
