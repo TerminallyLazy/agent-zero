@@ -1,0 +1,6 @@
+interactive_prompt: "> "
+exit_commands:
+  - exit
+  - quit
+last_health_check: null
+last_dependency_check: null
