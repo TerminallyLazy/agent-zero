@@ -1,0 +1,291 @@
+<html>
+<head>
+  <title>Headless Mode</title>
+  <script src="/plugins/headless_mode/webui/headless-mode-store.js"></script>
+  <style>
+    .hm-status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .hm-status-card {
+      padding: 12px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-bg-secondary);
+    }
+    .hm-status-card .hm-label {
+      font-size: var(--font-size-small);
+      color: var(--color-text-secondary);
+      margin-bottom: 4px;
+    }
+    .hm-status-card .hm-value {
+      font-weight: 600;
+    }
+    .hm-ok { color: var(--color-success, #22c55e); }
+    .hm-fail { color: var(--color-error, #ef4444); }
+    .hm-neutral { color: var(--color-text-secondary); }
+    .hm-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .hm-dep-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .hm-dep-row:last-child { border-bottom: none; }
+    .hm-dep-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .hm-dep-name { font-weight: 600; min-width: 140px; }
+    .hm-dep-detail {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-small);
+    }
+    .hm-code-block {
+      font-family: monospace;
+      background: var(--color-bg-primary);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: var(--font-size-small);
+      margin: 8px 0;
+    }
+    .hm-result-area {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: var(--color-bg-secondary);
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: var(--font-size-small);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    @media (max-width: 600px) {
+      .hm-status-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div x-data="createHeadlessConfigModel(context, config)" x-init="init()">
+
+  <!-- Section 1: Status Overview -->
+  <div class="section-title">Status</div>
+  <div class="section-description">Runtime health and dependency check results.</div>
+
+  <div class="hm-status-grid">
+    <div class="hm-status-card">
+      <div class="hm-label">Health Check</div>
+      <template x-if="healthResult">
+        <div>
+          <div class="hm-value" :class="healthResult.ok ? 'hm-ok' : 'hm-fail'"
+               x-text="healthResult.ok ? 'Passed' : 'Failed'"></div>
+          <div class="hm-dep-detail" x-text="relativeTime(healthResult.timestamp)"></div>
+          <div class="hm-dep-detail" x-text="healthResult.details" x-show="healthResult.details"></div>
+        </div>
+      </template>
+      <template x-if="!healthResult">
+        <div class="hm-value hm-neutral">Never checked</div>
+      </template>
+    </div>
+    <div class="hm-status-card">
+      <div class="hm-label">Dependencies</div>
+      <template x-if="depsResult">
+        <div>
+          <div class="hm-value" :class="depsResult.ok ? 'hm-ok' : 'hm-fail'"
+               x-text="depsResult.ok ? 'All OK' : 'Issues found'"></div>
+          <div class="hm-dep-detail" x-text="relativeTime(depsResult.timestamp)"></div>
+        </div>
+      </template>
+      <template x-if="!depsResult">
+        <div class="hm-value hm-neutral">Never checked</div>
+      </template>
+    </div>
+  </div>
+
+  <div class="hm-actions">
+    <button type="button" class="button" @click="runHealthCheck()" :disabled="healthChecking">
+      <template x-if="healthChecking">
+        <span class="icon material-symbols-outlined rotating">progress_activity</span>
+      </template>
+      <span x-text="healthChecking ? 'Checking...' : 'Run Health Check'"></span>
+    </button>
+    <button type="button" class="button" @click="runDependencyCheck()" :disabled="depsChecking">
+      <template x-if="depsChecking">
+        <span class="icon material-symbols-outlined rotating">progress_activity</span>
+      </template>
+      <span x-text="depsChecking ? 'Checking...' : 'Check Dependencies'"></span>
+    </button>
+  </div>
+
+  <!-- Section 2: Dependency Details -->
+  <template x-if="depsResult && depsResult.results">
+    <div style="margin-top: 20px;">
+      <div class="section-title">Dependency Details</div>
+      <template x-for="dep in depsResult.results" :key="dep.name">
+        <div class="hm-dep-row">
+          <div class="hm-dep-indicator" :style="'background:' + (dep.ok ? 'var(--color-success, #22c55e)' : 'var(--color-error, #ef4444)')"></div>
+          <div class="hm-dep-name" x-text="dep.name"></div>
+          <div class="hm-dep-detail" x-text="dep.detail"></div>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  <!-- Section 3: Command Builder -->
+  <div style="margin-top: 20px;">
+    <div class="section-title">Command Builder</div>
+    <div class="section-description">Build CLI commands with toggles. Copy the result to run in your terminal.</div>
+
+    <div class="field">
+      <div class="field-label">
+        <div class="field-title">Message</div>
+        <div class="field-description">Disabled when interactive mode is on.</div>
+      </div>
+      <div class="field-control">
+        <input type="text" x-model="cmdMessage" :disabled="cmdInteractive" placeholder="Enter message..." />
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        <div class="field-title">Context ID</div>
+        <div class="field-description">Reuse an existing conversation context.</div>
+      </div>
+      <div class="field-control">
+        <input type="text" x-model="cmdContextId" placeholder="Optional context ID" />
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label"><div class="field-title">Interactive mode</div></div>
+      <div class="field-control">
+        <label class="toggle"><input type="checkbox" x-model="cmdInteractive" /><span class="toggler"></span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label"><div class="field-title">JSON output</div></div>
+      <div class="field-control">
+        <label class="toggle"><input type="checkbox" x-model="cmdJsonOutput" /><span class="toggler"></span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label"><div class="field-title">Ephemeral (no persistence)</div></div>
+      <div class="field-control">
+        <label class="toggle"><input type="checkbox" x-model="cmdEphemeral" /><span class="toggler"></span></label>
+      </div>
+    </div>
+
+    <div class="hm-code-block" x-text="generatedCommand"></div>
+
+    <div class="hm-actions">
+      <button type="button" class="button" @click="copyCommand()">
+        <span class="icon material-symbols-outlined">content_copy</span>
+        Copy Command
+      </button>
+    </div>
+  </div>
+
+  <!-- Section 4: Execute -->
+  <div style="margin-top: 20px;">
+    <div class="section-title">Execute</div>
+    <div class="section-description">Run a single-shot headless message from this panel.</div>
+
+    <div class="field">
+      <div class="field-label">
+        <div class="field-title">Message</div>
+      </div>
+      <div class="field-control">
+        <textarea x-model="executeMessage" rows="3" placeholder="Type a message to send..." style="width:100%;resize:vertical;"></textarea>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label"><div class="field-title">Ephemeral</div></div>
+      <div class="field-control">
+        <label class="toggle"><input type="checkbox" x-model="executeEphemeral" /><span class="toggler"></span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        <div class="field-title">Context ID</div>
+        <div class="field-description">Optional. Leave blank for a new context.</div>
+      </div>
+      <div class="field-control">
+        <input type="text" x-model="executeContextId" placeholder="Optional" />
+      </div>
+    </div>
+
+    <div class="hm-actions">
+      <button type="button" class="button" @click="executeHeadlessRun()" :disabled="executing || !executeMessage.trim()">
+        <template x-if="executing">
+          <span class="icon material-symbols-outlined rotating">progress_activity</span>
+        </template>
+        <span x-text="executing ? 'Running...' : 'Run'"></span>
+      </button>
+    </div>
+
+    <template x-if="executeResult">
+      <div>
+        <div class="hm-result-area" :class="executeResult.ok ? '' : 'hm-fail'">
+          <template x-if="executeResult.ok">
+            <span x-text="executeResult.response"></span>
+          </template>
+          <template x-if="!executeResult.ok">
+            <span x-text="executeResult.error || 'Unknown error'"></span>
+          </template>
+        </div>
+        <div class="hm-dep-detail" x-show="executeResult.context_id" style="margin-top:6px;">
+          Context ID: <strong x-text="executeResult.context_id"></strong>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Section 5: Settings -->
+  <div style="margin-top: 20px;">
+    <div class="section-title">Settings</div>
+    <div class="section-description">CLI configuration for interactive mode.</div>
+
+    <div class="field">
+      <div class="field-label">
+        <div class="field-title">Interactive Prompt</div>
+        <div class="field-description">The prompt string shown in REPL mode.</div>
+      </div>
+      <div class="field-control">
+        <input type="text" x-model="config.interactive_prompt" />
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        <div class="field-title">Exit Commands</div>
+        <div class="field-description">Comma-separated commands to exit REPL mode.</div>
+      </div>
+      <div class="field-control">
+        <input type="text"
+               :value="(config.exit_commands || []).join(', ')"
+               @change="config.exit_commands = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)" />
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
