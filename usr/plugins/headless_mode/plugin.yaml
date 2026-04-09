@@ -1,0 +1,9 @@
+name: headless_mode
+title: Headless Mode
+description: Run Agent Zero from a plugin-owned CLI without starting the web UI server.
+version: 0.2.0
+settings_sections:
+  - developer
+per_project_config: false
+per_agent_config: false
+always_enabled: false
