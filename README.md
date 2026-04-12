@@ -15,6 +15,7 @@
 [Installation](./docs/setup/installation.md) •
 [How to update](./docs/setup/installation.md#how-to-update-agent-zero) <br>
 [Development Setup](./docs/setup/dev-setup.md) •
+[Rust Backend Skeleton](./docs/developer/rust-backend-skeleton.md) •
 [Usage](./docs/guides/usage.md)
 
 Or see DeepWiki generated documentation:
@@ -170,6 +171,7 @@ A detailed setup guide for Windows, macOS, and Linux can be found in the Agent Z
 | [Usage](./docs/guides/usage.md) | Basic and advanced usage |
 | [Guides](./docs/guides/) | Step-by-step guides: Usage, Projects, API Integration, MCP Setup, A2A Setup |
 | [Development Setup](./docs/setup/dev-setup.md) | Development and customization |
+| [Rust Backend Skeleton](./docs/developer/rust-backend-skeleton.md) | Experimental Rust migration foundation and crate layout |
 | [WebSocket Infrastructure](./docs/developer/websockets.md) | Real-time WebSocket handlers, client APIs, filtering semantics, envelopes |
 | [Extensions](./docs/developer/extensions.md) | Extending Agent Zero |
 | [Connectivity](./docs/developer/connectivity.md) | External API endpoints, MCP server connections, A2A protocol |

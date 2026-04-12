@@ -1,0 +1,2 @@
+fn({type error}) -> impl futures_util::Future<Output = Json<SuccessEnvelope<VersionResponse>>> {version}
+fn({type error}) -> impl futures_util::Future<Output = Json<SuccessEnvelope<VersionResponse>>> {version}: Handler<_, _>

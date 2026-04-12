@@ -1,0 +1,11 @@
+[package]
+name = "a0-observability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+a0-core = { path = "../a0-core" }
+serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

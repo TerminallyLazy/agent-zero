@@ -1,0 +1,28 @@
+[package]
+name = "a0-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+a0-bridge-py = { path = "../a0-bridge-py" }
+a0-config = { path = "../a0-config" }
+a0-core = { path = "../a0-core" }
+a0-observability = { path = "../a0-observability" }
+a0-ws = { path = "../a0-ws" }
+axum.workspace = true
+futures-util.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tower.workspace = true

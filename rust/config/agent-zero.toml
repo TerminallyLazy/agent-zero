@@ -1,0 +1,15 @@
+[server]
+host = "127.0.0.1"
+port = 50001
+
+[observability]
+log_format = "pretty"
+log_level = "info"
+
+[bridge]
+mode = "null"
+
+[security]
+auth_mode = "reserved"
+csrf_mode = "reserved"
+allowed_origins = ["http://localhost:50001"]

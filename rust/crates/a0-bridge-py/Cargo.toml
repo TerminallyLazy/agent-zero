@@ -1,0 +1,10 @@
+[package]
+name = "a0-bridge-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+a0-core = { path = "../a0-core" }
+async-trait.workspace = true
+
