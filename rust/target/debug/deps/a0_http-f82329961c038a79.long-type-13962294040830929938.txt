@@ -1,2 +1,0 @@
-fn({type error}) -> impl futures_util::Future<Output = Json<SuccessEnvelope<PluginListResponse>>> {api_plugins}
-fn({type error}) -> impl futures_util::Future<Output = Json<SuccessEnvelope<PluginListResponse>>> {api_plugins}: Handler<_, _>

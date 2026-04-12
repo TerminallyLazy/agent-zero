@@ -1,2 +1,0 @@
-fn({type error}, axum::extract::State<AppState>) -> impl futures_util::Future<Output = Json<SuccessEnvelope<Value>>> {health}
-fn({type error}, axum::extract::State<AppState>) -> impl futures_util::Future<Output = Json<SuccessEnvelope<Value>>> {health}: Handler<_, _>

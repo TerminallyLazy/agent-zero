@@ -1,2 +1,0 @@
-fn({type error}) -> impl futures_util::Future<Output = Result<Json<SuccessEnvelope<Value>>, HttpError>> {api_message}
-fn({type error}) -> impl futures_util::Future<Output = Result<Json<SuccessEnvelope<Value>>, HttpError>> {api_message}: Handler<_, _>
