@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use a0_core::{BuildInfo, PluginSummary};
+use a0_core::{BuildInfo, ConversationLog, PluginSummary};
 use a0_observability::HealthSnapshot;
 
 #[derive(Debug, Serialize)]
@@ -46,4 +46,37 @@ pub struct SettingsResponse {
     pub server_host: String,
     pub server_port: u16,
     pub bridge_mode: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AttachmentPayload {
+    pub filename: String,
+    pub base64: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ApiMessageRequest {
+    pub context_id: Option<String>,
+    pub message: String,
+    pub attachments: Option<Vec<AttachmentPayload>>,
+    pub lifetime_hours: Option<u64>,
+    pub project_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ApiMessageResponse {
+    pub context_id: String,
+    pub response: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ApiLogQuery {
+    pub context_id: Option<String>,
+    pub length: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ApiLogResponse {
+    pub context_id: String,
+    pub log: ConversationLog,
 }

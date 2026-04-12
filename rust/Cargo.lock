@@ -26,8 +26,10 @@ name = "a0-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "serde",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]
@@ -40,6 +42,7 @@ dependencies = [
  "a0-observability",
  "a0-ws",
  "axum",
+ "base64",
  "futures-util",
  "http",
  "serde",
@@ -68,6 +71,7 @@ version = "0.1.0"
 dependencies = [
  "a0-bridge-py",
  "a0-config",
+ "a0-core",
  "a0-http",
  "a0-observability",
  "anyhow",

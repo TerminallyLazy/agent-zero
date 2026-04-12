@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use a0_bridge_py::NullBridge;
 use a0_config::Settings;
+use a0_core::InMemoryConversationService;
 use a0_http::{build_router, AppState};
 use a0_observability::HealthRegistry;
 
@@ -12,7 +13,12 @@ pub async fn serve(settings: Settings) -> Result<()> {
     health.set_component("bridge", true, "null bridge ready");
     health.set_component("router", true, "http and websocket routes registered");
 
-    let state = AppState::new(settings.clone(), health, Arc::new(NullBridge));
+    let state = AppState::new(
+        settings.clone(),
+        health,
+        Arc::new(NullBridge),
+        Arc::new(InMemoryConversationService::default()),
+    );
     let app = build_router(state);
     let listener =
         tokio::net::TcpListener::bind((settings.server.host.as_str(), settings.server.port))

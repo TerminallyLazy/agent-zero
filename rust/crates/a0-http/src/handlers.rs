@@ -3,25 +3,29 @@ use std::sync::Arc;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Json, Query, State,
     },
     http::HeaderMap,
     response::IntoResponse,
-    Json,
 };
+use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use a0_core::{AppError, BridgeService, PluginSummary};
+use a0_core::{
+    AppError, BridgeService, ConversationService, InMemoryConversationService, PluginSummary,
+    SendMessageRequest,
+};
 use a0_observability::build_info;
 use a0_ws::{handlers::handle_client_message, messages::ServerEnvelope};
 
 use crate::{
     error::HttpError,
     models::{
-        PluginListResponse, ReadyResponse, SettingsResponse, SuccessEnvelope, VersionResponse,
+        ApiLogQuery, ApiLogResponse, ApiMessageRequest, ApiMessageResponse, PluginListResponse,
+        ReadyResponse, SettingsResponse, SuccessEnvelope, VersionResponse,
     },
     AppState,
 };
@@ -53,11 +57,45 @@ pub async fn version(headers: HeaderMap) -> Json<SuccessEnvelope<VersionResponse
     Json(SuccessEnvelope { ok: true, request_id, data: build_info().into() })
 }
 
-pub async fn api_message(headers: HeaderMap) -> Result<Json<SuccessEnvelope<Value>>, HttpError> {
-    Err(HttpError::from_app_error(
-        AppError::NotImplemented("POST /api/message"),
-        request_id(&headers),
-    ))
+pub async fn api_message(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<ApiMessageRequest>,
+) -> Result<Json<ApiMessageResponse>, HttpError> {
+    let request_id = request_id(&headers);
+
+    let attachment_filenames = payload
+        .attachments
+        .unwrap_or_default()
+        .into_iter()
+        .map(|attachment| {
+            let _ = base64::engine::general_purpose::STANDARD
+                .decode(attachment.base64.as_bytes())
+                .map_err(|error| {
+                    HttpError::new(
+                        axum::http::StatusCode::BAD_REQUEST,
+                        "invalid_request",
+                        error.to_string(),
+                        request_id.clone(),
+                    )
+                })?;
+            Ok(attachment.filename)
+        })
+        .collect::<Result<Vec<_>, HttpError>>()?;
+
+    let result = state
+        .conversations
+        .send_external_message(SendMessageRequest {
+            context_id: payload.context_id,
+            message: payload.message,
+            attachment_filenames,
+            lifetime_hours: payload.lifetime_hours.unwrap_or(24),
+            project_name: payload.project_name,
+        })
+        .await
+        .map_err(|error| map_app_error(error, request_id))?;
+
+    Ok(Json(ApiMessageResponse { context_id: result.context_id, response: result.response }))
 }
 
 pub async fn api_plugins(headers: HeaderMap) -> Json<SuccessEnvelope<PluginListResponse>> {
@@ -85,6 +123,46 @@ pub async fn api_settings(
             bridge_mode: state.bridge.mode().await.to_string(),
         },
     })
+}
+
+pub async fn api_log_get(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<ApiLogQuery>,
+) -> Result<Json<ApiLogResponse>, HttpError> {
+    api_log_get_inner(headers, state, query).await
+}
+
+pub async fn api_log_post(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(query): Json<ApiLogQuery>,
+) -> Result<Json<ApiLogResponse>, HttpError> {
+    api_log_get_inner(headers, state, query).await
+}
+
+async fn api_log_get_inner(
+    headers: HeaderMap,
+    state: AppState,
+    query: ApiLogQuery,
+) -> Result<Json<ApiLogResponse>, HttpError> {
+    let request_id = request_id(&headers);
+    let context_id = query.context_id.ok_or_else(|| {
+        HttpError::new(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "context_id is required",
+            request_id.clone(),
+        )
+    })?;
+
+    let log = state
+        .conversations
+        .get_log(&context_id, query.length.unwrap_or(100))
+        .await
+        .map_err(|error| map_app_error(error, request_id))?;
+
+    Ok(Json(ApiLogResponse { context_id, log }))
 }
 
 pub async fn websocket_upgrade(
@@ -158,4 +236,12 @@ fn request_id(headers: &HeaderMap) -> String {
 
 pub fn default_bridge() -> Arc<dyn BridgeService> {
     Arc::new(a0_bridge_py::NullBridge)
+}
+
+pub fn default_conversations() -> Arc<dyn ConversationService> {
+    Arc::new(InMemoryConversationService::default())
+}
+
+fn map_app_error(error: AppError, request_id: String) -> HttpError {
+    HttpError::from_app_error(error, request_id)
 }

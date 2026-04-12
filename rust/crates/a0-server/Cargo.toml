@@ -8,6 +8,7 @@ license.workspace = true
 anyhow.workspace = true
 a0-bridge-py = { path = "../a0-bridge-py" }
 a0-config = { path = "../a0-config" }
+a0-core = { path = "../a0-core" }
 a0-http = { path = "../a0-http" }
 a0-observability = { path = "../a0-observability" }
 axum.workspace = true
