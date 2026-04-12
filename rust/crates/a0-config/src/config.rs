@@ -16,7 +16,12 @@ impl Default for Settings {
                 log_format: "pretty".to_string(),
                 log_level: "info".to_string(),
             },
-            bridge: BridgeSettings { mode: "null".to_string() },
+            bridge: BridgeSettings {
+                mode: "null".to_string(),
+                base_url: None,
+                api_key: None,
+                timeout_secs: 30,
+            },
             security: SecuritySettings {
                 auth_mode: "reserved".to_string(),
                 csrf_mode: "reserved".to_string(),
@@ -41,6 +46,9 @@ pub struct ObservabilitySettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BridgeSettings {
     pub mode: String,
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+    pub timeout_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -73,6 +81,9 @@ pub struct PartialObservabilitySettings {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct PartialBridgeSettings {
     pub mode: Option<String>,
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+    pub timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -105,6 +116,15 @@ impl Settings {
         if let Some(bridge) = partial.bridge {
             if let Some(mode) = bridge.mode {
                 self.bridge.mode = mode;
+            }
+            if let Some(base_url) = bridge.base_url {
+                self.bridge.base_url = Some(base_url);
+            }
+            if let Some(api_key) = bridge.api_key {
+                self.bridge.api_key = Some(api_key);
+            }
+            if let Some(timeout_secs) = bridge.timeout_secs {
+                self.bridge.timeout_secs = timeout_secs;
             }
         }
 

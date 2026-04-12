@@ -8,6 +8,9 @@ log_level = "info"
 
 [bridge]
 mode = "null"
+base_url = "http://127.0.0.1:50001"
+api_key = ""
+timeout_secs = 30
 
 [security]
 auth_mode = "reserved"

@@ -2,23 +2,48 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use a0_bridge_py::NullBridge;
+use a0_bridge_py::{HttpBridge, HttpConversationService, NullBridge};
 use a0_config::Settings;
-use a0_core::InMemoryConversationService;
+use a0_core::{BridgeService, ConversationService, InMemoryConversationService};
 use a0_http::{build_router, AppState};
 use a0_observability::HealthRegistry;
 
 pub async fn serve(settings: Settings) -> Result<()> {
     let health = HealthRegistry::new();
-    health.set_component("bridge", true, "null bridge ready");
     health.set_component("router", true, "http and websocket routes registered");
 
-    let state = AppState::new(
-        settings.clone(),
-        health,
-        Arc::new(NullBridge),
-        Arc::new(InMemoryConversationService::default()),
-    );
+    let (bridge, conversations, bridge_detail): (
+        Arc<dyn BridgeService>,
+        Arc<dyn ConversationService>,
+        String,
+    ) = match settings.bridge.mode.as_str() {
+        "http" => {
+            let bridge: Arc<dyn BridgeService> = Arc::new(HttpBridge::new(settings.bridge.clone())?);
+            bridge.ready().await?;
+            let conversations: Arc<dyn ConversationService> =
+                Arc::new(HttpConversationService::new(settings.bridge.clone())?);
+            (
+                bridge,
+                conversations,
+                format!(
+                    "http bridge ready for {}",
+                    settings
+                        .bridge
+                        .base_url
+                        .clone()
+                        .unwrap_or_else(|| "<missing>".to_string())
+                ),
+            )
+        }
+        _ => (
+            Arc::new(NullBridge),
+            Arc::new(InMemoryConversationService::default()),
+            "null bridge ready".to_string(),
+        ),
+    };
+    health.set_component("bridge", true, bridge_detail);
+
+    let state = AppState::new(settings.clone(), health, bridge, conversations);
     let app = build_router(state);
     let listener =
         tokio::net::TcpListener::bind((settings.server.host.as_str(), settings.server.port))

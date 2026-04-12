@@ -49,6 +49,13 @@ fn apply_env_pairs(settings: &mut Settings, env_pairs: &[(&str, &str)]) {
             "A0_LOG_FORMAT" => settings.observability.log_format = (*value).to_string(),
             "A0_LOG_LEVEL" => settings.observability.log_level = (*value).to_string(),
             "A0_BRIDGE_MODE" => settings.bridge.mode = (*value).to_string(),
+            "A0_BRIDGE_BASE_URL" => settings.bridge.base_url = Some((*value).to_string()),
+            "A0_BRIDGE_API_KEY" => settings.bridge.api_key = Some((*value).to_string()),
+            "A0_BRIDGE_TIMEOUT_SECS" => {
+                if let Ok(timeout_secs) = value.parse::<u64>() {
+                    settings.bridge.timeout_secs = timeout_secs;
+                }
+            }
             "A0_AUTH_MODE" => settings.security.auth_mode = (*value).to_string(),
             "A0_CSRF_MODE" => settings.security.csrf_mode = (*value).to_string(),
             _ => {}

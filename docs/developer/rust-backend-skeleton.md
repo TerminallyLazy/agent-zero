@@ -14,6 +14,7 @@ The Rust workspace is runnable and intentionally narrow:
 - a real WebSocket endpoint at `/ws`
 - structured event envelopes with `eventId`, `correlationId`, `handlerId`, `ts`, and `data`
 - a null Python bridge and transport-independent core traits for future migration
+- an `http` bridge mode that can delegate external API calls to a running Python backend
 
 What it is not:
 
@@ -59,6 +60,16 @@ Override config from the CLI:
 ```bash
 cd /Users/lazy/Documents/agent-zero/rust
 cargo run -p a0-server -- serve --host 127.0.0.1 --port 60123 --log-format json
+```
+
+Enable bridge mode with environment variables:
+
+```bash
+cd /Users/lazy/Documents/agent-zero/rust
+A0_BRIDGE_MODE=http \
+A0_BRIDGE_BASE_URL=http://127.0.0.1:50001 \
+A0_BRIDGE_API_KEY=your-token \
+cargo run -p a0-server -- serve
 ```
 
 Print the resolved config:
@@ -133,3 +144,4 @@ The current Python backend remains the real runtime. The Rust server is a migrat
 - Python remains the source of truth for production behavior
 - Rust is safe to evolve without pretending parity exists yet
 - contract decisions can be tested in isolation before cutover work starts
+- bridge mode allows Rust to front selected API flows while delegating real work to Python
