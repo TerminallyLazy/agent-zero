@@ -18,7 +18,8 @@ pub async fn serve(settings: Settings) -> Result<()> {
         String,
     ) = match settings.bridge.mode.as_str() {
         "http" => {
-            let bridge: Arc<dyn BridgeService> = Arc::new(HttpBridge::new(settings.bridge.clone())?);
+            let bridge: Arc<dyn BridgeService> =
+                Arc::new(HttpBridge::new(settings.bridge.clone())?);
             bridge.ready().await?;
             let conversations: Arc<dyn ConversationService> =
                 Arc::new(HttpConversationService::new(settings.bridge.clone())?);
@@ -27,11 +28,7 @@ pub async fn serve(settings: Settings) -> Result<()> {
                 conversations,
                 format!(
                     "http bridge ready for {}",
-                    settings
-                        .bridge
-                        .base_url
-                        .clone()
-                        .unwrap_or_else(|| "<missing>".to_string())
+                    settings.bridge.base_url.clone().unwrap_or_else(|| "<missing>".to_string())
                 ),
             )
         }

@@ -10,11 +10,12 @@ The Rust workspace is runnable and intentionally narrow:
 - a bootable `a0-server` binary
 - `GET /health`, `GET /ready`, and `GET /version`
 - working external API routes for `POST /api_message` and `GET|POST /api_log_get`
+- working UI state routes for `POST /api/chat_create` and `POST /api/poll`
 - placeholder `/api/message`, `/api/plugins`, and `/api/settings` routes for the in-progress internal API surface
 - a real WebSocket endpoint at `/ws`
 - structured event envelopes with `eventId`, `correlationId`, `handlerId`, `ts`, and `data`
 - a null Python bridge and transport-independent core traits for future migration
-- an `http` bridge mode that can delegate external API calls to a running Python backend
+- an `http` bridge mode that can delegate external API and UI state calls to a running Python backend
 
 What it is not:
 
@@ -116,6 +117,20 @@ curl -s http://127.0.0.1:60123/api_message \
   -H 'content-type: application/json' \
   -d '{"context_id":"<context-id>","message":"follow-up"}'
 ```
+
+Create a chat context and fetch a UI snapshot:
+
+```bash
+curl -s http://127.0.0.1:60123/api/chat_create \
+  -H 'content-type: application/json' \
+  -d '{"current_context":"<context-id>"}'
+
+curl -s http://127.0.0.1:60123/api/poll \
+  -H 'content-type: application/json' \
+  -d '{"context":"<context-id>"}'
+```
+
+`/api/poll` accepts the same optional fields as the Python backend. Missing `log_from` and `notifications_from` default to `0`, and `timezone` may be omitted.
 
 WebSocket smoke:
 

@@ -15,8 +15,9 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use a0_core::{
-    AppError, BridgeService, ConversationService, InMemoryConversationService, PluginSummary,
-    SendMessageRequest,
+    AppError, BridgeService, ConversationService, CreateContextRequest, CreateContextResponse,
+    InMemoryConversationService, PluginSummary, SendMessageRequest, StateSnapshot,
+    StateSnapshotRequest,
 };
 use a0_observability::build_info;
 use a0_ws::{handlers::handle_client_message, messages::ServerEnvelope};
@@ -163,6 +164,36 @@ async fn api_log_get_inner(
         .map_err(|error| map_app_error(error, request_id))?;
 
     Ok(Json(ApiLogResponse { context_id, log }))
+}
+
+pub async fn api_chat_create(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateContextRequest>,
+) -> Result<Json<CreateContextResponse>, HttpError> {
+    let request_id = request_id(&headers);
+    let response = state
+        .conversations
+        .create_context(payload)
+        .await
+        .map_err(|error| map_app_error(error, request_id))?;
+
+    Ok(Json(response))
+}
+
+pub async fn api_poll(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<StateSnapshotRequest>,
+) -> Result<Json<StateSnapshot>, HttpError> {
+    let request_id = request_id(&headers);
+    let response = state
+        .conversations
+        .build_state_snapshot(payload)
+        .await
+        .map_err(|error| map_app_error(error, request_id))?;
+
+    Ok(Json(response))
 }
 
 pub async fn websocket_upgrade(

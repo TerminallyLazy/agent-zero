@@ -1,7 +1,8 @@
 use a0_config::BridgeSettings;
 use a0_core::{
-    AppError, BridgeService, ConversationLog, ConversationService, SendMessageRequest,
-    SendMessageResponse,
+    AppError, BridgeService, ConversationLog, ConversationService, CreateContextRequest,
+    CreateContextResponse, SendMessageRequest, SendMessageResponse, StateSnapshot,
+    StateSnapshotRequest,
 };
 use async_trait::async_trait;
 use reqwest::Client;
@@ -110,6 +111,52 @@ impl ConversationService for HttpConversationService {
                 .await
                 .map_err(|error| AppError::Internal(error.to_string()))?;
             serde_json::from_value(payload["log"].clone())
+                .map_err(|error| AppError::Internal(error.to_string()))
+        } else {
+            Err(map_remote_error(response.status().as_u16(), response.text().await.ok()))
+        }
+    }
+
+    async fn create_context(
+        &self,
+        request: CreateContextRequest,
+    ) -> Result<CreateContextResponse, AppError> {
+        let base_url = base_url(&self.settings)?;
+        let response = apply_api_key(
+            self.client.post(format!("{base_url}/api/chat_create")).json(&request),
+            &self.settings,
+        )
+        .send()
+        .await
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+
+        if response.status().is_success() {
+            response
+                .json::<CreateContextResponse>()
+                .await
+                .map_err(|error| AppError::Internal(error.to_string()))
+        } else {
+            Err(map_remote_error(response.status().as_u16(), response.text().await.ok()))
+        }
+    }
+
+    async fn build_state_snapshot(
+        &self,
+        request: StateSnapshotRequest,
+    ) -> Result<StateSnapshot, AppError> {
+        let base_url = base_url(&self.settings)?;
+        let response = apply_api_key(
+            self.client.post(format!("{base_url}/api/poll")).json(&request),
+            &self.settings,
+        )
+        .send()
+        .await
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+
+        if response.status().is_success() {
+            response
+                .json::<StateSnapshot>()
+                .await
                 .map_err(|error| AppError::Internal(error.to_string()))
         } else {
             Err(map_remote_error(response.status().as_u16(), response.text().await.ok()))

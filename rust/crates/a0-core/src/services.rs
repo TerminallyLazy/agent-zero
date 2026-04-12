@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 
 use crate::{
-    AppError, BuildInfo, ContextSummary, ConversationLog, JobSummary, PluginSummary,
-    SendMessageRequest, SendMessageResponse, ToolSummary,
+    AppError, BuildInfo, ContextSummary, ConversationLog, CreateContextRequest,
+    CreateContextResponse, JobSummary, PluginSummary, SendMessageRequest, SendMessageResponse,
+    StateSnapshot, StateSnapshotRequest, ToolSummary,
 };
 
 #[async_trait]
@@ -43,6 +44,14 @@ pub trait ConversationService: Send + Sync {
         request: SendMessageRequest,
     ) -> Result<SendMessageResponse, AppError>;
     async fn get_log(&self, context_id: &str, length: usize) -> Result<ConversationLog, AppError>;
+    async fn create_context(
+        &self,
+        request: CreateContextRequest,
+    ) -> Result<CreateContextResponse, AppError>;
+    async fn build_state_snapshot(
+        &self,
+        request: StateSnapshotRequest,
+    ) -> Result<StateSnapshot, AppError>;
 }
 
 pub trait HealthReporter: Send + Sync {
