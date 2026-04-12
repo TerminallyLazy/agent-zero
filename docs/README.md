@@ -23,6 +23,8 @@ Welcome to the Agent Zero documentation hub. Whether you're getting started or d
 ## Developer Documentation
 
 - **[Architecture Overview](developer/architecture.md):** Understand Agent Zero's internal structure and components.
+- **[Rust Backend Install](developer/rust-backend-install.md):** Install, verify, and run the experimental Rust backend.
+- **[Rust Backend Skeleton](developer/rust-backend-skeleton.md):** Migration foundation, crate layout, and supported routes.
 - **[Plugins](developer/plugins.md):** Build plugins with `plugin.yaml`, scoped settings, and activation toggles.
 - **[Extensions](developer/extensions.md):** Create custom extensions to extend functionality.
 - **[Connectivity](developer/connectivity.md):** Connect to Agent Zero from external applications.

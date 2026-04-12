@@ -2,6 +2,8 @@
 
 This document describes the experimental Rust backend skeleton under [rust](/Users/lazy/Documents/agent-zero/rust). It is the first migration milestone for moving Agent Zero backend responsibilities out of Python without attempting full parity in one step.
 
+If you want a direct install path instead of repo-local `cargo run` commands, use the step-by-step guide in [Rust Backend Install](rust-backend-install.md) and the installer at `rust/scripts/install-rust-backend.sh`.
+
 ## Current Status
 
 The Rust workspace is runnable and intentionally narrow:
@@ -51,6 +53,14 @@ rust/
 
 ## Run
 
+Quick install from this repository checkout:
+
+```bash
+bash rust/scripts/install-rust-backend.sh
+```
+
+See [Rust Backend Install](rust-backend-install.md) for the full workflow, installed paths, and verification steps.
+
 ```bash
 cd /Users/lazy/Documents/agent-zero/rust
 cargo run -p a0-server -- serve
@@ -60,7 +70,7 @@ Override config from the CLI:
 
 ```bash
 cd /Users/lazy/Documents/agent-zero/rust
-cargo run -p a0-server -- serve --host 127.0.0.1 --port 60123 --log-format json
+cargo run -p a0-server -- --host 127.0.0.1 --port 60123 --log-format json serve
 ```
 
 Enable bridge mode with environment variables:
@@ -99,7 +109,7 @@ Manual smoke:
 
 ```bash
 cd /Users/lazy/Documents/agent-zero/rust
-cargo run -p a0-server -- serve --host 127.0.0.1 --port 60123
+cargo run -p a0-server -- --host 127.0.0.1 --port 60123 serve
 curl -s http://127.0.0.1:60123/health
 curl -s http://127.0.0.1:60123/ready
 curl -s http://127.0.0.1:60123/version

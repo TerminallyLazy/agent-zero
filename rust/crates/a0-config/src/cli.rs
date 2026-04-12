@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Clone, Parser)]
 #[command(name = "a0-server", about = "Agent Zero Rust backend skeleton")]
 pub struct Cli {
-    #[arg(long)]
+    #[arg(long, env = "A0_CONFIG")]
     pub config: Option<String>,
 
     #[arg(long)]

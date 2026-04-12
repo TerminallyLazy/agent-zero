@@ -7,8 +7,8 @@ use crate::{Cli, PartialSettings, Settings};
 pub fn load_settings(cli: Cli, env_pairs: &[(&str, &str)]) -> Result<Settings> {
     let mut settings = Settings::default();
 
-    if let Some(config_path) = &cli.config {
-        let contents = fs::read_to_string(resolve_config_path(config_path))
+    if let Some(config_path) = discover_config_path(&cli, env_pairs) {
+        let contents = fs::read_to_string(resolve_config_path(&config_path))
             .with_context(|| format!("failed to read config file {config_path}"))?;
         let partial: PartialSettings =
             toml::from_str(&contents).with_context(|| "failed to parse config file")?;
@@ -35,6 +35,31 @@ fn resolve_config_path(path: &str) -> String {
 
     let workspace_relative = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(path);
     workspace_relative.to_string_lossy().to_string()
+}
+
+fn discover_config_path(cli: &Cli, env_pairs: &[(&str, &str)]) -> Option<String> {
+    cli.config
+        .clone()
+        .or_else(|| env_value(env_pairs, "A0_CONFIG").map(ToOwned::to_owned))
+        .or_else(|| discover_standard_user_config(env_pairs))
+}
+
+fn discover_standard_user_config(env_pairs: &[(&str, &str)]) -> Option<String> {
+    let xdg_path = env_value(env_pairs, "XDG_CONFIG_HOME")
+        .map(|value| Path::new(value).join("agent-zero/rust/agent-zero.toml"));
+    if let Some(path) = xdg_path.filter(|path| path.exists()) {
+        return Some(path.to_string_lossy().to_string());
+    }
+
+    let home_path = env_value(env_pairs, "HOME")
+        .map(|value| Path::new(value).join(".config/agent-zero/rust/agent-zero.toml"));
+    home_path.filter(|path| path.exists()).map(|path| path.to_string_lossy().to_string())
+}
+
+fn env_value<'a>(env_pairs: &'a [(&str, &str)], key: &str) -> Option<&'a str> {
+    env_pairs.iter().find_map(|(candidate_key, candidate_value)| {
+        (*candidate_key == key).then_some(*candidate_value)
+    })
 }
 
 fn apply_env_pairs(settings: &mut Settings, env_pairs: &[(&str, &str)]) {
