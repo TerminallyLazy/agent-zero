@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use a0_core::{BuildInfo, ConversationLog, PluginSummary};
 use a0_observability::HealthSnapshot;
@@ -46,6 +47,36 @@ pub struct SettingsResponse {
     pub server_host: String,
     pub server_port: u16,
     pub bridge_mode: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoadWebuiExtensionsRequest {
+    pub extension_point: String,
+    pub filters: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoadWebuiExtensionsResponse {
+    pub extensions: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ProjectsRequest {
+    pub action: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct AgentsRequest {
+    pub action: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActionResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use axum::{
     extract::{
@@ -26,9 +30,10 @@ use a0_ws::{handlers::handle_client_message, messages::ServerEnvelope};
 use crate::{
     error::HttpError,
     models::{
-        ApiLogQuery, ApiLogResponse, ApiMessageRequest, ApiMessageResponse, CsrfTokenResponse,
-        PluginListResponse, ReadyResponse, SettingsResponse, SuccessEnvelope, UiMessageRequest,
-        UiMessageResponse, VersionResponse,
+        ActionResponse, AgentsRequest, ApiLogQuery, ApiLogResponse, ApiMessageRequest,
+        ApiMessageResponse, CsrfTokenResponse, LoadWebuiExtensionsRequest,
+        LoadWebuiExtensionsResponse, PluginListResponse, ProjectsRequest, ReadyResponse,
+        SettingsResponse, SuccessEnvelope, UiMessageRequest, UiMessageResponse, VersionResponse,
     },
     AppState,
 };
@@ -72,6 +77,60 @@ pub async fn ui_index(State(state): State<AppState>) -> Result<Html<String>, Htt
     })?;
 
     Ok(Html(render_index_template(&template, &state)))
+}
+
+pub async fn load_webui_extensions(
+    State(state): State<AppState>,
+    Json(payload): Json<LoadWebuiExtensionsRequest>,
+) -> Json<LoadWebuiExtensionsResponse> {
+    Json(LoadWebuiExtensionsResponse {
+        extensions: discover_webui_extensions(
+            &state.workspace_root,
+            &payload.extension_point,
+            payload.filters.as_deref().unwrap_or(&["*".to_string()]),
+        ),
+    })
+}
+
+pub async fn settings_get(State(state): State<AppState>) -> Json<Value> {
+    Json(build_settings_payload(&state.workspace_root))
+}
+
+pub async fn projects(
+    State(state): State<AppState>,
+    Json(payload): Json<ProjectsRequest>,
+) -> Json<ActionResponse> {
+    let response = match payload.action.as_deref().unwrap_or_default() {
+        "list" => ActionResponse {
+            ok: true,
+            data: Some(Value::Array(load_projects_list(&state.workspace_root))),
+            error: None,
+        },
+        "list_options" => ActionResponse {
+            ok: true,
+            data: Some(Value::Array(load_projects_list_options(&state.workspace_root))),
+            error: None,
+        },
+        _ => ActionResponse { ok: false, data: None, error: Some("Invalid action".to_string()) },
+    };
+
+    Json(response)
+}
+
+pub async fn agents(
+    State(state): State<AppState>,
+    Json(payload): Json<AgentsRequest>,
+) -> Json<ActionResponse> {
+    let response = match payload.action.as_deref().unwrap_or_default() {
+        "list" => ActionResponse {
+            ok: true,
+            data: Some(Value::Array(load_agents_list(&state.workspace_root))),
+            error: None,
+        },
+        _ => ActionResponse { ok: false, data: None, error: Some("Invalid action".to_string()) },
+    };
+
+    Json(response)
 }
 
 pub async fn api_csrf_token(State(state): State<AppState>) -> Json<CsrfTokenResponse> {
@@ -445,6 +504,237 @@ fn render_index_template(template: &str, state: &AppState) -> String {
         .replace("{{runtime_id}}", &state.runtime_id)
         .replace("{{runtime_is_development}}", runtime_is_development)
         .replace("{{logged_in}}", "false")
+}
+
+fn discover_webui_extensions(
+    workspace_root: &Path,
+    extension_point: &str,
+    filters: &[String],
+) -> Vec<String> {
+    let mut matches = Vec::new();
+    let effective_filters =
+        if filters.is_empty() { vec!["*".to_string()] } else { filters.to_vec() };
+
+    for root in extension_roots(workspace_root, extension_point) {
+        let read_dir = match std::fs::read_dir(&root) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if !effective_filters.iter().any(|filter| matches_filter(file_name, filter)) {
+                continue;
+            }
+            if let Ok(relative) = path.strip_prefix(workspace_root) {
+                matches.push(relative.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+
+    matches.sort();
+    matches.dedup();
+    matches
+}
+
+fn extension_roots(workspace_root: &Path, extension_point: &str) -> Vec<PathBuf> {
+    let mut roots = vec![workspace_root.join("extensions/webui").join(extension_point)];
+
+    for container in [
+        workspace_root.join("plugins"),
+        workspace_root.join("usr/plugins"),
+        workspace_root.join("agents"),
+        workspace_root.join("usr/agents"),
+    ] {
+        let Ok(entries) = std::fs::read_dir(container) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path().join("extensions/webui").join(extension_point);
+            roots.push(path);
+        }
+    }
+
+    roots
+}
+
+fn matches_filter(file_name: &str, filter: &str) -> bool {
+    if filter == "*" {
+        return true;
+    }
+    if let Some(suffix) = filter.strip_prefix('*') {
+        return file_name.ends_with(suffix);
+    }
+    file_name == filter
+}
+
+fn build_settings_payload(workspace_root: &Path) -> Value {
+    let settings_path = workspace_root.join("usr/settings.json");
+    let mut settings = std::fs::read_to_string(&settings_path)
+        .ok()
+        .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
+        .unwrap_or_else(|| json!({}));
+
+    if let Some(map) = settings.as_object_mut() {
+        set_default_string(map, "stt_model_size", "base");
+        set_default_string(map, "stt_language", "en");
+        set_default_value(map, "stt_silence_threshold", json!(0.3));
+        set_default_value(map, "stt_silence_duration", json!(1000));
+        set_default_value(map, "stt_waiting_timeout", json!(2000));
+        map.entry("tts_kokoro").or_insert(Value::Bool(true));
+    }
+
+    json!({
+        "settings": settings,
+        "additional": {
+            "chat_providers": [],
+            "embedding_providers": [],
+            "is_dockerized": false,
+            "agent_subdirs": load_agents_list(workspace_root).into_iter().map(|entry| {
+                json!({
+                    "value": entry["key"].clone(),
+                    "label": entry["label"].clone(),
+                })
+            }).collect::<Vec<_>>(),
+            "knowledge_subdirs": load_knowledge_subdirs(workspace_root),
+            "stt_models": [
+                {"value": "tiny", "label": "Tiny (39M, English)"},
+                {"value": "base", "label": "Base (74M, English)"},
+                {"value": "small", "label": "Small (244M, English)"},
+                {"value": "medium", "label": "Medium (769M, English)"},
+                {"value": "large", "label": "Large (1.5B, Multilingual)"},
+                {"value": "turbo", "label": "Turbo (Multilingual)"}
+            ],
+            "runtime_settings": {
+                "uvicorn_access_logs_enabled": false
+            }
+        }
+    })
+}
+
+fn set_default_string(map: &mut serde_json::Map<String, Value>, key: &str, default: &str) {
+    map.entry(key.to_string()).or_insert_with(|| Value::String(default.to_string()));
+}
+
+fn set_default_value(map: &mut serde_json::Map<String, Value>, key: &str, default: Value) {
+    map.entry(key.to_string()).or_insert(default);
+}
+
+fn load_projects_list(workspace_root: &Path) -> Vec<Value> {
+    let parent = workspace_root.join("usr/projects");
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return Vec::new();
+    };
+
+    let mut projects = Vec::new();
+    for entry in entries.flatten() {
+        let project_dir = entry.path();
+        if !project_dir.is_dir() {
+            continue;
+        }
+        let Some(name) = project_dir.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let data = load_project_metadata(&project_dir);
+        projects.push(json!({
+            "name": name,
+            "title": data.get("title").and_then(Value::as_str).unwrap_or(name),
+            "description": data.get("description").and_then(Value::as_str).unwrap_or(""),
+            "color": data.get("color").and_then(Value::as_str).unwrap_or(""),
+        }));
+    }
+
+    projects.sort_by(|left, right| left["name"].as_str().cmp(&right["name"].as_str()));
+    projects
+}
+
+fn load_projects_list_options(workspace_root: &Path) -> Vec<Value> {
+    load_projects_list(workspace_root)
+        .into_iter()
+        .filter_map(|project| {
+            let key = project.get("name")?.as_str()?.to_string();
+            let label = project
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(&key)
+                .to_string();
+            Some(json!({ "key": key, "label": label }))
+        })
+        .collect()
+}
+
+fn load_project_metadata(project_dir: &Path) -> Value {
+    let path = project_dir.join(".a0proj/project.json");
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
+        .unwrap_or_else(|| json!({}))
+}
+
+fn load_agents_list(workspace_root: &Path) -> Vec<Value> {
+    let mut merged = BTreeMap::new();
+
+    for container in [workspace_root.join("agents"), workspace_root.join("usr/agents")] {
+        let Ok(entries) = std::fs::read_dir(container) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let agent_dir = entry.path();
+            if !agent_dir.is_dir() {
+                continue;
+            }
+            let Some(key) = agent_dir.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            let label = load_agent_title(&agent_dir).unwrap_or_else(|| key.to_string());
+            merged.entry(key.to_string()).or_insert_with(|| label);
+        }
+    }
+
+    merged.into_iter().map(|(key, label)| json!({ "key": key, "label": label })).collect()
+}
+
+fn load_agent_title(agent_dir: &Path) -> Option<String> {
+    let path = agent_dir.join("agent.yaml");
+    let contents = std::fs::read_to_string(path).ok()?;
+    contents.lines().find_map(|line| {
+        let trimmed = line.trim();
+        trimmed
+            .strip_prefix("title:")
+            .map(|value| value.trim().trim_matches('"').to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn load_knowledge_subdirs(workspace_root: &Path) -> Vec<Value> {
+    let Ok(entries) = std::fs::read_dir(workspace_root.join("knowledge")) else {
+        return Vec::new();
+    };
+
+    let mut subdirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if name == "default" {
+            continue;
+        }
+        subdirs.push(json!({ "value": name, "label": name }));
+    }
+
+    subdirs.sort_by(|left, right| left["value"].as_str().cmp(&right["value"].as_str()));
+    subdirs
 }
 
 fn request_id(headers: &HeaderMap) -> String {

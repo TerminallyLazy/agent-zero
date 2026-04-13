@@ -12,6 +12,7 @@ The Rust workspace is runnable and intentionally narrow:
 - a bootable `a0-server` binary
 - `GET /` plus static `webui/` asset serving for the real browser shell
 - `GET /health`, `GET /ready`, and `GET /version`
+- UI bootstrap routes for `POST /api/load_webui_extensions`, `GET|POST /api/settings_get`, `POST /api/projects`, and `POST /api/agents`
 - a basic UI bootstrap route at `GET /api/csrf_token`
 - working UI transport routes for `POST /message` and `POST /message_async`
 - working external API routes for `POST /api_message` and `GET|POST /api_log_get`
@@ -129,9 +130,29 @@ Bootstrap the current Web UI transport:
 ```bash
 curl -s http://127.0.0.1:60123/api/csrf_token
 
+curl -s http://127.0.0.1:60123/api/load_webui_extensions \
+  -H 'content-type: application/json' \
+  -d '{"extension_point":"initFw_end","filters":["*.js"]}'
+
+curl -s http://127.0.0.1:60123/api/settings_get \
+  -H 'content-type: application/json' \
+  -d '{}'
+
 curl -s http://127.0.0.1:60123/message_async \
   -H 'content-type: application/json' \
   -d '{"text":"hello from webui","context":null,"message_id":"demo-1"}'
+```
+
+List real UI bootstrap data from the repo-backed runtime:
+
+```bash
+curl -s http://127.0.0.1:60123/api/projects \
+  -H 'content-type: application/json' \
+  -d '{"action":"list_options"}'
+
+curl -s http://127.0.0.1:60123/api/agents \
+  -H 'content-type: application/json' \
+  -d '{"action":"list"}'
 ```
 
 Create and continue a context:

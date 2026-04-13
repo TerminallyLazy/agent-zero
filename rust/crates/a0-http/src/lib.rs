@@ -19,6 +19,7 @@ pub struct AppState {
     pub build_info: BuildInfo,
     pub runtime_id: String,
     pub ui_asset_root: PathBuf,
+    pub workspace_root: PathBuf,
     pub health: HealthRegistry,
     pub ws_hub: WsHub,
     pub bridge: Arc<dyn BridgeService>,
@@ -34,6 +35,7 @@ impl AppState {
     ) -> Self {
         Self {
             ui_asset_root: resolve_ui_asset_root(&settings),
+            workspace_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.."),
             settings,
             build_info: build_info(),
             runtime_id: uuid::Uuid::new_v4().to_string(),
