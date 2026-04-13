@@ -48,8 +48,10 @@ impl ConversationService for InMemoryConversationService {
     ) -> Result<SendMessageResponse, AppError> {
         self.prune_expired();
 
-        if request.message.trim().is_empty() {
-            return Err(AppError::InvalidRequest("message is required".to_string()));
+        if request.message.trim().is_empty() && request.attachment_filenames.is_empty() {
+            return Err(AppError::InvalidRequest(
+                "message or attachments are required".to_string(),
+            ));
         }
 
         let now = Utc::now();
@@ -105,7 +107,11 @@ impl ConversationService for InMemoryConversationService {
             created_at: now,
         });
 
-        let mut response = format!("Rust skeleton received: {}", request.message);
+        let mut response = if request.message.trim().is_empty() {
+            "Rust skeleton received attachments".to_string()
+        } else {
+            format!("Rust skeleton received: {}", request.message)
+        };
         if !request.attachment_filenames.is_empty() {
             response.push_str(&format!(
                 " ({} attachment{})",

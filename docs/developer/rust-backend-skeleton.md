@@ -11,6 +11,8 @@ The Rust workspace is runnable and intentionally narrow:
 - typed config with `CLI > env > file > defaults`
 - a bootable `a0-server` binary
 - `GET /health`, `GET /ready`, and `GET /version`
+- a basic UI bootstrap route at `GET /api/csrf_token`
+- working UI transport routes for `POST /message` and `POST /message_async`
 - working external API routes for `POST /api_message` and `GET|POST /api_log_get`
 - working UI state routes for `POST /api/chat_create` and `POST /api/poll`
 - placeholder `/api/message`, `/api/plugins`, and `/api/settings` routes for the in-progress internal API surface
@@ -114,6 +116,16 @@ curl -s http://127.0.0.1:60123/health
 curl -s http://127.0.0.1:60123/ready
 curl -s http://127.0.0.1:60123/version
 curl -s http://127.0.0.1:60123/api_log_get?context_id=<context-id>\&length=10
+```
+
+Bootstrap the current Web UI transport:
+
+```bash
+curl -s http://127.0.0.1:60123/api/csrf_token
+
+curl -s http://127.0.0.1:60123/message_async \
+  -H 'content-type: application/json' \
+  -d '{"text":"hello from webui","context":null,"message_id":"demo-1"}'
 ```
 
 Create and continue a context:

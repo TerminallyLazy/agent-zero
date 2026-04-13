@@ -16,6 +16,7 @@ pub use router::build_router;
 pub struct AppState {
     pub settings: Settings,
     pub build_info: BuildInfo,
+    pub runtime_id: String,
     pub health: HealthRegistry,
     pub ws_hub: WsHub,
     pub bridge: Arc<dyn BridgeService>,
@@ -32,6 +33,7 @@ impl AppState {
         Self {
             settings,
             build_info: build_info(),
+            runtime_id: uuid::Uuid::new_v4().to_string(),
             health,
             ws_hub: WsHub::default(),
             bridge,

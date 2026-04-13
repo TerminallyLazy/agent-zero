@@ -80,3 +80,24 @@ pub struct ApiLogResponse {
     pub context_id: String,
     pub log: ConversationLog,
 }
+
+#[derive(Debug, Deserialize, Default)]
+pub struct UiMessageRequest {
+    pub text: Option<String>,
+    pub context: Option<String>,
+    #[serde(rename = "message_id")]
+    pub _message_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UiMessageResponse {
+    pub message: String,
+    pub context: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CsrfTokenResponse {
+    pub ok: bool,
+    pub token: String,
+    pub runtime_id: String,
+}

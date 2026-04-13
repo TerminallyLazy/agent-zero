@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use axum::{
     extract::{
+        multipart::Multipart,
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Json, Query, State,
+        FromRequest, Json, Query, Request, State,
     },
     http::HeaderMap,
     response::IntoResponse,
@@ -25,8 +26,9 @@ use a0_ws::{handlers::handle_client_message, messages::ServerEnvelope};
 use crate::{
     error::HttpError,
     models::{
-        ApiLogQuery, ApiLogResponse, ApiMessageRequest, ApiMessageResponse, PluginListResponse,
-        ReadyResponse, SettingsResponse, SuccessEnvelope, VersionResponse,
+        ApiLogQuery, ApiLogResponse, ApiMessageRequest, ApiMessageResponse, CsrfTokenResponse,
+        PluginListResponse, ReadyResponse, SettingsResponse, SuccessEnvelope, UiMessageRequest,
+        UiMessageResponse, VersionResponse,
     },
     AppState,
 };
@@ -56,6 +58,28 @@ pub async fn ready(
 pub async fn version(headers: HeaderMap) -> Json<SuccessEnvelope<VersionResponse>> {
     let request_id = request_id(&headers);
     Json(SuccessEnvelope { ok: true, request_id, data: build_info().into() })
+}
+
+pub async fn api_csrf_token(State(state): State<AppState>) -> Json<CsrfTokenResponse> {
+    Json(CsrfTokenResponse {
+        ok: true,
+        token: Uuid::new_v4().to_string(),
+        runtime_id: state.runtime_id,
+    })
+}
+
+pub async fn ui_message(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<UiMessageResponse>, HttpError> {
+    handle_ui_message(state, request, false).await
+}
+
+pub async fn ui_message_async(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<UiMessageResponse>, HttpError> {
+    handle_ui_message(state, request, true).await
 }
 
 pub async fn api_message(
@@ -257,6 +281,145 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     state.ws_hub.unregister(&connection_id).await;
 }
 
+async fn handle_ui_message(
+    state: AppState,
+    request: Request,
+    acknowledge_only: bool,
+) -> Result<Json<UiMessageResponse>, HttpError> {
+    let request_id = request_id(request.headers());
+    let payload = parse_ui_message_request(request, state.clone(), request_id.clone()).await?;
+
+    let result = state
+        .conversations
+        .send_external_message(SendMessageRequest {
+            context_id: payload.context_id,
+            message: payload.message,
+            attachment_filenames: payload.attachment_filenames,
+            lifetime_hours: 24,
+            project_name: None,
+        })
+        .await
+        .map_err(|error| map_app_error(error, request_id))?;
+
+    let message = if acknowledge_only { "Message received.".to_string() } else { result.response };
+
+    Ok(Json(UiMessageResponse { message, context: result.context_id }))
+}
+
+async fn parse_ui_message_request(
+    request: Request,
+    state: AppState,
+    request_id: String,
+) -> Result<ParsedUiMessageRequest, HttpError> {
+    let content_type = request
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if content_type.starts_with("multipart/form-data") {
+        let mut multipart = Multipart::from_request(request, &state).await.map_err(|error| {
+            HttpError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid_request",
+                error.body_text(),
+                request_id.clone(),
+            )
+        })?;
+
+        let mut message = None;
+        let mut context_id = None;
+        let mut attachment_filenames = Vec::new();
+
+        while let Some(field) = multipart.next_field().await.map_err(|error| {
+            HttpError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid_request",
+                error.to_string(),
+                request_id.clone(),
+            )
+        })? {
+            match field.name() {
+                Some("text") => {
+                    message = Some(field.text().await.map_err(|error| {
+                        HttpError::new(
+                            axum::http::StatusCode::BAD_REQUEST,
+                            "invalid_request",
+                            error.to_string(),
+                            request_id.clone(),
+                        )
+                    })?);
+                }
+                Some("context") => {
+                    context_id = Some(field.text().await.map_err(|error| {
+                        HttpError::new(
+                            axum::http::StatusCode::BAD_REQUEST,
+                            "invalid_request",
+                            error.to_string(),
+                            request_id.clone(),
+                        )
+                    })?);
+                }
+                Some("attachments") => {
+                    if let Some(filename) = field.file_name().map(ToString::to_string) {
+                        attachment_filenames.push(filename);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        return build_ui_message_request(message, context_id, attachment_filenames, request_id);
+    }
+
+    let Json(payload) =
+        Json::<UiMessageRequest>::from_request(request, &state).await.map_err(|error| {
+            HttpError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid_request",
+                error.body_text(),
+                request_id.clone(),
+            )
+        })?;
+
+    build_ui_message_request(payload.text, payload.context, Vec::new(), request_id)
+}
+
+fn build_ui_message_request(
+    message: Option<String>,
+    context_id: Option<String>,
+    attachment_filenames: Vec<String>,
+    request_id: String,
+) -> Result<ParsedUiMessageRequest, HttpError> {
+    let message = message.unwrap_or_default().trim().to_string();
+    if message.is_empty() && attachment_filenames.is_empty() {
+        return Err(HttpError::new(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "text is required",
+            request_id,
+        ));
+    }
+
+    Ok(ParsedUiMessageRequest {
+        message,
+        context_id: normalize_optional_string(context_id),
+        attachment_filenames,
+    })
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 fn request_id(headers: &HeaderMap) -> String {
     headers
         .get("x-request-id")
@@ -275,4 +438,10 @@ pub fn default_conversations() -> Arc<dyn ConversationService> {
 
 fn map_app_error(error: AppError, request_id: String) -> HttpError {
     HttpError::from_app_error(error, request_id)
+}
+
+struct ParsedUiMessageRequest {
+    message: String,
+    context_id: Option<String>,
+    attachment_filenames: Vec<String>,
 }
