@@ -7,7 +7,7 @@ use axum::{
         FromRequest, Json, Query, Request, State,
     },
     http::HeaderMap,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
 };
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
@@ -58,6 +58,20 @@ pub async fn ready(
 pub async fn version(headers: HeaderMap) -> Json<SuccessEnvelope<VersionResponse>> {
     let request_id = request_id(&headers);
     Json(SuccessEnvelope { ok: true, request_id, data: build_info().into() })
+}
+
+pub async fn ui_index(State(state): State<AppState>) -> Result<Html<String>, HttpError> {
+    let index_path = state.ui_asset_root.join("index.html");
+    let template = tokio::fs::read_to_string(&index_path).await.map_err(|error| {
+        HttpError::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ui_asset_missing",
+            format!("failed to read web UI shell from {}: {error}", index_path.display()),
+            Uuid::new_v4().to_string(),
+        )
+    })?;
+
+    Ok(Html(render_index_template(&template, &state)))
 }
 
 pub async fn api_csrf_token(State(state): State<AppState>) -> Json<CsrfTokenResponse> {
@@ -418,6 +432,19 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
+}
+
+fn render_index_template(template: &str, state: &AppState) -> String {
+    let version = state.build_info.version.as_str();
+    let version_time = state.build_info.commit.as_deref().unwrap_or("rust-dev");
+    let runtime_is_development = if cfg!(debug_assertions) { "true" } else { "false" };
+
+    template
+        .replace("{{version_no}}", version)
+        .replace("{{version_time}}", version_time)
+        .replace("{{runtime_id}}", &state.runtime_id)
+        .replace("{{runtime_is_development}}", runtime_is_development)
+        .replace("{{logged_in}}", "false")
 }
 
 fn request_id(headers: &HeaderMap) -> String {

@@ -7,10 +7,13 @@ This guide is the shortest path to a working local install of the experimental R
 By default, the install script places files here:
 
 - binary: `~/.local/bin/a0-server`
+- web UI assets: `~/.local/share/agent-zero/rust/webui`
 - live config: `~/.config/agent-zero/rust/agent-zero.toml`
 - sample config: `~/.config/agent-zero/rust/agent-zero.example.toml`
 
-The installed binary automatically discovers the default config path above. If you install the config somewhere else, run the binary with `--config /path/to/agent-zero.toml`.
+The installed binary automatically discovers the default config path above. It also auto-discovers the installed `webui/` assets from the binary prefix, so `a0-server serve` can front the browser UI after install without depending on your current working directory. If you install the config somewhere else, run the binary with `--config /path/to/agent-zero.toml`.
+
+Current limitation: the Rust backend now serves the real Agent Zero HTML shell and static assets, but Socket.IO parity is still incomplete. You can open the UI in a browser and exercise the migrated HTTP flows, but this is not yet a drop-in replacement for the full Python runtime.
 
 ## Step 1: Install Rust
 
@@ -40,6 +43,7 @@ That script:
 
 - builds `a0-server` in release mode
 - installs the binary into `~/.local/bin`
+- installs the `webui/` assets into `~/.local/share/agent-zero/rust/webui`
 - installs a sample config into `~/.config/agent-zero/rust`
 - preserves an existing live config unless you pass `--force-config`
 
@@ -106,13 +110,24 @@ Override host and port at launch time:
 a0-server --host 127.0.0.1 --port 60123 serve
 ```
 
-## Step 6: Smoke Test The HTTP Surface
+## Step 6: Open The Browser UI
+
+Once the server is running, open:
+
+```text
+http://127.0.0.1:50001/
+```
+
+If you overrode the port, use that port instead.
+
+## Step 7: Smoke Test The HTTP Surface
 
 Once the server is running:
 
 ```bash
 curl -s http://127.0.0.1:50001/health
 curl -s http://127.0.0.1:50001/version
+curl -s http://127.0.0.1:50001/ | head -20
 curl -s http://127.0.0.1:50001/api/chat_create \
   -H 'content-type: application/json' \
   -d '{}'

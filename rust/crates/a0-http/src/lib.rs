@@ -4,6 +4,7 @@ mod models;
 mod router;
 
 use std::sync::Arc;
+use std::{env, path::PathBuf};
 
 use a0_config::Settings;
 use a0_core::{BridgeService, BuildInfo, ConversationService};
@@ -17,6 +18,7 @@ pub struct AppState {
     pub settings: Settings,
     pub build_info: BuildInfo,
     pub runtime_id: String,
+    pub ui_asset_root: PathBuf,
     pub health: HealthRegistry,
     pub ws_hub: WsHub,
     pub bridge: Arc<dyn BridgeService>,
@@ -31,6 +33,7 @@ impl AppState {
         conversations: Arc<dyn ConversationService>,
     ) -> Self {
         Self {
+            ui_asset_root: resolve_ui_asset_root(&settings),
             settings,
             build_info: build_info(),
             runtime_id: uuid::Uuid::new_v4().to_string(),
@@ -40,6 +43,29 @@ impl AppState {
             conversations,
         }
     }
+}
+
+fn resolve_ui_asset_root(settings: &Settings) -> PathBuf {
+    if let Some(asset_root) = settings.ui.asset_root.as_ref() {
+        return PathBuf::from(asset_root);
+    }
+
+    if let Ok(current_exe) = env::current_exe() {
+        if let Some(prefix_dir) = current_exe.parent().and_then(|dir| dir.parent()) {
+            let install_candidate = prefix_dir.join("share/agent-zero/rust/webui");
+            if install_candidate.exists() {
+                return install_candidate;
+            }
+        }
+    }
+
+    let workspace_candidate =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..").join("webui");
+    if workspace_candidate.exists() {
+        return workspace_candidate;
+    }
+
+    PathBuf::from("webui")
 }
 
 pub fn test_state() -> AppState {

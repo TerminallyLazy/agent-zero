@@ -6,6 +6,7 @@ pub struct Settings {
     pub observability: ObservabilitySettings,
     pub bridge: BridgeSettings,
     pub security: SecuritySettings,
+    pub ui: UiSettings,
 }
 
 impl Default for Settings {
@@ -27,6 +28,7 @@ impl Default for Settings {
                 csrf_mode: "reserved".to_string(),
                 allowed_origins: vec!["http://localhost:50001".to_string()],
             },
+            ui: UiSettings { asset_root: None },
         }
     }
 }
@@ -58,12 +60,18 @@ pub struct SecuritySettings {
     pub allowed_origins: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UiSettings {
+    pub asset_root: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct PartialSettings {
     pub server: Option<PartialServerSettings>,
     pub observability: Option<PartialObservabilitySettings>,
     pub bridge: Option<PartialBridgeSettings>,
     pub security: Option<PartialSecuritySettings>,
+    pub ui: Option<PartialUiSettings>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -91,6 +99,11 @@ pub struct PartialSecuritySettings {
     pub auth_mode: Option<String>,
     pub csrf_mode: Option<String>,
     pub allowed_origins: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PartialUiSettings {
+    pub asset_root: Option<String>,
 }
 
 impl Settings {
@@ -137,6 +150,13 @@ impl Settings {
             }
             if let Some(allowed_origins) = security.allowed_origins {
                 self.security.allowed_origins = allowed_origins;
+            }
+        }
+
+        if let Some(ui) = partial.ui {
+            if let Some(asset_root) = ui.asset_root {
+                let trimmed = asset_root.trim();
+                self.ui.asset_root = (!trimmed.is_empty()).then(|| trimmed.to_string());
             }
         }
     }

@@ -83,6 +83,10 @@ fn apply_env_pairs(settings: &mut Settings, env_pairs: &[(&str, &str)]) {
             }
             "A0_AUTH_MODE" => settings.security.auth_mode = (*value).to_string(),
             "A0_CSRF_MODE" => settings.security.csrf_mode = (*value).to_string(),
+            "A0_UI_ASSET_ROOT" => {
+                let trimmed = value.trim();
+                settings.ui.asset_root = (!trimmed.is_empty()).then(|| trimmed.to_string());
+            }
             _ => {}
         }
     }

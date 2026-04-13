@@ -16,3 +16,8 @@ timeout_secs = 30
 auth_mode = "reserved"
 csrf_mode = "reserved"
 allowed_origins = ["http://localhost:50001"]
+
+[ui]
+# Optional override. Leave commented to let the binary auto-discover
+# either an installed share directory or the repository's webui/ folder.
+# asset_root = "/absolute/path/to/webui"

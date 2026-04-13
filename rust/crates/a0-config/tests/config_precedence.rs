@@ -56,6 +56,22 @@ fn bridge_settings_load_from_environment() {
 }
 
 #[test]
+fn ui_asset_root_loads_from_environment() {
+    let cli = Cli {
+        command: Command::Serve,
+        config: Some("rust/config/agent-zero.toml".into()),
+        host: None,
+        port: None,
+        log_format: None,
+        log_level: None,
+    };
+
+    let settings = load_settings(cli, &[("A0_UI_ASSET_ROOT", "/tmp/agent-zero-webui")]).unwrap();
+
+    assert_eq!(settings.ui.asset_root.as_deref(), Some("/tmp/agent-zero-webui"));
+}
+
+#[test]
 fn config_path_can_come_from_environment() {
     let config_path = write_test_config("env-config", "10.20.30.40", 61234);
     let cli = Cli {

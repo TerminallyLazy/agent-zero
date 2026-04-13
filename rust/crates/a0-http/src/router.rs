@@ -1,18 +1,22 @@
 use axum::{
     http::{HeaderValue, Method},
-    routing::{get, post},
+    routing::{get, get_service, post},
     Router,
 };
 use tower_http::{
     cors::{Any, CorsLayer},
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    services::ServeDir,
     trace::TraceLayer,
 };
 
 use crate::{handlers, AppState};
 
 pub fn build_router(state: AppState) -> Router {
+    let ui_assets = state.ui_asset_root.clone();
+
     Router::new()
+        .route("/", get(handlers::ui_index))
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready))
         .route("/version", get(handlers::version))
@@ -27,6 +31,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api_log_get", get(handlers::api_log_get).post(handlers::api_log_post))
         .route("/api/poll", post(handlers::api_poll))
         .route("/ws", get(handlers::websocket_upgrade))
+        .fallback_service(get_service(ServeDir::new(ui_assets)))
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(TraceLayer::new_for_http())

@@ -10,6 +10,7 @@ The Rust workspace is runnable and intentionally narrow:
 
 - typed config with `CLI > env > file > defaults`
 - a bootable `a0-server` binary
+- `GET /` plus static `webui/` asset serving for the real browser shell
 - `GET /health`, `GET /ready`, and `GET /version`
 - a basic UI bootstrap route at `GET /api/csrf_token`
 - working UI transport routes for `POST /message` and `POST /message_async`
@@ -61,12 +62,17 @@ Quick install from this repository checkout:
 bash rust/scripts/install-rust-backend.sh
 ```
 
-See [Rust Backend Install](rust-backend-install.md) for the full workflow, installed paths, and verification steps.
+See [Rust Backend Install](rust-backend-install.md) for the full workflow, installed paths, browser URL, and verification steps.
+
+Fastest repo-local launch:
 
 ```bash
 cd /Users/lazy/Documents/agent-zero/rust
 cargo run -p a0-server -- serve
+open http://127.0.0.1:50001/
 ```
+
+Current limitation: the Rust server now fronts the real `webui/` shell and static files, but Socket.IO parity is still incomplete, so this is not yet a full Python-backend replacement.
 
 Override config from the CLI:
 
