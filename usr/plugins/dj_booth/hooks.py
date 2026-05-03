@@ -1,67 +1,36 @@
 """Plugin install/uninstall hooks for dj_booth.
 
-NOTE: every print() call below appears in the Plugin Install log surfaced
-by the Agent Zero UI when the user installs DJ Booth. Keep messages short
-and plain-language so non-technical users see friendly progress instead
-of opaque package lists.
+A0 only auto-calls uninstall() — install() is a manual-install hook that
+isn't reliably triggered by the plugin install flow. The actual dependency
+bootstrap happens on first Execute via helpers.setup.ensure_dependencies(),
+which this hook also delegates to so install can be invoked manually if
+the framework ever wires it up.
+
+Every print() appears in the Plugin Install / Execute log surfaced by the UI.
 """
 import os
-import subprocess
 import sys
+
+# Make sure repo root is on sys.path so 'from usr.plugins.dj_booth...' works
+# when the framework calls these hooks via call_plugin_hook.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 
 def install():
-    # User-visible progress in the Plugin Install log:
-    print("[DJ Booth] Setting up the radio stack — this can take a minute...")
-    print("[DJ Booth] Step 1/3: installing audio system tools (Icecast, Liquidsoap, FFmpeg, audio libs)")
-    apt_packages = [
-        "icecast2", "liquidsoap", "ffmpeg",
-        "libaubio-dev", "libsndfile1", "portaudio19-dev",
-    ]
-    result = subprocess.run(
-        ["apt-get", "install", "-y", "--no-install-recommends"] + apt_packages,
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        # Keep technical detail visible since it's needed for support, but lead with a friendly summary.
-        print(f"[DJ Booth] Heads up: some system packages didn't install. The booth may still work — details: {result.stderr}")
+    """Optional manual install hook. Bootstraps deps via the shared setup helper."""
+    print("[DJ Booth] Installing dependencies...")
+    from usr.plugins.dj_booth.helpers.setup import ensure_dependencies
+    status = ensure_dependencies(verbose=True)
+    if status["ok"]:
+        print("[DJ Booth] All set! Open the DJ Booth from the sidebar and click Start.")
     else:
-        print("[DJ Booth] Audio tools installed.")
-
-    print("[DJ Booth] Step 2/3: installing Python helpers (track analysis, metadata)")
-    py_packages = [
-        "mutagen>=1.47", "requests>=2.31",
-        "aubio>=0.4.9", "numpy>=1.24", "scipy>=1.11",
-    ]
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet"] + py_packages,
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"[DJ Booth] Heads up: some Python packages didn't install — details: {result.stderr}")
-    else:
-        print("[DJ Booth] Python helpers installed.")
-
-    # pyaudio install can fail without portaudio — isolate so other packages don't roll back.
-    print("[DJ Booth] Step 3/3: setting up microphone support (optional)")
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet", "pyaudio>=0.2.14"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        # Non-fatal — mic input is optional and the rest of the booth works fine without it.
-        print(f"[DJ Booth] Microphone support skipped (the rest of the booth works fine without it).")
-    else:
-        print("[DJ Booth] Microphone support ready.")
-
-    music_dir = "/a0/usr/workdir/music"
-    os.makedirs(music_dir, exist_ok=True)
-    print(f"[DJ Booth] Your music folder is ready at: {music_dir}")
-    print("[DJ Booth] All set! Open the DJ Booth from the sidebar and click Start.")
+        print("[DJ Booth] Install incomplete — see messages above. Try clicking Execute later, or contact your administrator.")
 
 
 def uninstall():
-    # Surfaces in the Plugin Install log on uninstall.
+    """Auto-called by A0 on plugin uninstall — stops services + cleanup."""
     print("[DJ Booth] Stopping the stream and cleaning up...")
     try:
         import asyncio
