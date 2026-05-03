@@ -116,3 +116,80 @@ async def test_announce_skips_empty_text(monkeypatch):
     monkeypatch.setattr(lifecycle, "_engine", fake_eng)
     await lifecycle.announce("   ")
     fake_eng.inject_tts.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_health_loop_flips_ever_had_listener_when_count_positive(monkeypatch):
+    """Once a real listener connects, ever_had_listener should latch True."""
+    state.reset_state()
+    s = state.get_state()
+    s.is_running = True
+    assert s.ever_had_listener is False
+
+    fake_ice = AsyncMock()
+    fake_ice.is_alive = AsyncMock(return_value=True)
+    # First poll: 0 listeners. Second poll: 2 listeners. Then cancel.
+    listener_counts = [0, 2]
+    fake_ice.get_listener_count = AsyncMock(side_effect=listener_counts)
+
+    monkeypatch.setattr(lifecycle, "IcecastManager", MagicMock(get=MagicMock(return_value=fake_ice)))
+    monkeypatch.setattr(lifecycle, "_engine", None)
+
+    # Speed up the loop so the test isn't slow.
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await real_sleep(0)
+
+    monkeypatch.setattr(lifecycle.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(lifecycle._health_loop({}))
+    # Yield enough times for two iterations.
+    for _ in range(20):
+        await real_sleep(0)
+        if s.ever_had_listener:
+            break
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert s.listener_count == 2
+    assert s.ever_had_listener is True
+
+
+@pytest.mark.asyncio
+async def test_health_loop_keeps_ever_had_listener_latched(monkeypatch):
+    """Once true, should not flip back even if listeners drop to 0."""
+    state.reset_state()
+    s = state.get_state()
+    s.is_running = True
+    s.ever_had_listener = True
+
+    fake_ice = AsyncMock()
+    fake_ice.is_alive = AsyncMock(return_value=True)
+    fake_ice.get_listener_count = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(lifecycle, "IcecastManager", MagicMock(get=MagicMock(return_value=fake_ice)))
+    monkeypatch.setattr(lifecycle, "_engine", None)
+
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_):
+        await real_sleep(0)
+
+    monkeypatch.setattr(lifecycle.asyncio, "sleep", fast_sleep)
+
+    task = asyncio.create_task(lifecycle._health_loop({}))
+    for _ in range(5):
+        await real_sleep(0)
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert s.ever_had_listener is True  # latched

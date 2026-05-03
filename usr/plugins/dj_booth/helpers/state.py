@@ -51,6 +51,18 @@ class StreamState:
     efx: EFXState = field(default_factory=EFXState)
     spectrum: list[float] = field(default_factory=list)
 
+    # Non-technical-friendly hint fields. These never gate functionality —
+    # they only feed plain-language UI cues for users sharing the stream.
+    # port_forwarded: None = unknown (default), True = a listener has reached us,
+    # False = warning shown after grace period with no connections.
+    port_forwarded: Optional[bool] = None
+    # ever_had_listener latches True the first time listener_count > 0.
+    # The most reliable signal that someone could actually reach the port.
+    ever_had_listener: bool = False
+    # started_at is unix epoch seconds when start_stack succeeded; 0.0 = not started.
+    # UI uses this to decide when enough time has passed to show a "no listener" hint.
+    started_at: float = 0.0
+
 
 _instance: Optional[StreamState] = None
 _lock: Optional[asyncio.Lock] = None

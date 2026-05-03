@@ -6,6 +6,7 @@ import logging
 import os
 import signal
 import socket
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -122,6 +123,11 @@ async def start_stack(cfg: dict, initial_tracks: Optional[list[str]] = None) -> 
         s.mount = cfg.get("mount", "/stream")
         s.stream_url = f"http://localhost:{cfg['icecast_port']}{s.mount}"
         s.icecast_pid = ice.process.pid if ice.process else 0
+        # Reset non-technical-friendly hint fields at every fresh start.
+        # These feed the UI's "Listener Help" panel — see webui/dj-booth.html.
+        s.started_at = time.time()
+        s.ever_had_listener = False
+        s.port_forwarded = None  # unknown until someone actually connects
 
         _health_task = asyncio.create_task(_health_loop(cfg))
 
@@ -281,6 +287,13 @@ async def _health_loop(cfg: dict) -> None:
                 log.error("dj_booth: engine died — health loop exiting")
                 return
             s.listener_count = await ice.get_listener_count()
+            # Latch ever_had_listener the first time anyone connects. This is
+            # our most reliable hint that the port is actually reachable from
+            # wherever this user is sharing the stream. It is informational
+            # only — never used to gate functionality.
+            if s.listener_count > 0 and not s.ever_had_listener:
+                s.ever_had_listener = True
+                s.port_forwarded = True
             if _engine is not None:
                 cur_a = await _engine.get_current("a")
                 cur_b = await _engine.get_current("b")

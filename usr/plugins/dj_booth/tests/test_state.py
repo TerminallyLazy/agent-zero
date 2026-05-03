@@ -111,3 +111,27 @@ def test_reset_state_resets_efx():
     assert s.efx.reverb_wet == 0.0
     assert s.efx.delay_time == 0.3
     assert s.deck_a.pitch == 0.0
+
+
+def test_stream_state_has_listener_hint_fields():
+    """New non-technical-friendly hint fields default to safe 'unknown' values."""
+    reset_state()
+    s = get_state()
+    assert hasattr(s, "port_forwarded")
+    assert s.port_forwarded is None  # None = unknown
+    assert hasattr(s, "ever_had_listener")
+    assert s.ever_had_listener is False
+    assert hasattr(s, "started_at")
+    assert s.started_at == 0.0
+
+
+def test_reset_state_resets_listener_hint_fields():
+    reset_state()
+    s = get_state()
+    s.port_forwarded = True
+    s.ever_had_listener = True
+    s.started_at = 12345.6
+    reset_state()
+    assert s.port_forwarded is None
+    assert s.ever_had_listener is False
+    assert s.started_at == 0.0
