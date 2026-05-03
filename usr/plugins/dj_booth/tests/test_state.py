@@ -75,3 +75,39 @@ def test_reset_state_restores_decks():
     reset_state()
     assert s.deck_a.volume == 1.0
     assert s.mixer.crossfader == 0.5
+
+
+def test_deck_state_has_pitch():
+    from usr.plugins.dj_booth.helpers.state import DeckState
+    d = DeckState()
+    assert hasattr(d, "pitch")
+    assert d.pitch == 0.0
+
+
+def test_efx_state_defaults():
+    from usr.plugins.dj_booth.helpers.state import EFXState
+    e = EFXState()
+    assert e.reverb_wet == 0.0
+    assert e.delay_wet == 0.0
+    assert e.delay_time == 0.3
+    assert e.filter_freq == 20000.0
+    assert e.filter_type == "lowpass"
+
+
+def test_stream_state_has_efx():
+    reset_state()
+    s = get_state()
+    assert hasattr(s, "efx")
+    assert s.efx.reverb_wet == 0.0
+
+
+def test_reset_state_resets_efx():
+    reset_state()
+    s = get_state()
+    s.efx.reverb_wet = 0.7
+    s.efx.delay_time = 0.9
+    s.deck_a.pitch = 3.5
+    reset_state()
+    assert s.efx.reverb_wet == 0.0
+    assert s.efx.delay_time == 0.3
+    assert s.deck_a.pitch == 0.0

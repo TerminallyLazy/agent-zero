@@ -14,12 +14,22 @@ class DeckState:
     eq_low: float = 0.0
     eq_mid: float = 0.0
     eq_high: float = 0.0
+    pitch: float = 0.0  # semitones, -6..+6
 
 
 @dataclass
 class MixerState:
     crossfader: float = 0.5
     master_volume: float = 0.8
+
+
+@dataclass
+class EFXState:
+    reverb_wet: float = 0.0
+    delay_wet: float = 0.0
+    delay_time: float = 0.3
+    filter_freq: float = 20000.0
+    filter_type: str = "lowpass"  # lowpass | highpass | bandpass
 
 
 @dataclass
@@ -38,6 +48,7 @@ class StreamState:
     deck_a: DeckState = field(default_factory=DeckState)
     deck_b: DeckState = field(default_factory=DeckState)
     mixer: MixerState = field(default_factory=MixerState)
+    efx: EFXState = field(default_factory=EFXState)
     spectrum: list[float] = field(default_factory=list)
 
 
