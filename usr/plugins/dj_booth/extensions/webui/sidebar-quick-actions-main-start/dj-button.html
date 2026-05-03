@@ -1,0 +1,12 @@
+<div x-data x-move-after=".config-button#dashboard">
+  <template x-if="$store.djBoothStore">
+    <button
+      class="config-button"
+      @click="openModal('/plugins/dj_booth/webui/dj-booth.html')"
+      title="DJ Booth"
+    >
+      <span class="icon">🎧</span>
+      <span>DJ Booth</span>
+    </button>
+  </template>
+</div>
