@@ -1,12 +1,10 @@
-# dj_booth — Slice 4 (Analysis & Visualization)
+# dj_booth — Slice 5 (Performance Features)
 
 Local Icecast2 streaming server packaged as an Agent Zero plugin. Any ICY-compatible client (Winamp, VLC, foobar2000, browser `<audio>`) can tune in.
 
 ## Status
 
-Slice 4 of 5. Ships: Icecast2 + 2-deck liquidsoap engine (ffmpeg single-stream fallback) + library scan + agent `dj_tool` + two-deck DJ booth UI with crossfader, per-deck volume, 3-band EQ per deck, deck-targeted queue/skip/clear, **on-demand BPM + key detection (aubio + Krumhansl-Schmuckler chromagram)**, **pre-computed waveform peaks rendered to canvas per deck**, and a **real-time 64-band spectrum analyzer** at the top of the mixer panel.
-
-Coming in Slice 5: mic input + cue/loop/scratch + EFX + BPM-sync.
+Slices 1-5 complete. dj_booth ships full DJ booth: 2 decks, mixer, EFX, pitch + BPM sync, TTS announcements, real-time spectrum, BPM/key analysis, library scan. Mic input stubbed (full impl deferred). Cue/loop/scratch deferred. Slice 3 liquidsoap script needs Docker integration test.
 
 ## Prerequisites
 
@@ -17,7 +15,7 @@ Coming in Slice 5: mic input + cue/loop/scratch + EFX + BPM-sync.
 ## Install
 
 1. Open the Plugins UI in Agent Zero
-2. Install `dj_booth`. The install hook runs `apt-get install icecast2 liquidsoap ffmpeg libaubio-dev libsndfile1` and `pip install mutagen aubio numpy scipy`.
+2. Install `dj_booth`. The install hook runs `apt-get install icecast2 liquidsoap ffmpeg libaubio-dev libsndfile1 portaudio19-dev` and `pip install mutagen aubio numpy scipy` (plus best-effort `pyaudio` for future mic capture).
 3. Open Settings → DJ Booth and adjust passwords + paths
 4. Click **Execute** in the plugin row to start the stack
 
