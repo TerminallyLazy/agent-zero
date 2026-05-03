@@ -2,6 +2,8 @@
 
 Engine selection is one-shot at start() — no mid-session auto-swap.
 See spec section 4.4 for failure semantics.
+
+Slice 3: 2-deck architecture with crossfader, per-deck volume + 3-band EQ.
 """
 from __future__ import annotations
 
@@ -25,9 +27,41 @@ set("server.telnet.port", {telnet_port})
 set("log.file", false)
 set("log.stdout", true)
 
-queue = request.queue(id="main")
-source = audio_to_stereo(queue)
-source = mksafe(source)
+# Decks
+deck_a_q = request.queue(id="deck_a")
+deck_b_q = request.queue(id="deck_b")
+
+deck_a = audio_to_stereo(deck_a_q)
+deck_b = audio_to_stereo(deck_b_q)
+
+# 3-band EQ per deck (server-controlled refs)
+eq_low_a  = interactive.float("deck_a.eq_low",  0.0)
+eq_mid_a  = interactive.float("deck_a.eq_mid",  0.0)
+eq_high_a = interactive.float("deck_a.eq_high", 0.0)
+eq_low_b  = interactive.float("deck_b.eq_low",  0.0)
+eq_mid_b  = interactive.float("deck_b.eq_mid",  0.0)
+eq_high_b = interactive.float("deck_b.eq_high", 0.0)
+
+deck_a = ladspa.tap_equalizer(deck_a, low={{eq_low_a}}, mid={{eq_mid_a}}, high={{eq_high_a}})
+deck_b = ladspa.tap_equalizer(deck_b, low={{eq_low_b}}, mid={{eq_mid_b}}, high={{eq_high_b}})
+
+# Channel volumes (server-controlled)
+vol_a = interactive.float("deck_a.volume", 1.0)
+vol_b = interactive.float("deck_b.volume", 1.0)
+deck_a = amplify({{vol_a}}, deck_a)
+deck_b = amplify({{vol_b}}, deck_b)
+
+# Crossfader: 0=A, 1=B
+xf = interactive.float("mixer.crossfader", 0.5)
+mix = add([
+  amplify({{1.0 - !xf}}, deck_a),
+  amplify({{!xf}}, deck_b)
+])
+
+# Master
+master_v = interactive.float("mixer.master_volume", 0.8)
+mix = amplify({{master_v}}, mix)
+mix = mksafe(mix)
 
 output.icecast(
   %mp3(bitrate={bitrate}),
@@ -40,7 +74,7 @@ output.icecast(
   genre="{stream_genre}",
   url="{stream_url}",
   public={public_int},
-  source
+  mix
 )
 '''
 
@@ -64,11 +98,14 @@ class StreamEngine(Protocol):
     name: str
     async def start(self, config: dict, initial_tracks: list[str]) -> None: ...
     async def stop(self) -> None: ...
-    async def queue_track(self, path: str) -> None: ...
-    async def skip(self) -> None: ...
-    async def clear_queue(self) -> None: ...
+    async def queue_track(self, path: str, deck: str = "a") -> None: ...
+    async def skip(self, deck: str = "a") -> None: ...
+    async def clear_queue(self, deck: str = "a") -> None: ...
     async def is_alive(self) -> bool: ...
-    async def get_current(self) -> Optional[str]: ...
+    async def get_current(self, deck: str = "a") -> Optional[str]: ...
+    async def set_crossfader(self, value: float) -> None: ...
+    async def set_volume(self, target: str, value: float) -> None: ...
+    async def set_eq(self, deck: str, low: float, mid: float, high: float) -> None: ...
 
 
 def select_engine() -> StreamEngine:
@@ -84,6 +121,9 @@ class FfmpegEngine:
     Fallback engine. Maintains an asyncio queue of track paths and spawns
     one ffmpeg per track that streams directly to the icecast source.
     No crossfade. Brief silence between tracks is expected.
+
+    Slice 3: deck-aware in signature only — ffmpeg cannot mix two streams,
+    so deck arg is treated as advisory metadata. Mixer ops log warnings.
     """
     name = "ffmpeg"
 
@@ -113,20 +153,31 @@ class FfmpegEngine:
         while not self.queue.empty():
             self.queue.get_nowait()
 
-    async def queue_track(self, path: str) -> None:
-        await self.queue.put(path)
+    async def queue_track(self, path: str, deck: str = "a") -> None:
+        await self.queue.put(path)  # deck arg ignored in fallback
 
-    async def skip(self) -> None:
+    async def skip(self, deck: str = "a") -> None:
         await self._kill_current()
 
-    async def clear_queue(self) -> None:
+    async def clear_queue(self, deck: str = "a") -> None:
         while not self.queue.empty():
             self.queue.get_nowait()
+
+    async def set_crossfader(self, value: float) -> None:
+        log.warning("dj_booth: ffmpeg fallback ignores crossfader")
+
+    async def set_volume(self, target: str, value: float) -> None:
+        log.warning("dj_booth: ffmpeg fallback ignores volume")
+
+    async def set_eq(self, deck: str, low: float, mid: float, high: float) -> None:
+        log.warning("dj_booth: ffmpeg fallback ignores EQ")
 
     async def is_alive(self) -> bool:
         return self._loop_task is not None and not self._loop_task.done()
 
-    async def get_current(self) -> Optional[str]:
+    async def get_current(self, deck: str = "a") -> Optional[str]:
+        if deck != "a":
+            return None  # ffmpeg only plays one stream
         return self._current_path or None
 
     async def _kill_current(self) -> None:
@@ -258,31 +309,34 @@ class LiquidsoapEngine:
         except FileNotFoundError:
             pass
 
-    async def queue_track(self, path: str) -> None:
-        await self._telnet_send(f"main.push {path}")
+    async def queue_track(self, path: str, deck: str = "a") -> None:
+        queue_id = "deck_a" if deck == "a" else "deck_b"
+        await self._telnet_send(f"{queue_id}.push {path}")
 
-    async def skip(self) -> None:
-        await self._telnet_send("main.skip")
+    async def skip(self, deck: str = "a") -> None:
+        queue_id = "deck_a" if deck == "a" else "deck_b"
+        await self._telnet_send(f"{queue_id}.skip")
 
-    async def clear_queue(self) -> None:
-        # Liquidsoap has no built-in queue purge; skip until empty.
-        # Slice 1: cap at 100 skips defensively.
+    async def clear_queue(self, deck: str = "a") -> None:
+        queue_id = "deck_a" if deck == "a" else "deck_b"
         for _ in range(100):
-            resp = await self._telnet_send("main.length")
+            resp = await self._telnet_send(f"{queue_id}.length")
             try:
                 if int(resp.strip()) == 0:
                     return
             except ValueError:
                 return
-            await self._telnet_send("main.skip")
+            await self._telnet_send(f"{queue_id}.skip")
 
     async def is_alive(self) -> bool:
         return self.process is not None and self.process.returncode is None
 
-    async def get_current(self) -> Optional[str]:
+    async def get_current(self, deck: str = "a") -> Optional[str]:
+        # request.on_air returns the on-air rid for whichever queue has audio out;
+        # we use the per-queue "remaining" trick: query deck_a.queue for current.
         try:
-            rid = (await self._telnet_send("request.on_air")).strip()
-            if not rid or rid == "":
+            rid = (await self._telnet_send(f"{'deck_a' if deck == 'a' else 'deck_b'}.queue")).strip().split("\n")[0].strip()
+            if not rid:
                 return None
             meta = await self._telnet_send(f"request.metadata {rid}")
             artist = title = ""
@@ -296,6 +350,24 @@ class LiquidsoapEngine:
             return None
         except Exception:
             return None
+
+    async def set_crossfader(self, value: float) -> None:
+        v = max(0.0, min(1.0, float(value)))
+        await self._telnet_send(f"mixer.crossfader.set {v}")
+
+    async def set_volume(self, target: str, value: float) -> None:
+        """target: 'deck_a' | 'deck_b' | 'master'"""
+        v = max(0.0, min(2.0, float(value)))
+        if target == "master":
+            await self._telnet_send(f"mixer.master_volume.set {v}")
+        else:
+            await self._telnet_send(f"{target}.volume.set {v}")
+
+    async def set_eq(self, deck: str, low: float, mid: float, high: float) -> None:
+        deck_q = "deck_a" if deck == "a" else "deck_b"
+        for band, val in [("low", low), ("mid", mid), ("high", high)]:
+            v = max(-12.0, min(12.0, float(val)))
+            await self._telnet_send(f"{deck_q}.eq_{band}.set {v}")
 
     async def _telnet_send(self, command: str) -> str:
         reader, writer = await asyncio.open_connection(LIQ_TELNET_HOST, LIQ_TELNET_PORT)

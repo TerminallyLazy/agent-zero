@@ -53,7 +53,11 @@ def test_render_liq_script_has_required_sections():
     script = render_liq_script(cfg)
     assert 'set("server.telnet", true)' in script
     assert 'set("server.telnet.port", 1234)' in script
-    assert 'request.queue(id="main")' in script
+    assert 'deck_a_q = request.queue(id="deck_a")' in script
+    assert 'deck_b_q = request.queue(id="deck_b")' in script
+    assert 'interactive.float("mixer.crossfader"' in script
+    assert 'interactive.float("deck_a.volume"' in script
+    assert 'interactive.float("deck_b.eq_high"' in script
     assert "output.icecast" in script
     assert 'mount="/stream"' in script
     assert "%mp3(bitrate=192)" in script
@@ -62,15 +66,15 @@ def test_render_liq_script_has_required_sections():
 
 @pytest.mark.asyncio
 async def test_liquidsoap_engine_telnet_round_trip(monkeypatch):
-    """Stub the telnet send to confirm command formatting."""
+    """Stub the telnet send to confirm command formatting (default deck = a)."""
     eng = LiquidsoapEngine()
     sent = []
 
     async def fake_send(cmd: str) -> str:
         sent.append(cmd)
-        if cmd.startswith("main.push"):
+        if cmd.startswith("deck_a.push") or cmd.startswith("deck_b.push"):
             return "1"
-        if cmd == "request.on_air":
+        if cmd.endswith(".queue"):
             return "1"
         if cmd.startswith("request.metadata"):
             return 'title="X"\nartist="Y"'
@@ -79,10 +83,38 @@ async def test_liquidsoap_engine_telnet_round_trip(monkeypatch):
     monkeypatch.setattr(eng, "_telnet_send", fake_send)
 
     await eng.queue_track("/m/a.mp3")
-    assert sent[-1] == "main.push /m/a.mp3"
+    assert sent[-1] == "deck_a.push /m/a.mp3"
 
     await eng.skip()
-    assert sent[-1] == "main.skip"
+    assert sent[-1] == "deck_a.skip"
 
     current = await eng.get_current()
     assert current and "Y" in current and "X" in current
+
+
+@pytest.mark.asyncio
+async def test_liquidsoap_engine_deck_b_routing(monkeypatch):
+    eng = LiquidsoapEngine()
+    sent = []
+    async def fake(cmd):
+        sent.append(cmd); return ""
+    monkeypatch.setattr(eng, "_telnet_send", fake)
+    await eng.queue_track("/b.mp3", deck="b")
+    assert sent[-1] == "deck_b.push /b.mp3"
+    await eng.skip(deck="b")
+    assert sent[-1] == "deck_b.skip"
+
+
+@pytest.mark.asyncio
+async def test_liquidsoap_engine_set_crossfader_eq(monkeypatch):
+    eng = LiquidsoapEngine()
+    sent = []
+    async def fake(cmd):
+        sent.append(cmd); return ""
+    monkeypatch.setattr(eng, "_telnet_send", fake)
+    await eng.set_crossfader(0.7)
+    assert sent[-1] == "mixer.crossfader.set 0.7"
+    await eng.set_eq("a", -3.0, 1.5, 6.0)
+    assert "deck_a.eq_low.set -3.0" in sent
+    assert "deck_a.eq_mid.set 1.5" in sent
+    assert "deck_a.eq_high.set 6.0" in sent
