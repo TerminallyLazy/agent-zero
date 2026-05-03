@@ -169,6 +169,12 @@ async def stop_stack() -> None:
             await IcecastManager.get().stop()
         except Exception:
             log.exception("dj_booth: icecast stop error")
+        # Auto-close any active public-share tunnel when the stream stops
+        try:
+            from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
+            StreamTunnel.get().stop()
+        except Exception:
+            log.exception("dj_booth: tunnel stop error")
         _state.reset_state(keep_library=True, keep_error=False)
 
 
@@ -305,3 +311,41 @@ async def _health_loop(cfg: dict) -> None:
             raise
         except Exception:
             log.exception("dj_booth: health loop error")
+
+
+
+# Public-share (Cloudflare quick tunnel) wrappers
+async def start_public_share(timeout: float = 30.0) -> str:
+    """Start a Cloudflare quick tunnel for the stream port. Returns public URL or ""."""
+    s = _state.get_state()
+    if not s.is_running:
+        raise RuntimeError("Start the stream first, then click Share Online.")
+    from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
+    from helpers.plugins import get_plugin_config
+    cfg = get_plugin_config("dj_booth") or {}
+    port = int(cfg.get("icecast_port", 8000))
+    tunnel = StreamTunnel.get()
+
+    s.public_url_starting = True
+    s.public_url_error = ""
+
+    # Run blocking start in a thread so we don't block the event loop
+    loop = asyncio.get_event_loop()
+    url = await loop.run_in_executor(None, tunnel.start, port, timeout)
+
+    s.public_url = url or ""
+    s.public_url_error = tunnel.last_error or ""
+    s.public_url_starting = False
+    if url:
+        mount = cfg.get("mount", "/stream")
+        s.public_url = f"{url}{mount}"
+    return s.public_url
+
+
+async def stop_public_share() -> None:
+    s = _state.get_state()
+    from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
+    StreamTunnel.get().stop()
+    s.public_url = ""
+    s.public_url_error = ""
+    s.public_url_starting = False

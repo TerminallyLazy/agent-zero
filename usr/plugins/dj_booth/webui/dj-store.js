@@ -203,6 +203,35 @@ export const store = createStore("djBoothStore", {
         }
     },
 
+    async copyPublicUrl() {
+        const u = this.status?.public_url;
+        if (!u) return;
+        try {
+            await navigator.clipboard.writeText(u);
+            toastFrontendSuccess("Public link copied — share with anyone!", "DJ Booth");
+        } catch (e) {
+            toastFrontendError("Copy failed", "DJ Booth");
+        }
+    },
+
+    async startShare() {
+        toastFrontendInfo("Creating public link — this takes ~10 seconds...", "DJ Booth");
+        const r = await this._control("start_share");
+        if (r && !r.error && r.public_url) {
+            toastFrontendSuccess("Public link ready! Anyone can listen now.", "DJ Booth");
+        }
+    },
+
+    async stopShare() {
+        await this._control("stop_share");
+        toastFrontendInfo("Public link removed.", "DJ Booth");
+    },
+
+    get publicUrl() { return this.status?.public_url || ""; },
+    get publicUrlStarting() { return this.status?.public_url_starting || false; },
+    get publicUrlError() { return this.status?.public_url_error || ""; },
+    get hasPublicUrl() { return !!this.publicUrl; },
+
     get isRunning() { return this.status?.is_running || false; },
     // Listener Help panel: true when stream's been running 2+ minutes and no
     // one has ever connected. Hint, not a warning — could just mean nobody

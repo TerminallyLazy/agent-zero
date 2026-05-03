@@ -63,6 +63,12 @@ class DjControl(ApiHandler):
                 )
             elif action == "announce":
                 await lifecycle.announce(input.get("text", ""))
+            elif action == "start_share":
+                url = await lifecycle.start_public_share()
+                if not url:
+                    return self._error(get_state().public_url_error or "Could not create public link.")
+            elif action == "stop_share":
+                await lifecycle.stop_public_share()
             elif action == "sync_bpm":
                 src_bpm = float(input.get("source_bpm", 0.0))
                 tgt_bpm = float(input.get("target_bpm", 0.0))

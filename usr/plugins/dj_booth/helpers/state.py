@@ -62,6 +62,10 @@ class StreamState:
     # started_at is unix epoch seconds when start_stack succeeded; 0.0 = not started.
     # UI uses this to decide when enough time has passed to show a "no listener" hint.
     started_at: float = 0.0
+    # Public Cloudflare quick-tunnel URL when "Share Online" is active. Empty when off.
+    public_url: str = ""
+    public_url_starting: bool = False
+    public_url_error: str = ""
 
 
 _instance: Optional[StreamState] = None

@@ -327,25 +327,61 @@
       <!-- LISTENER HELP — shown only when the stream is live -->
       <div class="djb-help" x-show="$store.djBoothStore.isRunning">
         <h3>Listener Help</h3>
+
+        <!-- Local link — works on this computer / same network -->
         <div class="djb-help-row">
           <a class="djb-tunein"
              :href="$store.djBoothStore.status?.stream_url || '#'"
-             target="_blank" rel="noopener">▶ Tune in</a>
+             target="_blank" rel="noopener">▶ Tune in (this computer / LAN)</a>
           <button class="djb-btn"
-                  @click="$store.djBoothStore.copyStreamUrl()">Copy URL</button>
+                  @click="$store.djBoothStore.copyStreamUrl()">Copy LAN URL</button>
           <span style="font-family: monospace; font-size: 0.8rem; color: #888;"
                 x-text="$store.djBoothStore.status?.stream_url || ''"></span>
         </div>
+
+        <!-- Share Online — Cloudflare quick tunnel for internet listeners -->
+        <div class="djb-help-row" style="margin-top: 0.75rem;">
+          <template x-if="!$store.djBoothStore.hasPublicUrl && !$store.djBoothStore.publicUrlStarting">
+            <button class="djb-btn start"
+                    @click="$store.djBoothStore.startShare()">🌐 Share Online</button>
+          </template>
+          <template x-if="$store.djBoothStore.publicUrlStarting">
+            <button class="djb-btn" disabled>Creating public link...</button>
+          </template>
+          <template x-if="$store.djBoothStore.hasPublicUrl">
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; flex: 1;">
+              <a class="djb-tunein"
+                 :href="$store.djBoothStore.publicUrl"
+                 target="_blank" rel="noopener">▶ Tune in (public)</a>
+              <button class="djb-btn"
+                      @click="$store.djBoothStore.copyPublicUrl()">Copy Public URL</button>
+              <button class="djb-btn stop"
+                      @click="$store.djBoothStore.stopShare()">Stop Sharing</button>
+              <span style="font-family: monospace; font-size: 0.8rem; color: #00d4ff; word-break: break-all; flex: 1;"
+                    x-text="$store.djBoothStore.publicUrl"></span>
+            </div>
+          </template>
+        </div>
+
         <p>
-          Share this link with anyone you want to listen. Most music players
-          (VLC, Winamp, browsers) can play it directly — paste the URL into
-          the player's "Open Network Stream" box.
+          The <strong>LAN URL</strong> works on this computer and on the same
+          local network. The <strong>Share Online</strong> button creates a free
+          public link via Cloudflare — anyone with the link can listen, no
+          router setup required. The public link disappears when you stop the
+          stream.
         </p>
+
         <div class="djb-callout"
-             x-show="$store.djBoothStore.shouldShowConnectivityHint">
-          Nobody has connected yet. If you're sharing this with someone outside
-          this computer, ask whoever set up Agent Zero to make sure port
-          <strong x-text="$store.djBoothStore.streamPort"></strong> is forwarded.
+             x-show="$store.djBoothStore.publicUrlError">
+          Couldn't create the public link: <span x-text="$store.djBoothStore.publicUrlError"></span>.
+          You can still share the LAN URL with anyone on your network, or click Share Online again to retry.
+        </div>
+
+        <div class="djb-callout"
+             x-show="$store.djBoothStore.shouldShowConnectivityHint && !$store.djBoothStore.hasPublicUrl">
+          Nobody has connected yet. If you want to share this beyond your
+          computer, click <strong>Share Online</strong> above to get a public link
+          anyone can use.
         </div>
       </div>
 
