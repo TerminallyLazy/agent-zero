@@ -29,6 +29,7 @@ PIDFILES_TO_SWEEP = (
 
 _engine: Optional[StreamEngine] = None
 _health_task: Optional[asyncio.Task] = None
+_spectrum_task: Optional[asyncio.Task] = None
 
 
 def _get_icecast() -> IcecastManager:
@@ -86,7 +87,7 @@ def _sweep_stale_pidfiles() -> None:
 
 
 async def start_stack(cfg: dict, initial_tracks: Optional[list[str]] = None) -> None:
-    global _engine, _health_task
+    global _engine, _health_task, _spectrum_task
     s = _state.get_state()
     lock = _state.get_lifecycle_lock()
     async with lock:
@@ -124,12 +125,27 @@ async def start_stack(cfg: dict, initial_tracks: Optional[list[str]] = None) -> 
 
         _health_task = asyncio.create_task(_health_loop(cfg))
 
+        from usr.plugins.dj_booth.helpers.spectrum import spectrum_loop
+
+        def _on_spectrum(bands: list[float]):
+            _state.get_state().spectrum = bands
+
+        _spectrum_task = asyncio.create_task(spectrum_loop(s.stream_url, _on_spectrum))
+
 
 async def stop_stack() -> None:
-    global _engine, _health_task
+    global _engine, _health_task, _spectrum_task
     s = _state.get_state()
     lock = _state.get_lifecycle_lock()
     async with lock:
+        if _spectrum_task:
+            _spectrum_task.cancel()
+            try:
+                await _spectrum_task
+            except asyncio.CancelledError:
+                pass
+            _spectrum_task = None
+        _state.get_state().spectrum = []
         if _health_task:
             _health_task.cancel()
             try:

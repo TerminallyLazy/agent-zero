@@ -38,6 +38,7 @@ class StreamState:
     deck_a: DeckState = field(default_factory=DeckState)
     deck_b: DeckState = field(default_factory=DeckState)
     mixer: MixerState = field(default_factory=MixerState)
+    spectrum: list[float] = field(default_factory=list)
 
 
 _instance: Optional[StreamState] = None
