@@ -5,8 +5,8 @@ import sys
 
 
 def install():
-    print("[dj_booth] installing system packages (icecast2, liquidsoap, ffmpeg)...")
-    apt_packages = ["icecast2", "liquidsoap", "ffmpeg"]
+    print("[dj_booth] installing system packages (icecast2, liquidsoap, ffmpeg, libaubio-dev, libsndfile1)...")
+    apt_packages = ["icecast2", "liquidsoap", "ffmpeg", "libaubio-dev", "libsndfile1"]
     result = subprocess.run(
         ["apt-get", "install", "-y", "--no-install-recommends"] + apt_packages,
         capture_output=True, text=True,
@@ -17,7 +17,10 @@ def install():
         print("[dj_booth] system packages installed.")
 
     print("[dj_booth] installing python packages...")
-    py_packages = ["mutagen>=1.47", "requests>=2.31"]
+    py_packages = [
+        "mutagen>=1.47", "requests>=2.31",
+        "aubio>=0.4.9", "numpy>=1.24", "scipy>=1.11",
+    ]
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", "--quiet"] + py_packages,
         capture_output=True, text=True,
