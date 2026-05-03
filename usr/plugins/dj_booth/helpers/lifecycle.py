@@ -314,38 +314,80 @@ async def _health_loop(cfg: dict) -> None:
 
 
 
+_share_task: Optional[asyncio.Task] = None
+
+
 # Public-share (Cloudflare quick tunnel) wrappers
-async def start_public_share(timeout: float = 30.0) -> str:
-    """Start a Cloudflare quick tunnel for the stream port. Returns public URL or ""."""
+async def start_public_share(timeout: float = 60.0) -> str:
+    """
+    Kick off a Cloudflare quick tunnel for the stream port. Non-blocking:
+    returns immediately with public_url_starting=True. The frontend polls
+    /stream_status every second and will pick up public_url when the tunnel
+    is ready (typically 5-15 seconds), or public_url_error if it failed.
+    """
+    global _share_task
     s = _state.get_state()
     if not s.is_running:
         raise RuntimeError("Start the stream first, then click Share Online.")
-    from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
+
+    # Idempotent: if a tunnel is already running or starting, don't kick off another
+    if s.public_url:
+        return s.public_url
+    if s.public_url_starting:
+        return ""
+
     from helpers.plugins import get_plugin_config
     cfg = get_plugin_config("dj_booth") or {}
     port = int(cfg.get("icecast_port", 8000))
-    tunnel = StreamTunnel.get()
+    mount = cfg.get("mount", "/stream")
 
     s.public_url_starting = True
     s.public_url_error = ""
+    s.public_url = ""
 
-    # Run blocking start in a thread so we don't block the event loop
-    loop = asyncio.get_event_loop()
-    url = await loop.run_in_executor(None, tunnel.start, port, timeout)
+    async def _runner():
+        from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
+        tunnel = StreamTunnel.get()
+        loop = asyncio.get_event_loop()
+        try:
+            url = await loop.run_in_executor(None, tunnel.start, port, timeout)
+            st = _state.get_state()
+            if url:
+                st.public_url = f"{url}{mount}"
+                st.public_url_error = ""
+                log.info("dj_booth: public share live at %s", st.public_url)
+            else:
+                st.public_url = ""
+                st.public_url_error = tunnel.last_error or "Tunnel could not be created."
+                log.warning("dj_booth: public share failed: %s", st.public_url_error)
+        except Exception as e:
+            log.exception("dj_booth: public share error")
+            _state.get_state().public_url_error = f"unexpected error: {e}"
+        finally:
+            _state.get_state().public_url_starting = False
 
-    s.public_url = url or ""
-    s.public_url_error = tunnel.last_error or ""
-    s.public_url_starting = False
-    if url:
-        mount = cfg.get("mount", "/stream")
-        s.public_url = f"{url}{mount}"
-    return s.public_url
+    _share_task = asyncio.create_task(_runner())
+    return ""
 
 
 async def stop_public_share() -> None:
+    global _share_task
     s = _state.get_state()
+    if _share_task and not _share_task.done():
+        _share_task.cancel()
+        try:
+            await _share_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        _share_task = None
+
     from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
-    StreamTunnel.get().stop()
+    loop = asyncio.get_event_loop()
+    try:
+        await loop.run_in_executor(None, StreamTunnel.get().stop)
+    except Exception:
+        log.exception("dj_booth: tunnel stop error")
+
     s.public_url = ""
     s.public_url_error = ""
     s.public_url_starting = False
