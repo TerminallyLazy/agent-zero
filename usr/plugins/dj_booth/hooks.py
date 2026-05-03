@@ -5,8 +5,11 @@ import sys
 
 
 def install():
-    print("[dj_booth] installing system packages (icecast2, liquidsoap, ffmpeg, libaubio-dev, libsndfile1)...")
-    apt_packages = ["icecast2", "liquidsoap", "ffmpeg", "libaubio-dev", "libsndfile1"]
+    print("[dj_booth] installing system packages (icecast2, liquidsoap, ffmpeg, libaubio-dev, libsndfile1, portaudio19-dev)...")
+    apt_packages = [
+        "icecast2", "liquidsoap", "ffmpeg",
+        "libaubio-dev", "libsndfile1", "portaudio19-dev",
+    ]
     result = subprocess.run(
         ["apt-get", "install", "-y", "--no-install-recommends"] + apt_packages,
         capture_output=True, text=True,
@@ -29,6 +32,17 @@ def install():
         print(f"[dj_booth] WARNING: pip install failed: {result.stderr}")
     else:
         print("[dj_booth] python packages installed.")
+
+    # pyaudio install can fail without portaudio — isolate so other packages don't roll back.
+    print("[dj_booth] installing pyaudio (best-effort, mic capture)...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--quiet", "pyaudio>=0.2.14"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"[dj_booth] WARNING: pyaudio install failed (mic disabled): {result.stderr.strip()}")
+    else:
+        print("[dj_booth] pyaudio installed.")
 
     music_dir = "/a0/usr/workdir/music"
     os.makedirs(music_dir, exist_ok=True)
