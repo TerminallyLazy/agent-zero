@@ -21,6 +21,37 @@ class Track:
     duration: float = 0.0
     file_size: int = 0
     format: str = ""
+    bpm: float = 0.0
+    key: str = ""
+    waveform_peaks: list[float] = field(default_factory=list)
+
+
+def compute_waveform(path: str, bucket_count: int = 1000) -> list[float]:
+    try:
+        import subprocess
+        import numpy as np
+        proc = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-i", path, "-f", "f32le", "-ac", "1", "-ar", "8000", "-"],
+            capture_output=True, timeout=60,
+        )
+        if proc.returncode != 0 or not proc.stdout:
+            return []
+        pcm = np.frombuffer(proc.stdout, dtype=np.float32)
+        if pcm.size == 0:
+            return []
+        bucket_size = max(1, pcm.size // bucket_count)
+        buckets = []
+        for i in range(bucket_count):
+            chunk = pcm[i * bucket_size:(i + 1) * bucket_size]
+            if chunk.size:
+                buckets.append(float(np.abs(chunk).max()))
+            else:
+                buckets.append(0.0)
+        peak = max(buckets) or 1.0
+        return [b / peak for b in buckets]
+    except Exception:
+        return []
 
 
 class LibraryManager:
@@ -90,3 +121,15 @@ class LibraryManager:
 
     def get_track(self, path: str) -> Optional[Track]:
         return self.index.get(path)
+
+    async def analyze(self, path: str) -> Optional[Track]:
+        t = self.get_track(path)
+        if t is None:
+            return None
+        from usr.plugins.dj_booth.helpers import bpm_key
+        import asyncio
+        loop = asyncio.get_event_loop()
+        t.bpm = await bpm_key.detect_bpm(path)
+        t.key = await bpm_key.detect_key(path)
+        t.waveform_peaks = await loop.run_in_executor(None, compute_waveform, path)
+        return t

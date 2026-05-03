@@ -1,8 +1,15 @@
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock
 import pytest
 from usr.plugins.dj_booth.helpers.library import LibraryManager, Track
+
+
+def _async_const(val):
+    async def _f(*a, **kw):
+        return val
+    return _f
 
 
 def make_dummy_audio(path: Path, content: bytes = b"ID3\x03\x00\x00\x00\x00\x00\x00"):
@@ -64,3 +71,37 @@ def test_scan_returns_count(music_dir):
     lib = LibraryManager()
     count = lib.scan(music_dir)
     assert count == len(lib.tracks)
+
+
+def test_compute_waveform_returns_empty_on_ffmpeg_failure(monkeypatch):
+    from usr.plugins.dj_booth.helpers import library
+    monkeypatch.setattr("subprocess.run",
+        lambda *a, **kw: type("R", (), {"returncode": 1, "stdout": b""})())
+    assert library.compute_waveform("/x.mp3") == []
+
+
+def test_track_has_analysis_fields():
+    from usr.plugins.dj_booth.helpers.library import Track
+    t = Track(path="/x.mp3")
+    assert t.bpm == 0.0
+    assert t.key == ""
+    assert t.waveform_peaks == []
+
+
+@pytest.mark.asyncio
+async def test_library_analyze_populates_track(monkeypatch, tmp_path):
+    from usr.plugins.dj_booth.helpers.library import LibraryManager, Track, AUDIO_EXTENSIONS
+    from usr.plugins.dj_booth.helpers import bpm_key, library as lib_mod
+    p = tmp_path / "x.mp3"
+    p.write_bytes(b"\x00" * 1024)
+    lib = LibraryManager()
+    lib.scan(str(tmp_path))
+    monkeypatch.setattr(bpm_key, "detect_bpm",
+                        AsyncMock(return_value=120.0) if False else _async_const(120.0))
+    monkeypatch.setattr(bpm_key, "detect_key", _async_const("C major"))
+    monkeypatch.setattr(lib_mod, "compute_waveform", lambda path, bucket_count=1000: [0.5] * 1000)
+    t = await lib.analyze(str(p))
+    assert t is not None
+    assert t.bpm == 120.0
+    assert t.key == "C major"
+    assert len(t.waveform_peaks) == 1000
