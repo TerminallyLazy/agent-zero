@@ -54,30 +54,93 @@ def compute_waveform(path: str, bucket_count: int = 1000) -> list[float]:
         return []
 
 
+def discover_music_dirs(configured: str = "") -> list[str]:
+    """Return a de-duped list of plausible music directories on this host.
+    Caller starts with whatever's in plugin config, then we add common spots
+    so non-technical users don't have to know about the container's filesystem."""
+    candidates = [
+        configured,
+        "/a0/usr/workdir/music",
+        "/a0/work_dir",
+        "/a0/usr/workdir",
+        "/a0/uploads",
+        "/root/Music",
+        "/home/agent/Music",
+        os.path.expanduser("~/Music"),
+        os.path.expanduser("~/music"),
+    ]
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in candidates:
+        if not c:
+            continue
+        try:
+            real = os.path.realpath(c)
+        except Exception:
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        if os.path.isdir(real):
+            out.append(real)
+    return out
+
+
 class LibraryManager:
-    """Scans a directory and exposes tracks. Not a singleton — kept on the plugin runtime."""
+    """Scans one or more directories and exposes tracks."""
 
     def __init__(self):
         self.tracks: list[Track] = []
         self.index: dict[str, Track] = {}
         self.last_dir: str = ""
+        self.scanned_paths: list[str] = []
+        self.scanned_path_counts: dict[str, int] = {}
+        self.last_scan_at: float = 0.0
+        self.scan_in_progress: bool = False
 
-    def scan(self, music_dir: str) -> int:
-        self.tracks.clear()
-        self.index.clear()
-        self.last_dir = music_dir
-        if not os.path.isdir(music_dir):
-            return 0
-        for root, _dirs, files in os.walk(music_dir):
-            for name in files:
-                p = Path(root) / name
-                if p.suffix.lower() not in AUDIO_EXTENSIONS:
+    def scan(self, music_dir) -> int:
+        """
+        Scan one or more directories. `music_dir` accepts a string (back-compat
+        with Slice 1) or a list of strings.
+        """
+        if isinstance(music_dir, (list, tuple, set)):
+            paths = [p for p in music_dir if p]
+        elif music_dir:
+            paths = [str(music_dir)]
+        else:
+            paths = []
+
+        import time
+        self.scan_in_progress = True
+        try:
+            self.tracks.clear()
+            self.index.clear()
+            self.scanned_paths = []
+            self.scanned_path_counts = {}
+            self.last_dir = paths[0] if paths else ""
+            for p in paths:
+                if not os.path.isdir(p):
                     continue
-                track = self._read_track(str(p))
-                if track is not None:
-                    self.tracks.append(track)
-                    self.index[track.path] = track
-        return len(self.tracks)
+                count_before = len(self.tracks)
+                for root, _dirs, files in os.walk(p):
+                    for name in files:
+                        fp = Path(root) / name
+                        if fp.suffix.lower() not in AUDIO_EXTENSIONS:
+                            continue
+                        # De-dup by realpath in case multiple roots overlap (e.g. mounts)
+                        rp = os.path.realpath(str(fp))
+                        if rp in self.index:
+                            continue
+                        track = self._read_track(rp)
+                        if track is not None:
+                            self.tracks.append(track)
+                            self.index[track.path] = track
+                self.scanned_paths.append(p)
+                self.scanned_path_counts[p] = len(self.tracks) - count_before
+            self.last_scan_at = time.time()
+            return len(self.tracks)
+        finally:
+            self.scan_in_progress = False
 
     def _read_track(self, path: str) -> Optional[Track]:
         try:

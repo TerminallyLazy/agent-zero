@@ -47,13 +47,21 @@ def main():
         music_dir = cfg.get("music_dir", "/a0/usr/workdir/music")
         os.makedirs(music_dir, exist_ok=True)
 
+        from usr.plugins.dj_booth.helpers.library import discover_music_dirs
         lib = _get_library()
-        scanned = lib.scan(music_dir)
-        get_state().library_count = scanned
-        print(f"[DJ Booth] Music library: {scanned} tracks in {music_dir}")
+        paths = discover_music_dirs(music_dir)
+        scanned = lib.scan(paths)
+        s = get_state()
+        s.library_count = scanned
+        s.last_scan_at = lib.last_scan_at
+        s.scanned_paths = list(lib.scanned_paths)
+        s.scanned_path_counts = dict(lib.scanned_path_counts)
+        print(f"[DJ Booth] Music library: {scanned} tracks across {len(lib.scanned_paths)} folder(s)")
+        for p in lib.scanned_paths:
+            n = lib.scanned_path_counts.get(p, 0)
+            print(f"[DJ Booth]   • {p}: {n} track(s)")
         if scanned == 0:
-            print(f"[DJ Booth] (No music yet — copy audio files into {music_dir}.)")
-            print(f"[DJ Booth] You can add files later and click Scan in the DJ Booth.")
+            print(f"[DJ Booth] (No music yet — drag-drop audio files onto the library panel in the DJ Booth, or copy them into {music_dir}.)")
 
         print("[DJ Booth] ")
         print("[DJ Booth] ✓ Setup complete!")

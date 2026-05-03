@@ -67,6 +67,15 @@ class StreamState:
     public_url_starting: bool = False
     public_url_error: str = ""
 
+    # Library scan visibility — drives the "Last scanned X ago" line and the
+    # per-path counts in the UI so users can see exactly what's being found
+    # and where, without diving into terminal output.
+    last_scan_at: float = 0.0
+    scan_in_progress: bool = False
+    scanned_paths: list[str] = field(default_factory=list)
+    # Per-path counts: { "/a0/usr/workdir/music": 7, "/a0/uploads": 0, ... }
+    scanned_path_counts: dict = field(default_factory=dict)
+
 
 _instance: Optional[StreamState] = None
 _lock: Optional[asyncio.Lock] = None

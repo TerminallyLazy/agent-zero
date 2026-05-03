@@ -60,10 +60,22 @@ class DjControl(ApiHandler):
                 )
             elif action == "scan_library":
                 # Library scan is sync + cheap — no need to schedule on the runtime.
+                # Auto-discover plausible music dirs in addition to what's configured
+                # so users don't have to know about the container's filesystem layout.
+                from usr.plugins.dj_booth.helpers.library import discover_music_dirs
                 lib = _get_library()
-                target = input.get("dir") or cfg.get("music_dir")
-                count = lib.scan(target)
-                get_state().library_count = count
+                override = input.get("dir") or input.get("paths")
+                if override:
+                    paths = override if isinstance(override, list) else [override]
+                else:
+                    paths = discover_music_dirs(cfg.get("music_dir", ""))
+                count = lib.scan(paths)
+                s = get_state()
+                s.library_count = count
+                s.last_scan_at = lib.last_scan_at
+                s.scanned_paths = list(lib.scanned_paths)
+                s.scanned_path_counts = dict(lib.scanned_path_counts)
+                s.scan_in_progress = False
             elif action == "set_pitch":
                 await run_async(
                     lifecycle.set_pitch(input.get("deck", "a"), float(input.get("semitones", 0.0))),

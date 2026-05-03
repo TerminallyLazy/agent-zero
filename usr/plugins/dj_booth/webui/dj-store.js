@@ -124,12 +124,82 @@ export const store = createStore("djBoothStore", {
     // Selected deck — UI tracks which deck is the "active" target for library double-click
     selectedDeck: "a",
     selectDeck(d) { this.selectedDeck = d; },
+    isUploading: false,
+    isScanning: false,
     async scanLibrary() {
-        const r = await this._control("scan_library");
-        if (r && !r.error) {
-            toastFrontendSuccess(`Scanned ${r.library_count} tracks`, "DJ Booth");
-            await this.fetchLibrary();
+        this.isScanning = true;
+        try {
+            const r = await this._control("scan_library");
+            if (r && !r.error) {
+                const pathCount = (r.scanned_paths || []).length;
+                toastFrontendSuccess(
+                    `Scanned ${r.library_count} tracks across ${pathCount} folder(s)`,
+                    "DJ Booth",
+                );
+                await this.fetchLibrary();
+            }
+        } finally {
+            this.isScanning = false;
         }
+    },
+
+    async uploadFiles(fileList) {
+        if (!fileList || !fileList.length) return;
+        const audioFiles = Array.from(fileList).filter(f => {
+            const n = (f.name || "").toLowerCase();
+            return /\.(mp3|flac|ogg|oga|m4a|aac|wav|aiff|aif)$/.test(n);
+        });
+        if (!audioFiles.length) {
+            toastFrontendError("No audio files in that drop. Try MP3/FLAC/OGG/M4A/WAV.", "DJ Booth");
+            return;
+        }
+        this.isUploading = true;
+        try {
+            const fd = new FormData();
+            for (const f of audioFiles) fd.append("files[]", f, f.name);
+            const res = await fetch("/api/plugins/dj_booth/upload_track", {
+                method: "POST",
+                body: fd,
+            });
+            const data = await res.json();
+            if (data.error) {
+                toastFrontendError(data.error, "DJ Booth");
+                return;
+            }
+            const okCount = (data.uploaded || []).length;
+            const skipCount = (data.rejected_non_audio || []).length;
+            const failCount = (data.failed || []).length;
+            const parts = [];
+            if (okCount) parts.push(`${okCount} added`);
+            if (skipCount) parts.push(`${skipCount} skipped (not audio)`);
+            if (failCount) parts.push(`${failCount} failed`);
+            toastFrontendSuccess(parts.join(" • ") || "Done", "DJ Booth");
+            await this.fetchLibrary();
+            await this.fetchStatus();
+        } catch (e) {
+            toastFrontendError(`Upload failed: ${e}`, "DJ Booth");
+        } finally {
+            this.isUploading = false;
+        }
+    },
+
+    // Returns "X minutes ago" / "just now" / "never" — keeps the scan-status
+    // line in the library panel readable without the user having to think
+    // about timestamps.
+    get lastScanLabel() {
+        const ts = this.status?.last_scan_at || 0;
+        if (!ts) return "never";
+        const ageSec = Math.max(0, Date.now() / 1000 - ts);
+        if (ageSec < 5) return "just now";
+        if (ageSec < 60) return `${Math.round(ageSec)} seconds ago`;
+        if (ageSec < 3600) return `${Math.round(ageSec / 60)} minutes ago`;
+        return `${Math.round(ageSec / 3600)} hours ago`;
+    },
+    get scannedPaths() {
+        return this.status?.scanned_paths || [];
+    },
+    get scannedPathCounts() {
+        return this.status?.scanned_path_counts || {};
     },
 
     async fetchLibrary() {

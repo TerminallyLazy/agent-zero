@@ -105,3 +105,50 @@ async def test_library_analyze_populates_track(monkeypatch, tmp_path):
     assert t.bpm == 120.0
     assert t.key == "C major"
     assert len(t.waveform_peaks) == 1000
+
+
+def test_discover_music_dirs_filters_to_existing(tmp_path):
+    from usr.plugins.dj_booth.helpers.library import discover_music_dirs
+    real = tmp_path / "music"
+    real.mkdir()
+    (tmp_path / "songs.txt").write_text("not a dir")
+    paths = discover_music_dirs(str(real))
+    # The configured path should be in the result; the file shouldn't.
+    assert str(real) in paths or str(real.resolve()) in paths
+    # No duplicates
+    assert len(paths) == len(set(paths))
+
+
+def test_scan_multi_path_dedups_overlapping_roots(tmp_path):
+    from usr.plugins.dj_booth.helpers.library import LibraryManager
+    a = tmp_path / "a"
+    a.mkdir()
+    (a / "x.mp3").write_bytes(b"\x00" * 256)
+    lib = LibraryManager()
+    # Pass the same dir twice — should not double-count
+    count = lib.scan([str(a), str(a)])
+    assert count == 1
+    assert len(lib.tracks) == 1
+
+
+def test_scan_records_per_path_counts(tmp_path):
+    from usr.plugins.dj_booth.helpers.library import LibraryManager
+    a = tmp_path / "a"; b = tmp_path / "b"
+    a.mkdir(); b.mkdir()
+    (a / "1.mp3").write_bytes(b"\x00" * 256)
+    (a / "2.mp3").write_bytes(b"\x00" * 256)
+    (b / "3.flac").write_bytes(b"\x00" * 256)
+    lib = LibraryManager()
+    lib.scan([str(a), str(b)])
+    assert lib.scanned_path_counts[str(a)] == 2
+    assert lib.scanned_path_counts[str(b)] == 1
+    assert lib.last_scan_at > 0
+
+
+def test_scan_ignores_string_for_back_compat(tmp_path):
+    """Slice 1 callers passed a single string; that path must still work."""
+    from usr.plugins.dj_booth.helpers.library import LibraryManager
+    (tmp_path / "x.mp3").write_bytes(b"\x00" * 256)
+    lib = LibraryManager()
+    count = lib.scan(str(tmp_path))
+    assert count == 1

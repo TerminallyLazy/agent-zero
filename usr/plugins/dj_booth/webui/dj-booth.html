@@ -48,6 +48,7 @@
                   border: 1px solid #3a3a4e; color: #e8e8f0; border-radius: 4px;
                   margin-bottom: 0.5rem; }
     .djb-empty { color: #888; font-style: italic; padding: 1rem; text-align: center; }
+    .djb-library { position: relative; }
     .djb-controls { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
     .djb-fader { width: 100%; }
     .djb-eq { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem; }
@@ -291,11 +292,57 @@
       </div>
 
       <!-- LIBRARY -->
-      <div class="djb-panel" style="margin-top: 1rem;">
-        <h3>Library
-          <button class="djb-btn sm" style="float:right;" @click="$store.djBoothStore.scanLibrary()">Scan</button>
+      <div class="djb-panel djb-library" style="margin-top: 1rem;"
+           x-data="{ dragOver: false }"
+           @dragenter.prevent="dragOver = true"
+           @dragover.prevent="dragOver = true"
+           @dragleave.prevent="dragOver = false"
+           @drop.prevent="dragOver = false; $store.djBoothStore.uploadFiles($event.dataTransfer.files)">
+        <h3 style="display: flex; align-items: center; gap: 0.5rem;">
+          <span>Library</span>
+          <span style="font-size: 0.75rem; color: #888; font-weight: normal; text-transform: none; letter-spacing: 0;"
+                x-text="`${$store.djBoothStore.status?.library_count || 0} tracks · last scanned ${$store.djBoothStore.lastScanLabel}`"></span>
+          <span style="margin-left: auto; display: flex; gap: 0.4rem;">
+            <input type="file" multiple accept="audio/*,.mp3,.flac,.ogg,.oga,.m4a,.aac,.wav,.aiff,.aif"
+                   x-ref="fileInput" style="display: none"
+                   @change="$store.djBoothStore.uploadFiles($event.target.files); $event.target.value=''">
+            <button class="djb-btn sm" @click="$refs.fileInput.click()"
+                    :disabled="$store.djBoothStore.isUploading">
+              <span x-show="!$store.djBoothStore.isUploading">+ Add Music</span>
+              <span x-show="$store.djBoothStore.isUploading">Uploading...</span>
+            </button>
+            <button class="djb-btn sm" @click="$store.djBoothStore.scanLibrary()"
+                    :disabled="$store.djBoothStore.isScanning">
+              <span x-show="!$store.djBoothStore.isScanning">⟳ Rescan</span>
+              <span x-show="$store.djBoothStore.isScanning">Scanning...</span>
+            </button>
+          </span>
         </h3>
-        <input class="djb-search" type="text" placeholder="search title / artist / album"
+
+        <!-- Drop zone overlay shown when user drags files over the panel -->
+        <div x-show="dragOver"
+             style="position: absolute; inset: 0; background: rgba(0, 212, 255, 0.15);
+                    border: 2px dashed #00d4ff; border-radius: 8px; display: flex;
+                    align-items: center; justify-content: center; pointer-events: none;
+                    font-size: 1.2rem; color: #00d4ff; z-index: 5;">
+          Drop audio files to add them to the library
+        </div>
+
+        <!-- Per-path scan results so users can see WHERE tracks were found -->
+        <details style="margin-bottom: 0.5rem; font-size: 0.75rem; color: #888;"
+                 x-show="$store.djBoothStore.scannedPaths.length">
+          <summary style="cursor: pointer;">Scanned folders</summary>
+          <ul style="margin: 0.25rem 0 0 1rem; padding: 0; list-style: none;">
+            <template x-for="p in $store.djBoothStore.scannedPaths" :key="p">
+              <li style="font-family: monospace;">
+                <span x-text="p"></span>
+                — <strong x-text="$store.djBoothStore.scannedPathCounts[p] || 0"></strong> tracks
+              </li>
+            </template>
+          </ul>
+        </details>
+
+        <input class="djb-search" type="text" placeholder="search title / artist / album / genre"
                :value="$store.djBoothStore.librarySearch"
                @input.debounce.300ms="$store.djBoothStore.onSearchChange($event.target.value)">
         <div class="djb-list lib">
@@ -318,8 +365,11 @@
                       @click.stop="$store.djBoothStore.queueTrack(t.path, 'b')">→B</button>
             </div>
           </template>
-          <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length">
-            no tracks — click Scan
+          <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length"
+               style="padding: 1.5rem 1rem;">
+            <strong>No tracks yet.</strong><br>
+            Drag-and-drop audio files anywhere on this panel,<br>
+            or click <em>+ Add Music</em> above to pick files from your computer.
           </div>
         </div>
       </div>
