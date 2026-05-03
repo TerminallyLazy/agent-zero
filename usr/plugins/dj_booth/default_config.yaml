@@ -1,0 +1,13 @@
+music_dir: /a0/usr/workdir/music
+icecast_port: 8000
+icecast_admin_password: hackme
+icecast_source_password: sourcepass
+stream_name: "Agent Zero Radio"
+stream_description: "Powered by Agent Zero"
+stream_genre: "Electronic"
+stream_url: "http://localhost:8000"
+mount: "/stream"
+bitrate: 192
+sample_rate: 44100
+max_listeners: 100
+public_listing: false

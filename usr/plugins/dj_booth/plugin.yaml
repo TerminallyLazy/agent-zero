@@ -1,0 +1,11 @@
+name: dj_booth
+title: DJ Booth
+description: >
+  Local Icecast2 streaming server with a minimal control panel.
+  Compatible with Winamp, VLC, foobar2000, and any ICY-protocol player.
+version: 0.1.0
+settings_sections:
+  - external
+per_project_config: false
+per_agent_config: false
+always_enabled: false
