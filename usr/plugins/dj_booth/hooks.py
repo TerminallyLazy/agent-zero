@@ -1,11 +1,19 @@
-"""Plugin install/uninstall hooks for dj_booth."""
+"""Plugin install/uninstall hooks for dj_booth.
+
+NOTE: every print() call below appears in the Plugin Install log surfaced
+by the Agent Zero UI when the user installs DJ Booth. Keep messages short
+and plain-language so non-technical users see friendly progress instead
+of opaque package lists.
+"""
 import os
 import subprocess
 import sys
 
 
 def install():
-    print("[dj_booth] installing system packages (icecast2, liquidsoap, ffmpeg, libaubio-dev, libsndfile1, portaudio19-dev)...")
+    # User-visible progress in the Plugin Install log:
+    print("[DJ Booth] Setting up the radio stack — this can take a minute...")
+    print("[DJ Booth] Step 1/3: installing audio system tools (Icecast, Liquidsoap, FFmpeg, audio libs)")
     apt_packages = [
         "icecast2", "liquidsoap", "ffmpeg",
         "libaubio-dev", "libsndfile1", "portaudio19-dev",
@@ -15,11 +23,12 @@ def install():
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        print(f"[dj_booth] WARNING: apt install failed (continuing): {result.stderr}")
+        # Keep technical detail visible since it's needed for support, but lead with a friendly summary.
+        print(f"[DJ Booth] Heads up: some system packages didn't install. The booth may still work — details: {result.stderr}")
     else:
-        print("[dj_booth] system packages installed.")
+        print("[DJ Booth] Audio tools installed.")
 
-    print("[dj_booth] installing python packages...")
+    print("[DJ Booth] Step 2/3: installing Python helpers (track analysis, metadata)")
     py_packages = [
         "mutagen>=1.47", "requests>=2.31",
         "aubio>=0.4.9", "numpy>=1.24", "scipy>=1.11",
@@ -29,29 +38,31 @@ def install():
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        print(f"[dj_booth] WARNING: pip install failed: {result.stderr}")
+        print(f"[DJ Booth] Heads up: some Python packages didn't install — details: {result.stderr}")
     else:
-        print("[dj_booth] python packages installed.")
+        print("[DJ Booth] Python helpers installed.")
 
     # pyaudio install can fail without portaudio — isolate so other packages don't roll back.
-    print("[dj_booth] installing pyaudio (best-effort, mic capture)...")
+    print("[DJ Booth] Step 3/3: setting up microphone support (optional)")
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", "--quiet", "pyaudio>=0.2.14"],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        print(f"[dj_booth] WARNING: pyaudio install failed (mic disabled): {result.stderr.strip()}")
+        # Non-fatal — mic input is optional and the rest of the booth works fine without it.
+        print(f"[DJ Booth] Microphone support skipped (the rest of the booth works fine without it).")
     else:
-        print("[dj_booth] pyaudio installed.")
+        print("[DJ Booth] Microphone support ready.")
 
     music_dir = "/a0/usr/workdir/music"
     os.makedirs(music_dir, exist_ok=True)
-    print(f"[dj_booth] music directory ready: {music_dir}")
-    print("[dj_booth] install complete.")
+    print(f"[DJ Booth] Your music folder is ready at: {music_dir}")
+    print("[DJ Booth] All set! Open the DJ Booth from the sidebar and click Start.")
 
 
 def uninstall():
-    print("[dj_booth] uninstalling — stopping services...")
+    # Surfaces in the Plugin Install log on uninstall.
+    print("[DJ Booth] Stopping the stream and cleaning up...")
     try:
         import asyncio
         from usr.plugins.dj_booth.helpers.lifecycle import stop_stack
@@ -64,5 +75,5 @@ def uninstall():
         except RuntimeError:
             asyncio.run(stop_stack())
     except Exception as e:
-        print(f"[dj_booth] uninstall warning: {e}")
-    print("[dj_booth] uninstall complete.")
+        print(f"[DJ Booth] Heads up during shutdown: {e}")
+    print("[DJ Booth] DJ Booth removed.")

@@ -17,7 +17,7 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Stream Name</div>
-                            <div class="field-description">Display name reported to listeners.</div>
+                            <div class="field-description">The name listeners see in their music player. Defaults to "Agent Zero Radio".</div>
                         </div>
                         <div class="field-control">
                             <input type="text" x-model="config.stream_name" />
@@ -27,6 +27,7 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Description</div>
+                            <div class="field-description">A short tagline shown to listeners alongside the stream name.</div>
                         </div>
                         <div class="field-control">
                             <input type="text" x-model="config.stream_description" />
@@ -36,6 +37,7 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Genre</div>
+                            <div class="field-description">Optional genre tag (e.g. "Electronic", "Talk", "Mixed"). Listeners see it next to the name.</div>
                         </div>
                         <div class="field-control">
                             <input type="text" x-model="config.stream_genre" />
@@ -44,8 +46,28 @@
 
                     <div class="field">
                         <div class="field-label">
+                            <div class="field-title">Stream URL</div>
+                            <div class="field-description">Where the stream broadcasts. Most players will tune in to this URL plus the mount point below.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="text" x-model="config.stream_url" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Mount Point</div>
+                            <div class="field-description">The path tacked onto the stream URL (default <code>/stream</code>). Most users should leave this alone.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="text" x-model="config.mount" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
                             <div class="field-title">Public Listing</div>
-                            <div class="field-description">Advertise the stream on Icecast YP directories.</div>
+                            <div class="field-description">If on, the stream is advertised on public Icecast directories. Off keeps it private to people you share the URL with.</div>
                         </div>
                         <div class="field-control">
                             <label class="toggle">
@@ -61,8 +83,8 @@
 
                     <div class="field">
                         <div class="field-label">
-                            <div class="field-title">Music Directory</div>
-                            <div class="field-description">Path inside the container where library scans look for tracks.</div>
+                            <div class="field-title">Music Folder</div>
+                            <div class="field-description">Folder where DJ Booth looks for your music. Drop your audio files in here, then click Scan in the booth.</div>
                         </div>
                         <div class="field-control">
                             <input type="text" x-model="config.music_dir" />
@@ -71,8 +93,8 @@
 
                     <div class="field">
                         <div class="field-label">
-                            <div class="field-title">Icecast Port</div>
-                            <div class="field-description">Map this port out of the container to expose the stream.</div>
+                            <div class="field-title">Stream Port</div>
+                            <div class="field-description">The port listeners connect to. Default 8000. If something else is using it, pick another (e.g. 8800). Whoever set up Agent Zero may need to forward this port for sharing beyond your own computer.</div>
                         </div>
                         <div class="field-control">
                             <input type="number" x-model.number="config.icecast_port" />
@@ -82,7 +104,7 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Source Password</div>
-                            <div class="field-description">Password used by the streaming engine to push audio to Icecast.</div>
+                            <div class="field-description">Internal password the booth uses to push audio. You can change it but most users don't need to.</div>
                         </div>
                         <div class="field-control">
                             <input type="password" x-model="config.icecast_source_password" />
@@ -92,7 +114,7 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Admin Password</div>
-                            <div class="field-description">Password for the Icecast admin interface.</div>
+                            <div class="field-description">Password for the Icecast admin page. Also internal — listeners never see it.</div>
                         </div>
                         <div class="field-control">
                             <input type="password" x-model="config.icecast_admin_password" />
@@ -102,6 +124,7 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Max Listeners</div>
+                            <div class="field-description">Cap on simultaneous listeners. 100 is plenty for personal use.</div>
                         </div>
                         <div class="field-control">
                             <input type="number" x-model.number="config.max_listeners" />
@@ -115,14 +138,28 @@
                     <div class="field">
                         <div class="field-label">
                             <div class="field-title">Bitrate</div>
-                            <div class="field-description">Output bitrate in kbps.</div>
+                            <div class="field-description">Audio quality. Higher sounds better but uses more bandwidth. 192 kbps is a good default for music.</div>
                         </div>
                         <div class="field-control">
                             <select x-model.number="config.bitrate">
-                                <option :value="64">64 kbps</option>
-                                <option :value="128">128 kbps</option>
-                                <option :value="192">192 kbps</option>
-                                <option :value="320">320 kbps</option>
+                                <option :value="64">64 kbps (low — talk radio)</option>
+                                <option :value="128">128 kbps (standard)</option>
+                                <option :value="192">192 kbps (recommended)</option>
+                                <option :value="320">320 kbps (high)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Sample Rate</div>
+                            <div class="field-description">How often audio is sampled per second. 44100 Hz is CD quality and works for almost everyone.</div>
+                        </div>
+                        <div class="field-control">
+                            <select x-model.number="config.sample_rate">
+                                <option :value="22050">22050 Hz</option>
+                                <option :value="44100">44100 Hz (CD quality)</option>
+                                <option :value="48000">48000 Hz</option>
                             </select>
                         </div>
                     </div>
