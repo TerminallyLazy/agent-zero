@@ -68,11 +68,21 @@ class DjTool(Tool):
                 high = float(self.args.get("high", 0.0))
                 await lifecycle.set_eq(deck, low, mid, high)
                 msg = f"EQ set on deck {deck.upper()}: low={low:+.1f} mid={mid:+.1f} high={high:+.1f}"
+            elif method == "analyze_track":
+                from usr.plugins.dj_booth.api.dj_control import _get_library
+                path = self.args.get("path", "")
+                if not path:
+                    return Response(message="dj_tool: analyze_track requires 'path'", break_loop=False)
+                t = await _get_library().analyze(path)
+                if t is None:
+                    msg = f"track not found: {path}"
+                else:
+                    msg = f"analyzed {t.title}: BPM={t.bpm}, key={t.key}, waveform={len(t.waveform_peaks)} peaks"
             else:
                 msg = (
                     f"dj_tool: unknown method '{method}'. "
                     f"Valid: status, search_library, queue_track, skip, clear_queue, "
-                    f"listener_count, set_crossfader, set_volume, set_eq."
+                    f"listener_count, set_crossfader, set_volume, set_eq, analyze_track."
                 )
         except Exception as e:
             msg = f"dj_tool error: {e}"

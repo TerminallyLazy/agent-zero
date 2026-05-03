@@ -26,4 +26,10 @@ class Library(ApiHandler):
         if action == "get_track":
             t = lib.get_track(input.get("path", ""))
             return {"track": asdict(t) if t else None}
+        if action == "analyze":
+            path = input.get("path", "")
+            if not path:
+                return {"error": "missing 'path'"}
+            t = await lib.analyze(path)
+            return {"track": asdict(t) if t else None}
         return {"error": f"unknown action: {action}"}
