@@ -1,4 +1,4 @@
-"""Agent-callable DJ control tool. Slice 2 scope — methods that work with Slice 1 backend."""
+"""Agent-callable DJ control tool. Slice 3 scope — deck-aware methods + mixer."""
 from __future__ import annotations
 
 from helpers.tool import Tool, Response
@@ -10,12 +10,15 @@ class DjTool(Tool):
 
       dj_tool:status              — current stream state summary
       dj_tool:search_library      — args.query → matching tracks
-      dj_tool:queue_track         — args.path → add track to queue
-      dj_tool:skip                — skip current track
-      dj_tool:clear_queue         — clear queued tracks
+      dj_tool:queue_track         — args.path (+ args.deck="a"|"b") → add track to deck queue
+      dj_tool:skip                — args.deck="a"|"b" → skip current track on deck
+      dj_tool:clear_queue         — args.deck="a"|"b" → clear queued tracks on deck
       dj_tool:listener_count      — current listener count
+      dj_tool:set_crossfader      — args.position 0.0..1.0 (0=A, 1=B)
+      dj_tool:set_volume          — args.channel ("deck_a"|"deck_b"|"master") + args.level
+      dj_tool:set_eq              — args.deck + args.low/mid/high (-12..+12 dB)
 
-    Deferred to later slices: load_track, crossfade, set_efx, announce.
+    Deferred to later slices: load_track, set_efx, announce, cue/loop/scratch.
     """
 
     async def execute(self, **kwargs) -> Response:
@@ -28,25 +31,48 @@ class DjTool(Tool):
             elif method == "queue_track":
                 from usr.plugins.dj_booth.helpers import lifecycle
                 path = self.args.get("path", "")
+                deck = self.args.get("deck", "a")
                 if not path:
                     return Response(message="dj_tool: queue_track requires 'path'", break_loop=False)
-                await lifecycle.queue_track(path)
-                msg = f"queued {path}"
+                await lifecycle.queue_track(path, deck)
+                msg = f"queued {path} on deck {deck.upper()}"
             elif method == "skip":
                 from usr.plugins.dj_booth.helpers import lifecycle
-                await lifecycle.skip_current()
-                msg = "skipped current track"
+                deck = self.args.get("deck", "a")
+                await lifecycle.skip_current(deck)
+                msg = f"skipped current track on deck {deck.upper()}"
             elif method == "clear_queue":
                 from usr.plugins.dj_booth.helpers import lifecycle
-                await lifecycle.clear_queue()
-                msg = "queue cleared"
+                deck = self.args.get("deck", "a")
+                await lifecycle.clear_queue(deck)
+                msg = f"queue cleared on deck {deck.upper()}"
             elif method == "listener_count":
                 from usr.plugins.dj_booth.helpers.state import get_state
                 msg = f"listeners: {get_state().listener_count}"
+            elif method == "set_crossfader":
+                from usr.plugins.dj_booth.helpers import lifecycle
+                position = float(self.args.get("position", 0.5))
+                await lifecycle.set_crossfader(position)
+                msg = f"crossfader set to {position:.2f}"
+            elif method == "set_volume":
+                from usr.plugins.dj_booth.helpers import lifecycle
+                channel = self.args.get("channel", "deck_a")
+                level = float(self.args.get("level", 1.0))
+                await lifecycle.set_volume(channel, level)
+                msg = f"volume set: {channel} = {level:.2f}"
+            elif method == "set_eq":
+                from usr.plugins.dj_booth.helpers import lifecycle
+                deck = self.args.get("deck", "a")
+                low = float(self.args.get("low", 0.0))
+                mid = float(self.args.get("mid", 0.0))
+                high = float(self.args.get("high", 0.0))
+                await lifecycle.set_eq(deck, low, mid, high)
+                msg = f"EQ set on deck {deck.upper()}: low={low:+.1f} mid={mid:+.1f} high={high:+.1f}"
             else:
                 msg = (
                     f"dj_tool: unknown method '{method}'. "
-                    f"Valid: status, search_library, queue_track, skip, clear_queue, listener_count."
+                    f"Valid: status, search_library, queue_track, skip, clear_queue, "
+                    f"listener_count, set_crossfader, set_volume, set_eq."
                 )
         except Exception as e:
             msg = f"dj_tool error: {e}"
@@ -59,8 +85,10 @@ class DjTool(Tool):
             return f"Stream OFF. Library: {s.library_count} tracks. Last error: {s.error or '(none)'}"
         return (
             f"Stream LIVE on {s.stream_url} (engine={s.engine})\n"
-            f"Now playing: {s.current_track or '(silence)'}\n"
-            f"Queue: {len(s.queue)} tracks | Listeners: {s.listener_count}"
+            f"Deck A: {s.deck_a.current_track or '(silence)'} | queue={len(s.deck_a.queue)}\n"
+            f"Deck B: {s.deck_b.current_track or '(silence)'} | queue={len(s.deck_b.queue)}\n"
+            f"Mixer: crossfader={s.mixer.crossfader:.2f} master={s.mixer.master_volume:.2f}\n"
+            f"Listeners: {s.listener_count}"
         )
 
     def _format_search(self, query: str) -> str:

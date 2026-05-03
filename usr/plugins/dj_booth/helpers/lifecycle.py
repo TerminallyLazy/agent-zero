@@ -150,26 +150,72 @@ async def stop_stack() -> None:
         _state.reset_state(keep_library=True, keep_error=False)
 
 
-async def queue_track(path: str) -> None:
+async def queue_track(path: str, deck: str = "a") -> None:
     s = _state.get_state()
     if not s.is_running or _engine is None:
         raise RuntimeError("stream not running")
-    await _engine.queue_track(path)
-    s.queue.append(path)
+    if deck not in ("a", "b"):
+        raise ValueError(f"invalid deck: {deck}")
+    await _engine.queue_track(path, deck)
+    target = s.deck_a if deck == "a" else s.deck_b
+    target.queue.append(path)
+    if deck == "a":
+        s.queue.append(path)  # back-compat mirror
 
 
-async def skip_current() -> None:
+async def skip_current(deck: str = "a") -> None:
     if _engine is None:
         raise RuntimeError("stream not running")
-    await _engine.skip()
+    if deck not in ("a", "b"):
+        raise ValueError(f"invalid deck: {deck}")
+    await _engine.skip(deck)
 
 
-async def clear_queue() -> None:
+async def clear_queue(deck: str = "a") -> None:
     s = _state.get_state()
     if _engine is None:
         return
-    await _engine.clear_queue()
-    s.queue.clear()
+    if deck not in ("a", "b"):
+        raise ValueError(f"invalid deck: {deck}")
+    await _engine.clear_queue(deck)
+    target = s.deck_a if deck == "a" else s.deck_b
+    target.queue.clear()
+    if deck == "a":
+        s.queue.clear()
+
+
+async def set_crossfader(value: float) -> None:
+    if _engine is None:
+        return
+    await _engine.set_crossfader(value)
+    _state.get_state().mixer.crossfader = max(0.0, min(1.0, float(value)))
+
+
+async def set_volume(target: str, value: float) -> None:
+    if _engine is None:
+        return
+    await _engine.set_volume(target, value)
+    s = _state.get_state()
+    v = max(0.0, min(2.0, float(value)))
+    if target == "deck_a":
+        s.deck_a.volume = v
+    elif target == "deck_b":
+        s.deck_b.volume = v
+    elif target == "master":
+        s.mixer.master_volume = v
+
+
+async def set_eq(deck: str, low: float, mid: float, high: float) -> None:
+    if _engine is None:
+        return
+    if deck not in ("a", "b"):
+        raise ValueError(f"invalid deck: {deck}")
+    await _engine.set_eq(deck, low, mid, high)
+    s = _state.get_state()
+    target = s.deck_a if deck == "a" else s.deck_b
+    target.eq_low = max(-12.0, min(12.0, float(low)))
+    target.eq_mid = max(-12.0, min(12.0, float(mid)))
+    target.eq_high = max(-12.0, min(12.0, float(high)))
 
 
 async def _health_loop(cfg: dict) -> None:
@@ -190,9 +236,12 @@ async def _health_loop(cfg: dict) -> None:
                 return
             s.listener_count = await ice.get_listener_count()
             if _engine is not None:
-                cur = await _engine.get_current()
-                if cur:
-                    s.current_track = cur
+                cur_a = await _engine.get_current("a")
+                cur_b = await _engine.get_current("b")
+                s.deck_a.current_track = cur_a or ""
+                s.deck_b.current_track = cur_b or ""
+                if cur_a:
+                    s.current_track = cur_a  # back-compat mirror of deck A
         except asyncio.CancelledError:
             raise
         except Exception:

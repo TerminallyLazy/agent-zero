@@ -57,7 +57,7 @@ async def test_queue_track_calls_lifecycle(monkeypatch):
     monkeypatch.setattr(lifecycle, "queue_track", fake_queue)
     t = _make_tool("queue_track", args={"path": "/a.mp3"})
     resp = await t.execute()
-    fake_queue.assert_awaited_once_with("/a.mp3")
+    fake_queue.assert_awaited_once_with("/a.mp3", "a")
     assert "queued" in resp.message.lower()
 
 

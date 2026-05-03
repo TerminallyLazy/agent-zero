@@ -48,3 +48,25 @@ async def test_validate_config_required_fields():
         "icecast_port": 8000, "icecast_source_password": "x",
         "icecast_admin_password": "x", "music_dir": "/tmp",
     })
+
+
+@pytest.mark.asyncio
+async def test_set_crossfader_clamps_and_writes_state(monkeypatch):
+    state.reset_state()
+    state.get_state().is_running = True
+    fake_eng = AsyncMock()
+    monkeypatch.setattr(lifecycle, "_engine", fake_eng)
+    await lifecycle.set_crossfader(1.7)
+    fake_eng.set_crossfader.assert_awaited_once()
+    assert state.get_state().mixer.crossfader == 1.0
+    await lifecycle.set_crossfader(-0.3)
+    assert state.get_state().mixer.crossfader == 0.0
+
+
+@pytest.mark.asyncio
+async def test_queue_track_invalid_deck_raises(monkeypatch):
+    state.reset_state()
+    state.get_state().is_running = True
+    monkeypatch.setattr(lifecycle, "_engine", AsyncMock())
+    with pytest.raises(ValueError):
+        await lifecycle.queue_track("/x.mp3", deck="c")

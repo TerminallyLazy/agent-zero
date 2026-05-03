@@ -28,13 +28,25 @@ class DjControl(ApiHandler):
                 await lifecycle.stop_stack()
             elif action == "queue_track":
                 path = input.get("path", "")
+                deck = input.get("deck", "a")
                 if not path:
                     return self._error("missing 'path'")
-                await lifecycle.queue_track(path)
+                await lifecycle.queue_track(path, deck)
             elif action == "skip":
-                await lifecycle.skip_current()
+                await lifecycle.skip_current(input.get("deck", "a"))
             elif action == "clear_queue":
-                await lifecycle.clear_queue()
+                await lifecycle.clear_queue(input.get("deck", "a"))
+            elif action == "set_crossfader":
+                await lifecycle.set_crossfader(float(input.get("position", 0.5)))
+            elif action == "set_volume":
+                await lifecycle.set_volume(input.get("channel", "deck_a"), float(input.get("level", 1.0)))
+            elif action == "set_eq":
+                await lifecycle.set_eq(
+                    input.get("deck", "a"),
+                    float(input.get("low", 0.0)),
+                    float(input.get("mid", 0.0)),
+                    float(input.get("high", 0.0)),
+                )
             elif action == "scan_library":
                 lib = _get_library()
                 target = input.get("dir") or cfg.get("music_dir")
