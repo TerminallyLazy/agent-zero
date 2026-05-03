@@ -234,6 +234,36 @@ async def set_eq(deck: str, low: float, mid: float, high: float) -> None:
     target.eq_high = max(-12.0, min(12.0, float(high)))
 
 
+async def set_pitch(deck: str, semitones: float) -> None:
+    if _engine is None:
+        return
+    if deck not in ("a", "b"):
+        raise ValueError(f"invalid deck: {deck}")
+    s = max(-6.0, min(6.0, float(semitones)))
+    await _engine.set_pitch(deck, s)
+    target = _state.get_state().deck_a if deck == "a" else _state.get_state().deck_b
+    target.pitch = s
+
+
+async def set_efx(effect: str, param: str, value) -> None:
+    if _engine is None:
+        return
+    await _engine.set_efx(effect, param, value)
+    s = _state.get_state().efx
+    attr = f"{effect}_{param}" if param != "type" else "filter_type"
+    if hasattr(s, attr):
+        setattr(s, attr, value)
+
+
+async def announce(text: str) -> None:
+    if _engine is None or not text.strip():
+        return
+    from usr.plugins.dj_booth.helpers.tts import generate_tts_wav
+    path = await generate_tts_wav(text)
+    if path:
+        await _engine.inject_tts(path)
+
+
 async def _health_loop(cfg: dict) -> None:
     s = _state.get_state()
     ice = IcecastManager.get()
