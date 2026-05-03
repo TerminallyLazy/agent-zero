@@ -106,6 +106,48 @@ export const store = createStore("djBoothStore", {
         if (data && !data.error) this.library = data;
     },
 
+    async analyzeTrack(path) {
+        const data = await this._post(API_LIB, { action: "analyze", path });
+        if (data && data.track) {
+            toastFrontendSuccess(`Analyzed: BPM ${data.track.bpm}, key ${data.track.key}`, "DJ Booth");
+            await this.fetchLibrary();
+        }
+    },
+
+    drawWaveform(canvas, deck) {
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        const { width, height } = canvas;
+        ctx.clearRect(0, 0, width, height);
+        const ds = deck === "a" ? this.deckA : this.deckB;
+        if (!ds.current_track) return;
+        // Find matching track
+        const track = (this.library.tracks || []).find(t => {
+            const display = `${t.artist} - ${t.title}`.trim();
+            return ds.current_track && (display === ds.current_track || ds.current_track.includes(t.title));
+        });
+        const peaks = track?.waveform_peaks || [];
+        if (!peaks.length) {
+            // flat fill
+            ctx.fillStyle = deck === "a" ? "#00d4ff" : "#ff006e";
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(0, height/2 - 1, width, 2);
+            return;
+        }
+        const bw = width / peaks.length;
+        ctx.fillStyle = deck === "a" ? "#00d4ff" : "#ff006e";
+        peaks.forEach((p, i) => {
+            const h = Math.max(1, p * height);
+            ctx.fillRect(i * bw, (height - h) / 2, Math.max(1, bw - 0.5), h);
+        });
+    },
+
+    get spectrumBars() {
+        const s = this.status?.spectrum;
+        if (!s || !s.length) return Array(64).fill(0);
+        return s;
+    },
+
     onSearchChange(val) {
         this.librarySearch = val;
         if (this.searchDebounce) clearTimeout(this.searchDebounce);

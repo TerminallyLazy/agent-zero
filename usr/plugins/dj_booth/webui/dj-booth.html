@@ -33,6 +33,12 @@
     .djb-bar { flex: 1; background: #00d4ff; opacity: 0.5; min-height: 2px; }
     .djb-panel.deck-b .djb-bar { background: #ff006e; }
     .djb-bar.active { opacity: 1; }
+    .djb-wave-canvas { width: 100%; height: 40px; background: #0a0a0f;
+                       border-radius: 4px; margin: 0.5rem 0; display: block; }
+    .djb-spectrum { display: flex; gap: 1px; height: 30px; align-items: end;
+                    background: #0a0a0f; padding: 2px; border-radius: 4px;
+                    margin-bottom: 0.5rem; }
+    .djb-meta { font-size: 0.75rem; color: #ffbe0b; padding: 0.2rem 0; }
     .djb-list { max-height: 140px; overflow-y: auto; font: 0.8rem monospace; }
     .djb-list.lib { max-height: 220px; }
     .djb-row { display: grid; grid-template-columns: 1fr; padding: 0.25rem 0.4rem;
@@ -51,7 +57,7 @@
     .djb-mixer-section label { font-size: 0.75rem; color: #aaa; }
     .djb-cf { background: linear-gradient(to right, #00d4ff, #1a1a2e 50%, #ff006e);
               border-radius: 4px; height: 10px; }
-    .djb-lib-row { display: grid; grid-template-columns: 1fr 1fr 60px 50px 50px;
+    .djb-lib-row { display: grid; grid-template-columns: 1fr 1fr 60px 100px 50px 50px;
                    gap: 0.5rem; padding: 0.3rem 0.4rem; cursor: pointer;
                    border-radius: 3px; align-items: center; }
     .djb-lib-row:hover { background: rgba(0, 212, 255, 0.1); }
@@ -94,11 +100,12 @@
              @click="$store.djBoothStore.selectDeck('a')">
           <h3>Deck A</h3>
           <div class="djb-now" x-text="$store.djBoothStore.deckA.current_track || '— silence —'"></div>
-          <div class="djb-waveform">
-            <template x-for="i in 32" :key="i">
-              <div class="djb-bar" :class="{ active: $store.djBoothStore.deckA.current_track }"></div>
-            </template>
+          <div class="djb-meta" x-show="$store.djBoothStore.deckA.current_track">
+            Use library Analyze to populate BPM/key
           </div>
+          <canvas class="djb-wave-canvas" width="400" height="40"
+                  x-ref="waveA"
+                  x-effect="$store.djBoothStore.drawWaveform($refs.waveA, 'a')"></canvas>
           <h3>Queue (<span x-text="$store.djBoothStore.deckA.queue.length"></span>)</h3>
           <div class="djb-list">
             <template x-for="(p, i) in $store.djBoothStore.deckA.queue" :key="i">
@@ -147,6 +154,12 @@
         <div class="djb-panel mixer">
           <h3 style="color: #ffbe0b;">Mixer</h3>
 
+          <div class="djb-spectrum">
+            <template x-for="(b, i) in $store.djBoothStore.spectrumBars" :key="i">
+              <div :style="`flex:1; background: hsl(${200 + i*2}, 90%, 55%); height: ${Math.max(2, b*100)}%`"></div>
+            </template>
+          </div>
+
           <div class="djb-mixer-section">
             <label>Master <span x-text="$store.djBoothStore.mixer.master_volume.toFixed(2)"></span>
               <input class="djb-fader" type="range" min="0" max="1.5" step="0.05"
@@ -174,11 +187,12 @@
              @click="$store.djBoothStore.selectDeck('b')">
           <h3>Deck B</h3>
           <div class="djb-now" x-text="$store.djBoothStore.deckB.current_track || '— silence —'"></div>
-          <div class="djb-waveform">
-            <template x-for="i in 32" :key="i">
-              <div class="djb-bar" :class="{ active: $store.djBoothStore.deckB.current_track }"></div>
-            </template>
+          <div class="djb-meta" x-show="$store.djBoothStore.deckB.current_track">
+            Use library Analyze to populate BPM/key
           </div>
+          <canvas class="djb-wave-canvas" width="400" height="40"
+                  x-ref="waveB"
+                  x-effect="$store.djBoothStore.drawWaveform($refs.waveB, 'b')"></canvas>
           <h3>Queue (<span x-text="$store.djBoothStore.deckB.queue.length"></span>)</h3>
           <div class="djb-list">
             <template x-for="(p, i) in $store.djBoothStore.deckB.queue" :key="i">
@@ -239,6 +253,13 @@
               <span x-text="t.title"></span>
               <span x-text="t.artist" style="color:#aaa;"></span>
               <span x-text="t.format" style="color:#666;"></span>
+              <div>
+                <span x-show="t.bpm" x-text="t.bpm.toFixed(0) + ' ' + (t.key || '')"
+                      style="font-size: 0.7rem; color: #ffbe0b;"></span>
+                <button class="djb-btn djb-lib-btn" x-show="!t.bpm"
+                        @click.stop="$store.djBoothStore.analyzeTrack(t.path)"
+                        title="Analyze BPM + key + waveform">⚡</button>
+              </div>
               <button class="djb-btn djb-lib-btn a"
                       @click.stop="$store.djBoothStore.queueTrack(t.path, 'a')">→A</button>
               <button class="djb-btn djb-lib-btn b"
