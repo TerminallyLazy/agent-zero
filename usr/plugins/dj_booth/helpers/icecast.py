@@ -98,11 +98,27 @@ class IcecastManager:
     def __init__(self):
         self.process: Optional[asyncio.subprocess.Process] = None
         self.config: dict = {}
+        self.mode: str = ""  # "icecast2" | "python" | ""
+        self.python_server = None  # IcyServer instance when mode == "python"
 
     async def start(self, config: dict) -> None:
         self.config = config
         os.makedirs(LOG_DIR, exist_ok=True)
-        Path(XML_CONFIG_PATH).write_text(render_icecast_xml(config))
+
+        # Pick implementation: external icecast2 if available, else built-in Python server.
+        # The Python server speaks the same ICY-over-HTTP protocol so listener clients
+        # (VLC, Winamp, browsers) can't tell the difference.
+        import shutil as _shutil
+        if _shutil.which("icecast2"):
+            await self._start_icecast2()
+            self.mode = "icecast2"
+        else:
+            await self._start_python_server()
+            self.mode = "python"
+        log.info("dj_booth: streaming server started (mode=%s)", self.mode)
+
+    async def _start_icecast2(self) -> None:
+        Path(XML_CONFIG_PATH).write_text(render_icecast_xml(self.config))
         log.info("dj_booth: starting icecast2 with %s", XML_CONFIG_PATH)
         self.process = await asyncio.create_subprocess_exec(
             "icecast2", "-c", XML_CONFIG_PATH,
@@ -113,29 +129,60 @@ class IcecastManager:
         if self.process.returncode is not None:
             raise RuntimeError(f"icecast2 exited immediately, code {self.process.returncode}")
 
+    async def _start_python_server(self) -> None:
+        from usr.plugins.dj_booth.helpers.icy_server import IcyServer
+        self.python_server = IcyServer(
+            port=int(self.config["icecast_port"]),
+            mount=self.config.get("mount", "/stream"),
+            stream_name=self.config.get("stream_name", "Stream"),
+            stream_description=self.config.get("stream_description", ""),
+            stream_genre=self.config.get("stream_genre", ""),
+        )
+        await self.python_server.start()
+
     async def stop(self) -> None:
-        if self.process is None:
-            return
-        try:
-            self.process.terminate()
+        if self.python_server is not None:
             try:
-                await asyncio.wait_for(self.process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                self.process.kill()
-                await self.process.wait()
-        except ProcessLookupError:
-            pass
-        self.process = None
-        for path in (XML_CONFIG_PATH, PIDFILE):
+                await self.python_server.stop()
+            except Exception:
+                log.exception("dj_booth: python server stop error")
+            self.python_server = None
+        if self.process is not None:
             try:
-                os.unlink(path)
-            except FileNotFoundError:
+                self.process.terminate()
+                try:
+                    await asyncio.wait_for(self.process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.process.kill()
+                    await self.process.wait()
+            except ProcessLookupError:
                 pass
+            self.process = None
+            for path in (XML_CONFIG_PATH, PIDFILE):
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+        self.mode = ""
 
     async def is_alive(self) -> bool:
+        if self.mode == "python":
+            return self.python_server is not None and self.python_server.is_running
         return self.process is not None and self.process.returncode is None
 
+    async def push_audio(self, data: bytes) -> None:
+        """Feed audio bytes into the in-process Python server. No-op for icecast2 mode
+        (in icecast2 mode, the engine writes directly to icecast2's HTTP source endpoint)."""
+        if self.python_server is not None:
+            await self.python_server.push_chunk(data)
+
+    def set_now_playing(self, display: str) -> None:
+        if self.python_server is not None:
+            self.python_server.set_current_track(display)
+
     async def get_listener_count(self) -> int:
+        if self.python_server is not None:
+            return self.python_server.listener_count
         port = int(self.config.get("icecast_port", 8000))
         mount = self.config.get("mount", "/stream")
         url = f"http://localhost:{port}/status-json.xsl"

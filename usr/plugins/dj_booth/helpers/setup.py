@@ -17,15 +17,19 @@ import sys
 from typing import List, Tuple
 
 
-REQUIRED_BINARIES = ("icecast2", "ffmpeg")
-PREFERRED_BINARIES = ("liquidsoap",)  # missing → falls back to ffmpeg engine, not fatal
+# ffmpeg is the ONLY required binary — the streaming server is pure Python
+# (helpers/icy_server.py) and runs in-process. icecast2 and liquidsoap are
+# optional upgrades the booth uses when present.
+REQUIRED_BINARIES = ("ffmpeg",)
+PREFERRED_BINARIES = ("icecast2", "liquidsoap")  # missing → in-process Python server + ffmpeg-only mode
 
 REQUIRED_PY = ("mutagen",)
 PREFERRED_PY = ("numpy", "scipy", "aubio")  # analysis features — not fatal if missing
 
-APT_PACKAGES = ["icecast2", "liquidsoap", "ffmpeg", "libaubio-dev", "libsndfile1"]
-PIP_PACKAGES = ["mutagen>=1.47", "requests>=2.31", "numpy>=1.24", "scipy>=1.11"]
-PIP_OPTIONAL = ["aubio>=0.4.9", "pyaudio>=0.2.14"]
+APT_PACKAGES = ["ffmpeg"]
+APT_OPTIONAL = ["icecast2", "liquidsoap", "libaubio-dev", "libsndfile1"]
+PIP_PACKAGES = ["mutagen>=1.47", "requests>=2.31"]
+PIP_OPTIONAL = ["numpy>=1.24", "scipy>=1.11", "aubio>=0.4.9", "pyaudio>=0.2.14"]
 
 DEBCONF_PRESEED = """\
 icecast2 icecast2/icecast-setup boolean false
@@ -138,17 +142,29 @@ def ensure_dependencies(verbose: bool = True) -> dict:
             status["missing_binaries"] = missing_bin
             return status
 
-        say(f"Installing audio tools (Icecast, Liquidsoap, FFmpeg)...")
+        say("Installing audio encoder (FFmpeg)...")
         ok, out = _apt_install(APT_PACKAGES)
         if not ok:
             tail = out.strip().splitlines()[-3:] if out else []
-            say(f"Audio tool install ran into trouble: {' / '.join(tail) if tail else 'unknown error'}")
+            say(f"FFmpeg install ran into trouble: {' / '.join(tail) if tail else 'unknown error'}")
             status["missing_binaries"] = _missing_binaries()
             if status["missing_binaries"]:
                 status["needs_manual_install"] = True
                 return status
         else:
-            say("Audio tools installed.")
+            say("Audio encoder installed.")
+
+        # Optional upgrades — try but don't block on failure.
+        # Built-in Python streaming server covers the icecast2 case.
+        # Without liquidsoap the booth runs in single-deck/sequential mode.
+        missing_optional = [p for p in APT_OPTIONAL if not _have_binary(p.split('-')[0])]
+        if missing_optional:
+            say("Trying optional upgrades (icecast2, liquidsoap, audio analysis libs)...")
+            ok_opt, _ = _apt_install(APT_OPTIONAL)
+            if ok_opt:
+                say("Optional upgrades installed — full feature set available.")
+            else:
+                say("Optional upgrades not available in this image — booth runs in basic mode (single deck, built-in streaming server). All listener-facing features still work.")
 
     # Re-check
     missing_bin = _missing_binaries()

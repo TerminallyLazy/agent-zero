@@ -225,46 +225,101 @@ class FfmpegEngine:
         self._current_proc = None
         self._current_path = ""
 
+    def _get_icy_server(self):
+        """Return the in-process IcyServer if the IcecastManager is running in
+        Python mode, else None (icecast2 is handling the source endpoint directly)."""
+        try:
+            from usr.plugins.dj_booth.helpers.icecast import IcecastManager
+            mgr = IcecastManager.get()
+            if getattr(mgr, "mode", "") == "python":
+                return mgr.python_server
+        except Exception:
+            pass
+        return None
+
     async def _loop(self) -> None:
         cfg = self.config
         port = int(cfg.get("icecast_port", 8000))
         bitrate = int(cfg.get("bitrate", 192))
         sample_rate = int(cfg.get("sample_rate", 44100))
         mount = cfg.get("mount", "/stream")
-        password = cfg["icecast_source_password"]
+        password = cfg.get("icecast_source_password", "")
         icecast_url = f"icecast://source:{password}@localhost:{port}{mount}"
 
         while True:
             try:
+                # Determine source mode each iteration in case server mode toggles
+                icy_server = self._get_icy_server()
+                use_python = icy_server is not None
+
                 path: str
                 try:
                     path = self.queue.get_nowait()
                     self._current_path = path
-                    cmd = [
-                        "ffmpeg", "-hide_banner", "-loglevel", "error",
-                        "-re", "-i", path,
-                        "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
-                        "-ar", str(sample_rate), "-ac", "2",
-                        "-content_type", "audio/mpeg", "-f", "mp3",
-                        icecast_url,
-                    ]
+                    if use_python:
+                        # Encode mp3 to stdout, we'll relay chunks to the python server
+                        cmd = [
+                            "ffmpeg", "-hide_banner", "-loglevel", "error",
+                            "-re", "-i", path,
+                            "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
+                            "-ar", str(sample_rate), "-ac", "2",
+                            "-f", "mp3", "pipe:1",
+                        ]
+                    else:
+                        cmd = [
+                            "ffmpeg", "-hide_banner", "-loglevel", "error",
+                            "-re", "-i", path,
+                            "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
+                            "-ar", str(sample_rate), "-ac", "2",
+                            "-content_type", "audio/mpeg", "-f", "mp3",
+                            icecast_url,
+                        ]
                 except asyncio.QueueEmpty:
                     self._current_path = ""
-                    cmd = [
-                        "ffmpeg", "-hide_banner", "-loglevel", "error",
-                        "-re", "-f", "lavfi",
-                        "-i", f"anullsrc=r={sample_rate}:cl=stereo",
-                        "-t", "5",
-                        "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
-                        "-content_type", "audio/mpeg", "-f", "mp3",
-                        icecast_url,
-                    ]
-                self._current_proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                rc = await self._current_proc.wait()
+                    if use_python:
+                        cmd = [
+                            "ffmpeg", "-hide_banner", "-loglevel", "error",
+                            "-re", "-f", "lavfi",
+                            "-i", f"anullsrc=r={sample_rate}:cl=stereo",
+                            "-t", "5",
+                            "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
+                            "-f", "mp3", "pipe:1",
+                        ]
+                    else:
+                        cmd = [
+                            "ffmpeg", "-hide_banner", "-loglevel", "error",
+                            "-re", "-f", "lavfi",
+                            "-i", f"anullsrc=r={sample_rate}:cl=stereo",
+                            "-t", "5",
+                            "-c:a", "libmp3lame", "-b:a", f"{bitrate}k",
+                            "-content_type", "audio/mpeg", "-f", "mp3",
+                            icecast_url,
+                        ]
+                # Python mode: capture stdout and relay to IcyServer
+                if use_python:
+                    self._current_proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    if self._current_path and icy_server is not None:
+                        # Update now-playing metadata for status endpoint
+                        icy_server.set_current_track(self._current_path)
+                    while True:
+                        chunk = await self._current_proc.stdout.read(4096)
+                        if not chunk:
+                            break
+                        if icy_server is not None:
+                            await icy_server.push_chunk(chunk)
+                    rc = await self._current_proc.wait()
+                else:
+                    self._current_proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    rc = await self._current_proc.wait()
+
                 if rc != 0 and self._current_path:
                     self._failure_streak += 1
                     log.warning("dj_booth ffmpeg failed for %s rc=%d", self._current_path, rc)
