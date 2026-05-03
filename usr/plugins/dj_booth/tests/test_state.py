@@ -41,3 +41,37 @@ def test_reset_state_clears_runtime_fields_keeps_library_count():
     assert s.listener_count == 0
     assert s.library_count == 42
     assert s.error == ""
+
+
+def test_deck_state_defaults():
+    from usr.plugins.dj_booth.helpers.state import DeckState
+    d = DeckState()
+    assert d.queue == []
+    assert d.current_track == ""
+    assert d.volume == 1.0
+    assert d.eq_low == 0.0 and d.eq_mid == 0.0 and d.eq_high == 0.0
+
+
+def test_mixer_state_defaults():
+    from usr.plugins.dj_booth.helpers.state import MixerState
+    m = MixerState()
+    assert m.crossfader == 0.5
+    assert m.master_volume == 0.8
+
+
+def test_stream_state_has_decks():
+    reset_state()
+    s = get_state()
+    assert hasattr(s, "deck_a") and hasattr(s, "deck_b")
+    assert s.deck_a.volume == 1.0
+    assert s.mixer.crossfader == 0.5
+
+
+def test_reset_state_restores_decks():
+    reset_state()
+    s = get_state()
+    s.deck_a.volume = 0.3
+    s.mixer.crossfader = 0.9
+    reset_state()
+    assert s.deck_a.volume == 1.0
+    assert s.mixer.crossfader == 0.5
