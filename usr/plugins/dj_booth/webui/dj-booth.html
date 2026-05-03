@@ -1,0 +1,110 @@
+<head>
+  <script type="module" src="/plugins/dj_booth/webui/dj-store.js"></script>
+  <style>
+    .djb-wrap { padding: 1rem; max-width: 1100px; margin: 0 auto; color: #e8e8f0; }
+    .djb-header { display: flex; gap: 1rem; align-items: center; padding: 0.75rem 1rem;
+                  background: #1a1a2e; border-radius: 8px; margin-bottom: 1rem; }
+    .djb-header h2 { margin: 0 1rem 0 0; font-size: 1.1rem; }
+    .djb-badge { padding: 0.15rem 0.5rem; background: #16213e; border-radius: 4px;
+                 font: 0.75rem 'JetBrains Mono', monospace; color: #00d4ff; }
+    .djb-badge.fallback { color: #ffbe0b; }
+    .djb-listeners { display: flex; align-items: center; gap: 0.4rem; font: 0.85rem monospace; }
+    .djb-pulse { width: 8px; height: 8px; border-radius: 50%; background: #00ff88;
+                 box-shadow: 0 0 8px #00ff88; animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.3; } }
+    .djb-stream-url { flex: 1; font: 0.8rem monospace; color: #aaa; }
+    .djb-btn { padding: 0.4rem 0.9rem; border-radius: 4px; border: 1px solid #3a3a4e;
+               background: #16213e; color: #e8e8f0; cursor: pointer; }
+    .djb-btn:hover { background: #233355; border-color: #00d4ff; }
+    .djb-btn.start { background: #00ff88; color: #001a0c; border-color: #00ff88; }
+    .djb-btn.stop  { background: #ff006e; color: #fff; border-color: #ff006e; }
+    .djb-grid { display: grid; grid-template-columns: 2fr 3fr; gap: 1rem; }
+    .djb-panel { background: #1a1a2e; padding: 1rem; border-radius: 8px; }
+    .djb-panel h3 { margin-top: 0; font-size: 0.9rem; color: #00d4ff; text-transform: uppercase;
+                    letter-spacing: 1px; }
+    .djb-now { font: 1.2rem 'JetBrains Mono', monospace; padding: 0.5rem 0; }
+    .djb-list { max-height: 280px; overflow-y: auto; font: 0.85rem monospace; }
+    .djb-row { display: grid; grid-template-columns: 1fr 1fr 80px;
+               padding: 0.3rem 0.4rem; gap: 0.5rem; cursor: pointer; border-radius: 3px; }
+    .djb-row:hover { background: rgba(0, 212, 255, 0.1); }
+    .djb-search { width: 100%; padding: 0.4rem; background: #0a0a0f;
+                  border: 1px solid #3a3a4e; color: #e8e8f0; border-radius: 4px;
+                  margin-bottom: 0.5rem; }
+    .djb-empty { color: #888; font-style: italic; padding: 1rem; text-align: center; }
+  </style>
+</head>
+
+<div x-data>
+  <template x-if="$store.djBoothStore">
+    <div x-init="$store.djBoothStore.onOpen()" x-destroy="$store.djBoothStore.cleanup()" class="djb-wrap">
+
+      <div class="djb-header">
+        <h2 x-text="$store.djBoothStore.status?.is_running ? '🎧 ON AIR' : '🎧 DJ Booth'"></h2>
+        <span class="djb-badge"
+              :class="{ fallback: $store.djBoothStore.status?.engine === 'ffmpeg' }"
+              x-text="$store.djBoothStore.engineLabel"></span>
+        <div class="djb-listeners" x-show="$store.djBoothStore.isRunning">
+          <span class="djb-pulse"></span>
+          <span x-text="$store.djBoothStore.listenerCount + ' listening'"></span>
+        </div>
+        <div class="djb-stream-url"
+             x-text="$store.djBoothStore.status?.stream_url || ''"
+             x-show="$store.djBoothStore.isRunning"></div>
+        <button class="djb-btn"
+                x-show="$store.djBoothStore.isRunning"
+                @click="$store.djBoothStore.copyStreamUrl()">Copy URL</button>
+        <button class="djb-btn start"
+                x-show="!$store.djBoothStore.isRunning"
+                @click="$store.djBoothStore.start()">Start</button>
+        <button class="djb-btn stop"
+                x-show="$store.djBoothStore.isRunning"
+                @click="$store.djBoothStore.stop()">Stop</button>
+      </div>
+
+      <div class="djb-grid">
+        <div class="djb-panel">
+          <h3>Now Playing</h3>
+          <div class="djb-now" x-text="$store.djBoothStore.currentTrack || '— silence —'"></div>
+
+          <h3 style="margin-top:1rem;">Queue (<span x-text="$store.djBoothStore.queueList.length"></span>)</h3>
+          <div class="djb-list">
+            <template x-for="(p, i) in $store.djBoothStore.queueList" :key="i">
+              <div class="djb-row"><span x-text="p" style="grid-column: span 3;"></span></div>
+            </template>
+            <div class="djb-empty" x-show="!$store.djBoothStore.queueList.length">queue empty</div>
+          </div>
+          <div style="margin-top:0.5rem; display:flex; gap:0.5rem;">
+            <button class="djb-btn"
+                    @click="$store.djBoothStore.skip()"
+                    :disabled="!$store.djBoothStore.isRunning">Skip</button>
+            <button class="djb-btn"
+                    @click="$store.djBoothStore.clearQueue()"
+                    :disabled="!$store.djBoothStore.isRunning">Clear</button>
+          </div>
+        </div>
+
+        <div class="djb-panel">
+          <h3>Library
+            <button class="djb-btn" style="float:right; padding: 0.2rem 0.6rem; font-size: 0.8rem;"
+                    @click="$store.djBoothStore.scanLibrary()">Scan</button>
+          </h3>
+          <input class="djb-search" type="text" placeholder="search title / artist / album"
+                 :value="$store.djBoothStore.librarySearch"
+                 @input.debounce.300ms="$store.djBoothStore.onSearchChange($event.target.value)">
+          <div class="djb-list">
+            <template x-for="t in $store.djBoothStore.library.tracks" :key="t.path">
+              <div class="djb-row" @dblclick="$store.djBoothStore.queueTrack(t.path)" :title="t.path">
+                <span x-text="t.title"></span>
+                <span x-text="t.artist" style="color:#aaa;"></span>
+                <span x-text="t.format" style="color:#666;"></span>
+              </div>
+            </template>
+            <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length">
+              no tracks — click Scan
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
