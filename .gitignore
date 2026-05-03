@@ -40,6 +40,9 @@ usr/**
 usr/**/*
 # But allow .gitkeep files
 !usr/**/.gitkeep
+# In-repo plugin development: dj_booth (Slice 1+)
+!usr/plugins/dj_booth/
+!usr/plugins/dj_booth/**
 
 
 # Global rule to include .gitkeep files anywhere
@@ -50,3 +53,5 @@ agent_history.gif
 
 .agent/**
 .claude/**
+
+/notebooks/**
