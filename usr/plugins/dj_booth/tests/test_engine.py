@@ -38,3 +38,51 @@ async def test_ffmpeg_engine_queue_and_skip():
 async def test_ffmpeg_engine_is_alive_before_start():
     eng = FfmpegEngine()
     assert await eng.is_alive() is False
+
+
+from usr.plugins.dj_booth.helpers.engine import LiquidsoapEngine, render_liq_script
+
+
+def test_render_liq_script_has_required_sections():
+    cfg = {
+        "icecast_port": 8000, "icecast_source_password": "pw",
+        "stream_name": "n", "stream_description": "d", "stream_genre": "g",
+        "stream_url": "u", "mount": "/stream", "bitrate": 192,
+        "public_listing": False,
+    }
+    script = render_liq_script(cfg)
+    assert 'set("server.telnet", true)' in script
+    assert 'set("server.telnet.port", 1234)' in script
+    assert 'request.queue(id="main")' in script
+    assert "output.icecast" in script
+    assert 'mount="/stream"' in script
+    assert "%mp3(bitrate=192)" in script
+    assert "mksafe" in script
+
+
+@pytest.mark.asyncio
+async def test_liquidsoap_engine_telnet_round_trip(monkeypatch):
+    """Stub the telnet send to confirm command formatting."""
+    eng = LiquidsoapEngine()
+    sent = []
+
+    async def fake_send(cmd: str) -> str:
+        sent.append(cmd)
+        if cmd.startswith("main.push"):
+            return "1"
+        if cmd == "request.on_air":
+            return "1"
+        if cmd.startswith("request.metadata"):
+            return 'title="X"\nartist="Y"'
+        return "OK"
+
+    monkeypatch.setattr(eng, "_telnet_send", fake_send)
+
+    await eng.queue_track("/m/a.mp3")
+    assert sent[-1] == "main.push /m/a.mp3"
+
+    await eng.skip()
+    assert sent[-1] == "main.skip"
+
+    current = await eng.get_current()
+    assert current and "Y" in current and "X" in current
