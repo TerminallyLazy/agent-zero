@@ -1,12 +1,12 @@
-# dj_booth — Slice 1 (Stream Backbone)
+# dj_booth — Slice 3 (Two-Deck DJ Booth)
 
 Local Icecast2 streaming server packaged as an Agent Zero plugin. Any ICY-compatible client (Winamp, VLC, foobar2000, browser `<audio>`) can tune in.
 
 ## Status
 
-Slice 1 of 5. Ships: Icecast2 + streaming engine (liquidsoap preferred, ffmpeg fallback) + library scan + minimal start/stop UI.
+Slice 3 of 5. Ships: Icecast2 + 2-deck liquidsoap engine (ffmpeg single-stream fallback) + library scan + agent `dj_tool` + two-deck DJ booth UI with crossfader, per-deck volume, 3-band EQ per deck, simple waveform visualizer, deck-targeted queue/skip/clear.
 
-Coming in later slices: agent DJ tool (Slice 2), full DJ booth UI with two decks + EFX (Slice 3), BPM/key/spectrum analysis (Slice 4), mic + cue/loop/scratch (Slice 5).
+Coming in later slices: BPM/key/spectrum analysis (Slice 4), mic + cue/loop/scratch + EFX + sync (Slice 5).
 
 ## Prerequisites
 
@@ -25,11 +25,15 @@ If liquidsoap is unavailable on the host, the engine falls back to ffmpeg automa
 
 ## Use
 
-- Open the **🎧 DJ Booth** sidebar button → minimal control panel modal
+- Open the **🎧 DJ Booth** sidebar button → two-deck booth modal
 - Click **Scan** in the Library panel after copying files into `music_dir`
-- Double-click a track to queue it
-- **Skip** / **Clear** buttons control the queue
+- Click a deck panel (A or B) to select it as the active target
+- Double-click a library track to queue on the selected deck, or use the **→A** / **→B** buttons
+- Drag the **Crossfader** to mix between decks; per-deck **Volume** + 3-band **EQ** (low/mid/high) sliders shape each channel
+- **Skip** / **Clear** buttons act on the deck they belong to
 - Listeners connect to `http://<host>:8000/stream` from VLC, Winamp, or browser
+
+> **ffmpeg fallback note:** when liquidsoap is unavailable, the engine plays a single sequential queue; deck routing, crossfader, volume and EQ controls become no-ops (warnings in the server log).
 
 ## Troubleshooting
 
