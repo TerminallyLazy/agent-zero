@@ -75,12 +75,19 @@ export const store = createStore("djBoothStore", {
         const r = await this._control("stop");
         if (r && !r.error) toastFrontendInfo("Stream stopped", "DJ Booth");
     },
-    async skip() { await this._control("skip"); },
-    async clearQueue() { await this._control("clear_queue"); },
-    async queueTrack(path) {
-        const r = await this._control("queue_track", { path });
-        if (r && !r.error) toastFrontendInfo("Queued", "DJ Booth");
+    async queueTrack(path, deck = "a") {
+        const r = await this._control("queue_track", { path, deck });
+        if (r && !r.error) toastFrontendInfo(`Queued on deck ${deck.toUpperCase()}`, "DJ Booth");
     },
+    async skip(deck = "a") { await this._control("skip", { deck }); },
+    async clearQueue(deck = "a") { await this._control("clear_queue", { deck }); },
+    async setCrossfader(position) { await this._control("set_crossfader", { position }); },
+    async setVolume(channel, level) { await this._control("set_volume", { channel, level }); },
+    async setEQ(deck, low, mid, high) { await this._control("set_eq", { deck, low, mid, high }); },
+
+    // Selected deck — UI tracks which deck is the "active" target for library double-click
+    selectedDeck: "a",
+    selectDeck(d) { this.selectedDeck = d; },
     async scanLibrary() {
         const r = await this._control("scan_library");
         if (r && !r.error) {
@@ -124,6 +131,11 @@ export const store = createStore("djBoothStore", {
         return this.status.engine === "ffmpeg" ? "FFMPEG (fallback)" : this.status.engine.toUpperCase();
     },
     get listenerCount() { return this.status?.listener_count || 0; },
-    get currentTrack() { return this.status?.current_track || ""; },
-    get queueList() { return this.status?.queue || []; },
+    get currentTrack() { return this.deckA.current_track || ""; },
+    get queueList() { return this.deckA.queue || []; },
+
+    // Deck/mixer convenience getters
+    get deckA() { return this.status?.deck_a || { queue: [], current_track: "", volume: 1.0, eq_low: 0, eq_mid: 0, eq_high: 0 }; },
+    get deckB() { return this.status?.deck_b || { queue: [], current_track: "", volume: 1.0, eq_low: 0, eq_mid: 0, eq_high: 0 }; },
+    get mixer() { return this.status?.mixer || { crossfader: 0.5, master_volume: 0.8 }; },
 });
