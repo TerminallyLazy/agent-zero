@@ -1,0 +1,148 @@
+<html>
+<head>
+    <title>DJ Booth</title>
+</head>
+<body>
+    <div x-data>
+        <template x-if="config">
+            <div class="dj-booth-config">
+                <div class="section-title">DJ Booth</div>
+                <div class="section-description">
+                    Local Icecast2 streaming server. Tune in from any ICY-compatible client (VLC, Winamp, browser).
+                </div>
+
+                <div class="dj-booth-card">
+                    <div class="section-title">Stream</div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Stream Name</div>
+                            <div class="field-description">Display name reported to listeners.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="text" x-model="config.stream_name" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Description</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="text" x-model="config.stream_description" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Genre</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="text" x-model="config.stream_genre" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Public Listing</div>
+                            <div class="field-description">Advertise the stream on Icecast YP directories.</div>
+                        </div>
+                        <div class="field-control">
+                            <label class="toggle">
+                                <input type="checkbox" x-model="config.public_listing" />
+                                <span class="toggler"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dj-booth-card">
+                    <div class="section-title">Server</div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Music Directory</div>
+                            <div class="field-description">Path inside the container where library scans look for tracks.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="text" x-model="config.music_dir" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Icecast Port</div>
+                            <div class="field-description">Map this port out of the container to expose the stream.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="number" x-model.number="config.icecast_port" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Source Password</div>
+                            <div class="field-description">Password used by the streaming engine to push audio to Icecast.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="password" x-model="config.icecast_source_password" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Admin Password</div>
+                            <div class="field-description">Password for the Icecast admin interface.</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="password" x-model="config.icecast_admin_password" />
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Max Listeners</div>
+                        </div>
+                        <div class="field-control">
+                            <input type="number" x-model.number="config.max_listeners" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dj-booth-card">
+                    <div class="section-title">Audio</div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Bitrate</div>
+                            <div class="field-description">Output bitrate in kbps.</div>
+                        </div>
+                        <div class="field-control">
+                            <select x-model.number="config.bitrate">
+                                <option :value="64">64 kbps</option>
+                                <option :value="128">128 kbps</option>
+                                <option :value="192">192 kbps</option>
+                                <option :value="320">320 kbps</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .dj-booth-config {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .dj-booth-card {
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+    </style>
+</body>
+</html>
