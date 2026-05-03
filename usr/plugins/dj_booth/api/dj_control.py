@@ -53,6 +53,25 @@ class DjControl(ApiHandler):
                 count = lib.scan(target)
                 state = get_state()
                 state.library_count = count
+            elif action == "set_pitch":
+                await lifecycle.set_pitch(input.get("deck", "a"), float(input.get("semitones", 0.0)))
+            elif action == "set_efx":
+                await lifecycle.set_efx(
+                    input.get("effect", ""),
+                    input.get("param", ""),
+                    input.get("value", 0.0),
+                )
+            elif action == "announce":
+                await lifecycle.announce(input.get("text", ""))
+            elif action == "sync_bpm":
+                src_bpm = float(input.get("source_bpm", 0.0))
+                tgt_bpm = float(input.get("target_bpm", 0.0))
+                deck = input.get("target_deck", "b")
+                if src_bpm <= 0 or tgt_bpm <= 0:
+                    return self._error("sync_bpm requires source_bpm and target_bpm > 0")
+                import math
+                semitones = max(-6.0, min(6.0, 12.0 * math.log2(src_bpm / tgt_bpm)))
+                await lifecycle.set_pitch(deck, semitones)
             else:
                 return self._error(f"unknown action: {action}")
         except Exception as e:

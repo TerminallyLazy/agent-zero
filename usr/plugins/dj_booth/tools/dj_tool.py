@@ -17,8 +17,12 @@ class DjTool(Tool):
       dj_tool:set_crossfader      — args.position 0.0..1.0 (0=A, 1=B)
       dj_tool:set_volume          — args.channel ("deck_a"|"deck_b"|"master") + args.level
       dj_tool:set_eq              — args.deck + args.low/mid/high (-12..+12 dB)
+      dj_tool:set_pitch           — args.deck + args.semitones (-6..+6 st)
+      dj_tool:set_efx             — args.effect + args.param + args.value
+      dj_tool:announce            — args.text → TTS + inject into stream
+      dj_tool:sync_bpm            — args.source_path + args.target_path (+ args.target_deck="b") → match BPM via pitch
 
-    Deferred to later slices: load_track, set_efx, announce, cue/loop/scratch.
+    Deferred to later slices: load_track, cue/loop/scratch.
     """
 
     async def execute(self, **kwargs) -> Response:
@@ -78,11 +82,52 @@ class DjTool(Tool):
                     msg = f"track not found: {path}"
                 else:
                     msg = f"analyzed {t.title}: BPM={t.bpm}, key={t.key}, waveform={len(t.waveform_peaks)} peaks"
+            elif method == "set_pitch":
+                from usr.plugins.dj_booth.helpers import lifecycle
+                deck = self.args.get("deck", "a")
+                semitones = float(self.args.get("semitones", 0.0))
+                await lifecycle.set_pitch(deck, semitones)
+                msg = f"pitch set on deck {deck.upper()}: {semitones:+.2f} st"
+            elif method == "set_efx":
+                from usr.plugins.dj_booth.helpers import lifecycle
+                effect = self.args.get("effect", "")
+                param = self.args.get("param", "")
+                value = self.args.get("value", 0.0)
+                if not effect or not param:
+                    return Response(message="dj_tool: set_efx requires 'effect' and 'param'", break_loop=False)
+                await lifecycle.set_efx(effect, param, value)
+                msg = f"EFX {effect}.{param} = {value}"
+            elif method == "announce":
+                from usr.plugins.dj_booth.helpers import lifecycle
+                text = self.args.get("text", "")
+                if not text.strip():
+                    return Response(message="dj_tool: announce requires non-empty 'text'", break_loop=False)
+                await lifecycle.announce(text)
+                msg = f"announced: {text}"
+            elif method == "sync_bpm":
+                from usr.plugins.dj_booth.api.dj_control import _get_library
+                from usr.plugins.dj_booth.helpers import lifecycle
+                import math
+                lib = _get_library()
+                src_path = self.args.get("source_path", "")
+                tgt_path = self.args.get("target_path", "")
+                target_deck = self.args.get("target_deck", "b")
+                src = lib.get_track(src_path)
+                tgt = lib.get_track(tgt_path)
+                if not src or not tgt or not src.bpm or not tgt.bpm:
+                    return Response(
+                        message="sync_bpm: tracks must be analyzed first (BPM>0)",
+                        break_loop=False,
+                    )
+                semitones = max(-6.0, min(6.0, 12.0 * math.log2(src.bpm / tgt.bpm)))
+                await lifecycle.set_pitch(target_deck, semitones)
+                msg = f"sync'd deck {target_deck.upper()} to {src.bpm} BPM (pitch {semitones:+.2f} st)"
             else:
                 msg = (
                     f"dj_tool: unknown method '{method}'. "
                     f"Valid: status, search_library, queue_track, skip, clear_queue, "
-                    f"listener_count, set_crossfader, set_volume, set_eq, analyze_track."
+                    f"listener_count, set_crossfader, set_volume, set_eq, analyze_track, "
+                    f"set_pitch, set_efx, announce, sync_bpm."
                 )
         except Exception as e:
             msg = f"dj_tool error: {e}"
