@@ -41,8 +41,12 @@ usr/**/*
 # But allow .gitkeep files
 !usr/**/.gitkeep
 # In-repo plugin development: dj_booth (Slice 1+)
+# Note: these MUST come after usr/**/* to override it
+!usr/plugins/
 !usr/plugins/dj_booth/
 !usr/plugins/dj_booth/**
+# Re-ignore python caches inside the allowed plugin tree
+usr/plugins/dj_booth/**/__pycache__/
 
 
 # Global rule to include .gitkeep files anywhere
