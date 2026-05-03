@@ -1,10 +1,9 @@
 <head>
   <script type="module" src="/plugins/dj_booth/webui/dj-store.js"></script>
   <style>
-    .djb-wrap { padding: 1rem; max-width: 1100px; margin: 0 auto; color: #e8e8f0; }
+    .djb-wrap { padding: 1rem; max-width: 1400px; margin: 0 auto; color: #e8e8f0; }
     .djb-header { display: flex; gap: 1rem; align-items: center; padding: 0.75rem 1rem;
                   background: #1a1a2e; border-radius: 8px; margin-bottom: 1rem; }
-    .djb-header h2 { margin: 0 1rem 0 0; font-size: 1.1rem; }
     .djb-badge { padding: 0.15rem 0.5rem; background: #16213e; border-radius: 4px;
                  font: 0.75rem 'JetBrains Mono', monospace; color: #00d4ff; }
     .djb-badge.fallback { color: #ffbe0b; }
@@ -14,23 +13,51 @@
     @keyframes pulse { 50% { opacity: 0.3; } }
     .djb-stream-url { flex: 1; font: 0.8rem monospace; color: #aaa; }
     .djb-btn { padding: 0.4rem 0.9rem; border-radius: 4px; border: 1px solid #3a3a4e;
-               background: #16213e; color: #e8e8f0; cursor: pointer; }
+               background: #16213e; color: #e8e8f0; cursor: pointer; font-size: 0.85rem; }
     .djb-btn:hover { background: #233355; border-color: #00d4ff; }
     .djb-btn.start { background: #00ff88; color: #001a0c; border-color: #00ff88; }
     .djb-btn.stop  { background: #ff006e; color: #fff; border-color: #ff006e; }
-    .djb-grid { display: grid; grid-template-columns: 2fr 3fr; gap: 1rem; }
+    .djb-btn.sm { padding: 0.2rem 0.5rem; font-size: 0.75rem; }
+    .djb-grid { display: grid; grid-template-columns: 5fr 3fr 5fr; gap: 1rem; }
     .djb-panel { background: #1a1a2e; padding: 1rem; border-radius: 8px; }
-    .djb-panel h3 { margin-top: 0; font-size: 0.9rem; color: #00d4ff; text-transform: uppercase;
+    .djb-panel.deck-a { border-top: 3px solid #00d4ff; }
+    .djb-panel.deck-b { border-top: 3px solid #ff006e; }
+    .djb-panel.mixer { border-top: 3px solid #ffbe0b; }
+    .djb-panel.selected { box-shadow: 0 0 16px rgba(0, 212, 255, 0.4); }
+    .djb-panel h3 { margin-top: 0; font-size: 0.85rem; color: #00d4ff; text-transform: uppercase;
                     letter-spacing: 1px; }
-    .djb-now { font: 1.2rem 'JetBrains Mono', monospace; padding: 0.5rem 0; }
-    .djb-list { max-height: 280px; overflow-y: auto; font: 0.85rem monospace; }
-    .djb-row { display: grid; grid-template-columns: 1fr 1fr 80px;
-               padding: 0.3rem 0.4rem; gap: 0.5rem; cursor: pointer; border-radius: 3px; }
+    .djb-panel.deck-b h3 { color: #ff006e; }
+    .djb-now { font: 1.05rem 'JetBrains Mono', monospace; padding: 0.4rem 0; min-height: 1.5rem; }
+    .djb-waveform { display: flex; gap: 1px; height: 40px; align-items: end;
+                    background: #0a0a0f; padding: 4px; border-radius: 4px; margin: 0.5rem 0; }
+    .djb-bar { flex: 1; background: #00d4ff; opacity: 0.5; min-height: 2px; }
+    .djb-panel.deck-b .djb-bar { background: #ff006e; }
+    .djb-bar.active { opacity: 1; }
+    .djb-list { max-height: 140px; overflow-y: auto; font: 0.8rem monospace; }
+    .djb-list.lib { max-height: 220px; }
+    .djb-row { display: grid; grid-template-columns: 1fr; padding: 0.25rem 0.4rem;
+               cursor: pointer; border-radius: 3px; }
     .djb-row:hover { background: rgba(0, 212, 255, 0.1); }
     .djb-search { width: 100%; padding: 0.4rem; background: #0a0a0f;
                   border: 1px solid #3a3a4e; color: #e8e8f0; border-radius: 4px;
                   margin-bottom: 0.5rem; }
     .djb-empty { color: #888; font-style: italic; padding: 1rem; text-align: center; }
+    .djb-controls { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .djb-fader { width: 100%; }
+    .djb-eq { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem; }
+    .djb-eq label { font-size: 0.7rem; color: #aaa; display: flex; flex-direction: column; align-items: center; }
+    .djb-eq input { width: 100%; }
+    .djb-mixer-section { margin-bottom: 1rem; }
+    .djb-mixer-section label { font-size: 0.75rem; color: #aaa; }
+    .djb-cf { background: linear-gradient(to right, #00d4ff, #1a1a2e 50%, #ff006e);
+              border-radius: 4px; height: 10px; }
+    .djb-lib-row { display: grid; grid-template-columns: 1fr 1fr 60px 50px 50px;
+                   gap: 0.5rem; padding: 0.3rem 0.4rem; cursor: pointer;
+                   border-radius: 3px; align-items: center; }
+    .djb-lib-row:hover { background: rgba(0, 212, 255, 0.1); }
+    .djb-lib-btn { padding: 0.15rem 0.4rem; font-size: 0.7rem; }
+    .djb-lib-btn.a { color: #00d4ff; border-color: #00d4ff; }
+    .djb-lib-btn.b { color: #ff006e; border-color: #ff006e; }
   </style>
 </head>
 
@@ -39,7 +66,8 @@
     <div x-init="$store.djBoothStore.onOpen()" x-destroy="$store.djBoothStore.cleanup()" class="djb-wrap">
 
       <div class="djb-header">
-        <h2 x-text="$store.djBoothStore.status?.is_running ? '🎧 ON AIR' : '🎧 DJ Booth'"></h2>
+        <h2 x-text="$store.djBoothStore.status?.is_running ? '🎧 ON AIR' : '🎧 DJ Booth'"
+            style="margin: 0 1rem 0 0; font-size: 1.05rem;"></h2>
         <span class="djb-badge"
               :class="{ fallback: $store.djBoothStore.status?.engine === 'ffmpeg' }"
               x-text="$store.djBoothStore.engineLabel"></span>
@@ -50,61 +78,179 @@
         <div class="djb-stream-url"
              x-text="$store.djBoothStore.status?.stream_url || ''"
              x-show="$store.djBoothStore.isRunning"></div>
-        <button class="djb-btn"
-                x-show="$store.djBoothStore.isRunning"
+        <button class="djb-btn" x-show="$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.copyStreamUrl()">Copy URL</button>
-        <button class="djb-btn start"
-                x-show="!$store.djBoothStore.isRunning"
+        <button class="djb-btn start" x-show="!$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.start()">Start</button>
-        <button class="djb-btn stop"
-                x-show="$store.djBoothStore.isRunning"
+        <button class="djb-btn stop" x-show="$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.stop()">Stop</button>
       </div>
 
       <div class="djb-grid">
-        <div class="djb-panel">
-          <h3>Now Playing</h3>
-          <div class="djb-now" x-text="$store.djBoothStore.currentTrack || '— silence —'"></div>
 
-          <h3 style="margin-top:1rem;">Queue (<span x-text="$store.djBoothStore.queueList.length"></span>)</h3>
-          <div class="djb-list">
-            <template x-for="(p, i) in $store.djBoothStore.queueList" :key="i">
-              <div class="djb-row"><span x-text="p" style="grid-column: span 3;"></span></div>
+        <!-- DECK A -->
+        <div class="djb-panel deck-a"
+             :class="{ selected: $store.djBoothStore.selectedDeck === 'a' }"
+             @click="$store.djBoothStore.selectDeck('a')">
+          <h3>Deck A</h3>
+          <div class="djb-now" x-text="$store.djBoothStore.deckA.current_track || '— silence —'"></div>
+          <div class="djb-waveform">
+            <template x-for="i in 32" :key="i">
+              <div class="djb-bar" :class="{ active: $store.djBoothStore.deckA.current_track }"></div>
             </template>
-            <div class="djb-empty" x-show="!$store.djBoothStore.queueList.length">queue empty</div>
           </div>
-          <div style="margin-top:0.5rem; display:flex; gap:0.5rem;">
-            <button class="djb-btn"
-                    @click="$store.djBoothStore.skip()"
+          <h3>Queue (<span x-text="$store.djBoothStore.deckA.queue.length"></span>)</h3>
+          <div class="djb-list">
+            <template x-for="(p, i) in $store.djBoothStore.deckA.queue" :key="i">
+              <div class="djb-row"><span x-text="p.split('/').pop()"></span></div>
+            </template>
+            <div class="djb-empty" x-show="!$store.djBoothStore.deckA.queue.length">queue empty</div>
+          </div>
+          <div class="djb-controls">
+            <button class="djb-btn sm" @click.stop="$store.djBoothStore.skip('a')"
                     :disabled="!$store.djBoothStore.isRunning">Skip</button>
-            <button class="djb-btn"
-                    @click="$store.djBoothStore.clearQueue()"
+            <button class="djb-btn sm" @click.stop="$store.djBoothStore.clearQueue('a')"
                     :disabled="!$store.djBoothStore.isRunning">Clear</button>
+          </div>
+          <label style="font-size: 0.75rem; color: #aaa; display: block; margin-top: 0.5rem;">
+            Volume <span x-text="$store.djBoothStore.deckA.volume.toFixed(2)"></span>
+            <input class="djb-fader" type="range" min="0" max="2" step="0.05"
+                   :value="$store.djBoothStore.deckA.volume"
+                   @input="$store.djBoothStore.setVolume('deck_a', parseFloat($event.target.value))">
+          </label>
+          <div class="djb-eq">
+            <label>Low <span x-text="$store.djBoothStore.deckA.eq_low.toFixed(1)"></span>
+              <input type="range" min="-12" max="12" step="0.5"
+                     :value="$store.djBoothStore.deckA.eq_low"
+                     @change="$store.djBoothStore.setEQ('a',
+                                parseFloat($event.target.value),
+                                $store.djBoothStore.deckA.eq_mid,
+                                $store.djBoothStore.deckA.eq_high)"></label>
+            <label>Mid <span x-text="$store.djBoothStore.deckA.eq_mid.toFixed(1)"></span>
+              <input type="range" min="-12" max="12" step="0.5"
+                     :value="$store.djBoothStore.deckA.eq_mid"
+                     @change="$store.djBoothStore.setEQ('a',
+                                $store.djBoothStore.deckA.eq_low,
+                                parseFloat($event.target.value),
+                                $store.djBoothStore.deckA.eq_high)"></label>
+            <label>High <span x-text="$store.djBoothStore.deckA.eq_high.toFixed(1)"></span>
+              <input type="range" min="-12" max="12" step="0.5"
+                     :value="$store.djBoothStore.deckA.eq_high"
+                     @change="$store.djBoothStore.setEQ('a',
+                                $store.djBoothStore.deckA.eq_low,
+                                $store.djBoothStore.deckA.eq_mid,
+                                parseFloat($event.target.value))"></label>
           </div>
         </div>
 
-        <div class="djb-panel">
-          <h3>Library
-            <button class="djb-btn" style="float:right; padding: 0.2rem 0.6rem; font-size: 0.8rem;"
-                    @click="$store.djBoothStore.scanLibrary()">Scan</button>
-          </h3>
-          <input class="djb-search" type="text" placeholder="search title / artist / album"
-                 :value="$store.djBoothStore.librarySearch"
-                 @input.debounce.300ms="$store.djBoothStore.onSearchChange($event.target.value)">
-          <div class="djb-list">
-            <template x-for="t in $store.djBoothStore.library.tracks" :key="t.path">
-              <div class="djb-row" @dblclick="$store.djBoothStore.queueTrack(t.path)" :title="t.path">
-                <span x-text="t.title"></span>
-                <span x-text="t.artist" style="color:#aaa;"></span>
-                <span x-text="t.format" style="color:#666;"></span>
-              </div>
+        <!-- MIXER -->
+        <div class="djb-panel mixer">
+          <h3 style="color: #ffbe0b;">Mixer</h3>
+
+          <div class="djb-mixer-section">
+            <label>Master <span x-text="$store.djBoothStore.mixer.master_volume.toFixed(2)"></span>
+              <input class="djb-fader" type="range" min="0" max="1.5" step="0.05"
+                     :value="$store.djBoothStore.mixer.master_volume"
+                     @input="$store.djBoothStore.setVolume('master', parseFloat($event.target.value))"></label>
+          </div>
+
+          <div class="djb-mixer-section">
+            <label>Crossfader (A ←→ B) <span x-text="$store.djBoothStore.mixer.crossfader.toFixed(2)"></span></label>
+            <input class="djb-fader" type="range" min="0" max="1" step="0.01"
+                   :value="$store.djBoothStore.mixer.crossfader"
+                   @input="$store.djBoothStore.setCrossfader(parseFloat($event.target.value))">
+            <div class="djb-cf"></div>
+          </div>
+
+          <div style="margin-top: 1rem; font-size: 0.75rem; color: #888;">
+            Selected deck: <strong x-text="$store.djBoothStore.selectedDeck.toUpperCase()"></strong>
+            <br>Library double-click queues here.
+          </div>
+        </div>
+
+        <!-- DECK B -->
+        <div class="djb-panel deck-b"
+             :class="{ selected: $store.djBoothStore.selectedDeck === 'b' }"
+             @click="$store.djBoothStore.selectDeck('b')">
+          <h3>Deck B</h3>
+          <div class="djb-now" x-text="$store.djBoothStore.deckB.current_track || '— silence —'"></div>
+          <div class="djb-waveform">
+            <template x-for="i in 32" :key="i">
+              <div class="djb-bar" :class="{ active: $store.djBoothStore.deckB.current_track }"></div>
             </template>
-            <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length">
-              no tracks — click Scan
-            </div>
+          </div>
+          <h3>Queue (<span x-text="$store.djBoothStore.deckB.queue.length"></span>)</h3>
+          <div class="djb-list">
+            <template x-for="(p, i) in $store.djBoothStore.deckB.queue" :key="i">
+              <div class="djb-row"><span x-text="p.split('/').pop()"></span></div>
+            </template>
+            <div class="djb-empty" x-show="!$store.djBoothStore.deckB.queue.length">queue empty</div>
+          </div>
+          <div class="djb-controls">
+            <button class="djb-btn sm" @click.stop="$store.djBoothStore.skip('b')"
+                    :disabled="!$store.djBoothStore.isRunning">Skip</button>
+            <button class="djb-btn sm" @click.stop="$store.djBoothStore.clearQueue('b')"
+                    :disabled="!$store.djBoothStore.isRunning">Clear</button>
+          </div>
+          <label style="font-size: 0.75rem; color: #aaa; display: block; margin-top: 0.5rem;">
+            Volume <span x-text="$store.djBoothStore.deckB.volume.toFixed(2)"></span>
+            <input class="djb-fader" type="range" min="0" max="2" step="0.05"
+                   :value="$store.djBoothStore.deckB.volume"
+                   @input="$store.djBoothStore.setVolume('deck_b', parseFloat($event.target.value))">
+          </label>
+          <div class="djb-eq">
+            <label>Low <span x-text="$store.djBoothStore.deckB.eq_low.toFixed(1)"></span>
+              <input type="range" min="-12" max="12" step="0.5"
+                     :value="$store.djBoothStore.deckB.eq_low"
+                     @change="$store.djBoothStore.setEQ('b',
+                                parseFloat($event.target.value),
+                                $store.djBoothStore.deckB.eq_mid,
+                                $store.djBoothStore.deckB.eq_high)"></label>
+            <label>Mid <span x-text="$store.djBoothStore.deckB.eq_mid.toFixed(1)"></span>
+              <input type="range" min="-12" max="12" step="0.5"
+                     :value="$store.djBoothStore.deckB.eq_mid"
+                     @change="$store.djBoothStore.setEQ('b',
+                                $store.djBoothStore.deckB.eq_low,
+                                parseFloat($event.target.value),
+                                $store.djBoothStore.deckB.eq_high)"></label>
+            <label>High <span x-text="$store.djBoothStore.deckB.eq_high.toFixed(1)"></span>
+              <input type="range" min="-12" max="12" step="0.5"
+                     :value="$store.djBoothStore.deckB.eq_high"
+                     @change="$store.djBoothStore.setEQ('b',
+                                $store.djBoothStore.deckB.eq_low,
+                                $store.djBoothStore.deckB.eq_mid,
+                                parseFloat($event.target.value))"></label>
           </div>
         </div>
       </div>
+
+      <!-- LIBRARY -->
+      <div class="djb-panel" style="margin-top: 1rem;">
+        <h3>Library
+          <button class="djb-btn sm" style="float:right;" @click="$store.djBoothStore.scanLibrary()">Scan</button>
+        </h3>
+        <input class="djb-search" type="text" placeholder="search title / artist / album"
+               :value="$store.djBoothStore.librarySearch"
+               @input.debounce.300ms="$store.djBoothStore.onSearchChange($event.target.value)">
+        <div class="djb-list lib">
+          <template x-for="t in $store.djBoothStore.library.tracks" :key="t.path">
+            <div class="djb-lib-row" :title="t.path"
+                 @dblclick="$store.djBoothStore.queueTrack(t.path, $store.djBoothStore.selectedDeck)">
+              <span x-text="t.title"></span>
+              <span x-text="t.artist" style="color:#aaa;"></span>
+              <span x-text="t.format" style="color:#666;"></span>
+              <button class="djb-btn djb-lib-btn a"
+                      @click.stop="$store.djBoothStore.queueTrack(t.path, 'a')">→A</button>
+              <button class="djb-btn djb-lib-btn b"
+                      @click.stop="$store.djBoothStore.queueTrack(t.path, 'b')">→B</button>
+            </div>
+          </template>
+          <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length">
+            no tracks — click Scan
+          </div>
+        </div>
+      </div>
+
     </div>
   </template>
 </div>
