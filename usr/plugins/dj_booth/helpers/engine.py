@@ -45,6 +45,12 @@ eq_high_b = interactive.float("deck_b.eq_high", 0.0)
 deck_a = ladspa.tap_equalizer(deck_a, low={{eq_low_a}}, mid={{eq_mid_a}}, high={{eq_high_a}})
 deck_b = ladspa.tap_equalizer(deck_b, low={{eq_low_b}}, mid={{eq_mid_b}}, high={{eq_high_b}})
 
+# Pitch (rate-based) per deck
+pitch_a = interactive.float("deck_a.pitch", 1.0)
+pitch_b = interactive.float("deck_b.pitch", 1.0)
+deck_a = stretch(ratio=!pitch_a, deck_a)
+deck_b = stretch(ratio=!pitch_b, deck_b)
+
 # Channel volumes (server-controlled)
 vol_a = interactive.float("deck_a.volume", 1.0)
 vol_b = interactive.float("deck_b.volume", 1.0)
@@ -62,6 +68,19 @@ mix = add([
 master_v = interactive.float("mixer.master_volume", 0.8)
 mix = amplify({{master_v}}, mix)
 mix = mksafe(mix)
+
+# EFX
+reverb_wet = interactive.float("efx.reverb_wet", 0.0)
+delay_wet  = interactive.float("efx.delay_wet", 0.0)
+delay_time = interactive.float("efx.delay_time", 0.3)
+filter_freq = interactive.float("efx.filter_freq", 20000.0)
+mix = ladspa.plate_2x2(mix, dry=!reverb_wet, wet=!reverb_wet)
+mix = echo(delay=!delay_time, feedback=0.4, ping_pong=false, mix)
+mix = filter.iir.butter.low(frequency=!filter_freq, mix)
+
+# TTS injection queue (fallback source — TTS interrupts when present)
+tts_queue = request.queue(id="tts")
+mix = fallback(track_sensitive=false, [tts_queue, mix])
 
 output.icecast(
   %mp3(bitrate={bitrate}),
@@ -106,6 +125,9 @@ class StreamEngine(Protocol):
     async def set_crossfader(self, value: float) -> None: ...
     async def set_volume(self, target: str, value: float) -> None: ...
     async def set_eq(self, deck: str, low: float, mid: float, high: float) -> None: ...
+    async def set_pitch(self, deck: str, semitones: float) -> None: ...
+    async def set_efx(self, effect: str, param: str, value) -> None: ...
+    async def inject_tts(self, wav_path: str) -> None: ...
 
 
 def select_engine() -> StreamEngine:
@@ -171,6 +193,15 @@ class FfmpegEngine:
 
     async def set_eq(self, deck: str, low: float, mid: float, high: float) -> None:
         log.warning("dj_booth: ffmpeg fallback ignores EQ")
+
+    async def set_pitch(self, deck: str, semitones: float) -> None:
+        log.warning("dj_booth: ffmpeg fallback ignores pitch")
+
+    async def set_efx(self, effect: str, param: str, value) -> None:
+        log.warning("dj_booth: ffmpeg fallback ignores EFX")
+
+    async def inject_tts(self, wav_path: str) -> None:
+        log.warning("dj_booth: ffmpeg fallback ignores TTS injection")
 
     async def is_alive(self) -> bool:
         return self._loop_task is not None and not self._loop_task.done()
@@ -368,6 +399,22 @@ class LiquidsoapEngine:
         for band, val in [("low", low), ("mid", mid), ("high", high)]:
             v = max(-12.0, min(12.0, float(val)))
             await self._telnet_send(f"{deck_q}.eq_{band}.set {v}")
+
+    async def set_pitch(self, deck: str, semitones: float) -> None:
+        s = max(-6.0, min(6.0, float(semitones)))
+        ratio = 2.0 ** (s / 12.0)
+        target = "deck_a" if deck == "a" else "deck_b"
+        await self._telnet_send(f"{target}.pitch.set {ratio}")
+
+    async def set_efx(self, effect: str, param: str, value) -> None:
+        # filter type change requires script reload — skip in Slice 5
+        if param == "type":
+            return
+        name = f"efx.{effect}_{param}"
+        await self._telnet_send(f"{name}.set {float(value)}")
+
+    async def inject_tts(self, wav_path: str) -> None:
+        await self._telnet_send(f"tts.push {wav_path}")
 
     async def _telnet_send(self, command: str) -> str:
         reader, writer = await asyncio.open_connection(LIQ_TELNET_HOST, LIQ_TELNET_PORT)
