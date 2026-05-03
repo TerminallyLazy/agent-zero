@@ -1,12 +1,12 @@
-# dj_booth — Slice 3 (Two-Deck DJ Booth)
+# dj_booth — Slice 4 (Analysis & Visualization)
 
 Local Icecast2 streaming server packaged as an Agent Zero plugin. Any ICY-compatible client (Winamp, VLC, foobar2000, browser `<audio>`) can tune in.
 
 ## Status
 
-Slice 3 of 5. Ships: Icecast2 + 2-deck liquidsoap engine (ffmpeg single-stream fallback) + library scan + agent `dj_tool` + two-deck DJ booth UI with crossfader, per-deck volume, 3-band EQ per deck, simple waveform visualizer, deck-targeted queue/skip/clear.
+Slice 4 of 5. Ships: Icecast2 + 2-deck liquidsoap engine (ffmpeg single-stream fallback) + library scan + agent `dj_tool` + two-deck DJ booth UI with crossfader, per-deck volume, 3-band EQ per deck, deck-targeted queue/skip/clear, **on-demand BPM + key detection (aubio + Krumhansl-Schmuckler chromagram)**, **pre-computed waveform peaks rendered to canvas per deck**, and a **real-time 64-band spectrum analyzer** at the top of the mixer panel.
 
-Coming in later slices: BPM/key/spectrum analysis (Slice 4), mic + cue/loop/scratch + EFX + sync (Slice 5).
+Coming in Slice 5: mic input + cue/loop/scratch + EFX + BPM-sync.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Coming in later slices: BPM/key/spectrum analysis (Slice 4), mic + cue/loop/scra
 ## Install
 
 1. Open the Plugins UI in Agent Zero
-2. Install `dj_booth`. The install hook runs `apt-get install icecast2 liquidsoap ffmpeg` and `pip install mutagen`.
+2. Install `dj_booth`. The install hook runs `apt-get install icecast2 liquidsoap ffmpeg libaubio-dev libsndfile1` and `pip install mutagen aubio numpy scipy`.
 3. Open Settings → DJ Booth and adjust passwords + paths
 4. Click **Execute** in the plugin row to start the stack
 
@@ -31,6 +31,8 @@ If liquidsoap is unavailable on the host, the engine falls back to ffmpeg automa
 - Double-click a library track to queue on the selected deck, or use the **→A** / **→B** buttons
 - Drag the **Crossfader** to mix between decks; per-deck **Volume** + 3-band **EQ** (low/mid/high) sliders shape each channel
 - **Skip** / **Clear** buttons act on the deck they belong to
+- Click the **⚡** button on a library row to detect BPM, key, and pre-compute the waveform — values appear inline once the analysis completes
+- The mixer panel's spectrum bars animate in real time while the stream is live
 - Listeners connect to `http://<host>:8000/stream` from VLC, Winamp, or browser
 
 > **ffmpeg fallback note:** when liquidsoap is unavailable, the engine plays a single sequential queue; deck routing, crossfader, volume and EQ controls become no-ops (warnings in the server log).
