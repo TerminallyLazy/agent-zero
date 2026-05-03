@@ -84,6 +84,18 @@ export const store = createStore("djBoothStore", {
     async setCrossfader(position) { await this._control("set_crossfader", { position }); },
     async setVolume(channel, level) { await this._control("set_volume", { channel, level }); },
     async setEQ(deck, low, mid, high) { await this._control("set_eq", { deck, low, mid, high }); },
+    async setPitch(deck, semitones) { await this._control("set_pitch", { deck, semitones }); },
+    async setEFX(effect, param, value) { await this._control("set_efx", { effect, param, value }); },
+    async announce(text) {
+        if (!text || !text.trim()) return;
+        const r = await this._control("announce", { text });
+        if (r && !r.error) toastFrontendInfo("Announcement queued", "DJ Booth");
+    },
+    async syncBPM(sourceBpm, targetBpm, targetDeck = "b") {
+        await this._control("sync_bpm", {
+            source_bpm: sourceBpm, target_bpm: targetBpm, target_deck: targetDeck,
+        });
+    },
 
     // Selected deck — UI tracks which deck is the "active" target for library double-click
     selectedDeck: "a",
@@ -177,7 +189,13 @@ export const store = createStore("djBoothStore", {
     get queueList() { return this.deckA.queue || []; },
 
     // Deck/mixer convenience getters
-    get deckA() { return this.status?.deck_a || { queue: [], current_track: "", volume: 1.0, eq_low: 0, eq_mid: 0, eq_high: 0 }; },
-    get deckB() { return this.status?.deck_b || { queue: [], current_track: "", volume: 1.0, eq_low: 0, eq_mid: 0, eq_high: 0 }; },
+    get deckA() { return this.status?.deck_a || { queue: [], current_track: "", volume: 1.0, eq_low: 0, eq_mid: 0, eq_high: 0, pitch: 0 }; },
+    get deckB() { return this.status?.deck_b || { queue: [], current_track: "", volume: 1.0, eq_low: 0, eq_mid: 0, eq_high: 0, pitch: 0 }; },
     get mixer() { return this.status?.mixer || { crossfader: 0.5, master_volume: 0.8 }; },
+    get efx() {
+        return this.status?.efx || {
+            reverb_wet: 0.0, delay_wet: 0.0, delay_time: 0.3,
+            filter_freq: 20000.0, filter_type: "lowpass",
+        };
+    },
 });

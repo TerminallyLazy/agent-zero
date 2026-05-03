@@ -148,6 +148,12 @@
                                 $store.djBoothStore.deckA.eq_mid,
                                 parseFloat($event.target.value))"></label>
           </div>
+          <label style="font-size: 0.75rem; color: #aaa; display: block; margin-top: 0.5rem;">
+            Pitch <span x-text="(($store.djBoothStore.deckA.pitch || 0)).toFixed(2) + ' st'"></span>
+            <input class="djb-fader" type="range" min="-6" max="6" step="0.1"
+                   :value="$store.djBoothStore.deckA.pitch || 0"
+                   @input="$store.djBoothStore.setPitch('a', parseFloat($event.target.value))">
+          </label>
         </div>
 
         <!-- MIXER -->
@@ -173,6 +179,30 @@
                    :value="$store.djBoothStore.mixer.crossfader"
                    @input="$store.djBoothStore.setCrossfader(parseFloat($event.target.value))">
             <div class="djb-cf"></div>
+          </div>
+
+          <div class="djb-mixer-section">
+            <h4 style="font-size: 0.75rem; color: #ffbe0b; margin: 0.5rem 0 0.25rem;">EFX</h4>
+            <label>Reverb <span x-text="(($store.djBoothStore.efx.reverb_wet||0)*100).toFixed(0)+'%'"></span>
+              <input class="djb-fader" type="range" min="0" max="1" step="0.01"
+                     :value="$store.djBoothStore.efx.reverb_wet"
+                     @input="$store.djBoothStore.setEFX('reverb','wet',parseFloat($event.target.value))"></label>
+            <label>Delay <span x-text="(($store.djBoothStore.efx.delay_wet||0)*100).toFixed(0)+'%'"></span>
+              <input class="djb-fader" type="range" min="0" max="1" step="0.01"
+                     :value="$store.djBoothStore.efx.delay_wet"
+                     @input="$store.djBoothStore.setEFX('delay','wet',parseFloat($event.target.value))"></label>
+            <label>Filter <span x-text="Math.round($store.djBoothStore.efx.filter_freq) + ' Hz'"></span>
+              <input class="djb-fader" type="range" min="20" max="20000" step="10"
+                     :value="$store.djBoothStore.efx.filter_freq"
+                     @input="$store.djBoothStore.setEFX('filter','freq',parseFloat($event.target.value))"></label>
+          </div>
+
+          <div class="djb-mixer-section">
+            <h4 style="font-size: 0.75rem; color: #ffbe0b; margin: 0.5rem 0 0.25rem;">Announce</h4>
+            <input class="djb-search" type="text" placeholder="say something to the listeners…"
+                   x-ref="ttsInput">
+            <button class="djb-btn sm" style="margin-top: 0.25rem;"
+                    @click="$store.djBoothStore.announce($refs.ttsInput.value); $refs.ttsInput.value=''">Speak</button>
           </div>
 
           <div style="margin-top: 1rem; font-size: 0.75rem; color: #888;">
@@ -235,6 +265,12 @@
                                 $store.djBoothStore.deckB.eq_mid,
                                 parseFloat($event.target.value))"></label>
           </div>
+          <label style="font-size: 0.75rem; color: #aaa; display: block; margin-top: 0.5rem;">
+            Pitch <span x-text="(($store.djBoothStore.deckB.pitch || 0)).toFixed(2) + ' st'"></span>
+            <input class="djb-fader" type="range" min="-6" max="6" step="0.1"
+                   :value="$store.djBoothStore.deckB.pitch || 0"
+                   @input="$store.djBoothStore.setPitch('b', parseFloat($event.target.value))">
+          </label>
         </div>
       </div>
 
