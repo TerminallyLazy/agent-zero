@@ -43,6 +43,30 @@ export const store = createStore("djBoothStore", {
         }
     },
 
+    // Map terse backend errors to plain-language messages users can act on.
+    // Anything not in the table gets a short friendly preamble so people don't
+    // see raw stack traces in the toast — the original message still shows up
+    // in the notification panel for debugging.
+    _friendlyError(raw) {
+        const msg = String(raw || "").toLowerCase();
+        if (msg.includes("stream not running")) {
+            return "The DJ Booth isn't running yet. Click Start at the top to begin.";
+        }
+        if (msg.includes("missing 'path'") || msg.includes("missing path")) {
+            return "Pick a track from the Library first.";
+        }
+        if (msg.includes("port") && msg.includes("in use")) {
+            return "That port is already taken by another app. Try a different port in Settings → DJ Booth.";
+        }
+        if (msg.includes("music_dir") || msg.includes("music dir")) {
+            return "Couldn't find your music folder. Check the path in Settings → DJ Booth.";
+        }
+        if (msg.includes("invalid deck")) {
+            return "That deck doesn't exist. Pick deck A or B.";
+        }
+        return `Couldn't do that — see details in the notification panel. (${raw})`;
+    },
+
     async _post(url, body) {
         try {
             const res = await fetch(url, {
@@ -52,11 +76,11 @@ export const store = createStore("djBoothStore", {
             });
             const data = await res.json();
             if (data && data.error) {
-                toastFrontendError(data.error, "DJ Booth");
+                toastFrontendError(this._friendlyError(data.error), "DJ Booth");
             }
             return data;
         } catch (e) {
-            toastFrontendError(String(e), "DJ Booth");
+            toastFrontendError(this._friendlyError(e), "DJ Booth");
             return null;
         }
     },
@@ -180,6 +204,23 @@ export const store = createStore("djBoothStore", {
     },
 
     get isRunning() { return this.status?.is_running || false; },
+    // Listener Help panel: true when stream's been running 2+ minutes and no
+    // one has ever connected. Hint, not a warning — could just mean nobody
+    // has tried yet. UI uses this to nudge users about port forwarding.
+    get shouldShowConnectivityHint() {
+        if (!this.isRunning) return false;
+        if (this.status?.ever_had_listener) return false;
+        const startedAt = this.status?.started_at || 0;
+        if (!startedAt) return false;
+        const elapsedSec = Date.now() / 1000 - startedAt;
+        return elapsedSec >= 120;
+    },
+    get streamPort() {
+        // Pulled from the stream URL so users see the right number in the hint.
+        const url = this.status?.stream_url || "";
+        const m = url.match(/:(\d+)/);
+        return m ? m[1] : "8000";
+    },
     get engineLabel() {
         if (!this.status?.engine) return "—";
         return this.status.engine === "ffmpeg" ? "FFMPEG (fallback)" : this.status.engine.toUpperCase();

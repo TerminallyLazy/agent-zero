@@ -64,6 +64,22 @@
     .djb-lib-btn { padding: 0.15rem 0.4rem; font-size: 0.7rem; }
     .djb-lib-btn.a { color: #00d4ff; border-color: #00d4ff; }
     .djb-lib-btn.b { color: #ff006e; border-color: #ff006e; }
+    .djb-help { background: #1a1a2e; padding: 1rem; border-radius: 8px;
+                margin-top: 1rem; border-left: 3px solid #00ff88; }
+    .djb-help h3 { color: #00ff88; margin-top: 0; font-size: 0.85rem;
+                   text-transform: uppercase; letter-spacing: 1px; }
+    .djb-help-row { display: flex; gap: 0.75rem; align-items: center;
+                    margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .djb-tunein { padding: 0.6rem 1.2rem; background: #00ff88; color: #001a0c;
+                  border-radius: 6px; border: none; font-weight: 600;
+                  text-decoration: none; cursor: pointer; font-size: 0.95rem;
+                  display: inline-block; }
+    .djb-tunein:hover { background: #00cc6e; }
+    .djb-help p { margin: 0.4rem 0; color: #c8c8d0; font-size: 0.85rem;
+                  line-height: 1.4; }
+    .djb-callout { background: #3a2e0a; border: 1px solid #ffbe0b;
+                   border-radius: 6px; padding: 0.7rem 0.9rem;
+                   color: #ffe9a8; font-size: 0.85rem; margin-top: 0.6rem; }
   </style>
 </head>
 
@@ -305,6 +321,31 @@
           <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length">
             no tracks — click Scan
           </div>
+        </div>
+      </div>
+
+      <!-- LISTENER HELP — shown only when the stream is live -->
+      <div class="djb-help" x-show="$store.djBoothStore.isRunning">
+        <h3>Listener Help</h3>
+        <div class="djb-help-row">
+          <a class="djb-tunein"
+             :href="$store.djBoothStore.status?.stream_url || '#'"
+             target="_blank" rel="noopener">▶ Tune in</a>
+          <button class="djb-btn"
+                  @click="$store.djBoothStore.copyStreamUrl()">Copy URL</button>
+          <span style="font-family: monospace; font-size: 0.8rem; color: #888;"
+                x-text="$store.djBoothStore.status?.stream_url || ''"></span>
+        </div>
+        <p>
+          Share this link with anyone you want to listen. Most music players
+          (VLC, Winamp, browsers) can play it directly — paste the URL into
+          the player's "Open Network Stream" box.
+        </p>
+        <div class="djb-callout"
+             x-show="$store.djBoothStore.shouldShowConnectivityHint">
+          Nobody has connected yet. If you're sharing this with someone outside
+          this computer, ask whoever set up Agent Zero to make sure port
+          <strong x-text="$store.djBoothStore.streamPort"></strong> is forwarded.
         </div>
       </div>
 
