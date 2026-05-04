@@ -426,15 +426,24 @@
         <h3>Listener Help</h3>
 
         <!-- Built-in player: lets the DJ hear what listeners hear, with no
-             external app. Most reliable signal that the stream actually works. -->
+             external app. Most reliable signal that the stream actually works.
+             preload="metadata" so Chrome opens the connection on page load and
+             surfaces any header/protocol error immediately, rather than waiting
+             for the user to press play. -->
         <div style="background: #0a0a0f; padding: 0.75rem; border-radius: 6px;
                     margin-bottom: 0.75rem; display: flex; gap: 0.75rem;
                     align-items: center; flex-wrap: wrap;">
           <strong style="color: #00d4ff; font-size: 0.85rem; white-space: nowrap;">🎧 Listen here:</strong>
-          <audio controls preload="none" style="flex: 1; min-width: 280px;"
+          <audio controls preload="metadata" crossorigin="anonymous"
+                 style="flex: 1; min-width: 280px;"
                  :src="$store.djBoothStore.status?.stream_url || ''"></audio>
-          <span style="font-size: 0.75rem; color: #888;">
-            Press play. If you hear audio, the stream is working.
+          <span style="font-size: 0.75rem; color: #888; flex-basis: 100%;"
+                x-show="!$store.djBoothStore.deckA.current_track && !$store.djBoothStore.deckB.current_track">
+            ⚠️ No track playing yet. The stream is silent until you click <strong>▶ Play</strong> on a track in the library below.
+          </span>
+          <span style="font-size: 0.75rem; color: #00ff88; flex-basis: 100%;"
+                x-show="$store.djBoothStore.deckA.current_track || $store.djBoothStore.deckB.current_track">
+            Press play above. If you hear audio, the stream is working.
           </span>
         </div>
 
@@ -458,6 +467,14 @@
           </div>
           <div>Listeners connected:
             <strong x-text="$store.djBoothStore.diagnoseReport?.listener_count || 0"></strong>
+          </div>
+          <div>Audio flowing:
+            <span :style="`color: ${$store.djBoothStore.diagnoseReport?.audio_flowing ? '#00ff88' : '#ffbe0b'}`"
+                  x-text="$store.djBoothStore.diagnoseReport?.audio_flowing
+                    ? ('✓ ' + ($store.djBoothStore.diagnoseReport?.bytes_pushed/1024).toFixed(0) + ' KB sent')
+                    : ($store.djBoothStore.diagnoseReport?.bytes_pushed > 0
+                        ? '⚠️ stalled ' + $store.djBoothStore.diagnoseReport?.last_chunk_age_seconds + 's ago'
+                        : '⚠️ no audio yet — click Play on a track')"></span>
           </div>
         </div>
 

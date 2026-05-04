@@ -214,6 +214,22 @@ async def connectivity_check() -> dict:
     except Exception:
         pass
 
+    # Are audio bytes actually flowing? Definitive answer for "is the
+    # engine pushing data?" — independent of the engine's task being alive.
+    bytes_pushed = 0
+    last_chunk_age = -1.0
+    try:
+        ice = IcecastManager.get()
+        if getattr(ice, "python_server", None) is not None:
+            bytes_pushed = ice.python_server.bytes_pushed
+            import time as _time
+            if ice.python_server.last_chunk_at > 0:
+                last_chunk_age = _time.time() - ice.python_server.last_chunk_at
+    except Exception:
+        pass
+
+    has_audio_flow = bytes_pushed > 0 and (last_chunk_age < 0 or last_chunk_age < 30)
+
     return {
         "ok": status_ok and mount_ok and engine_alive,
         "is_running": s.is_running,
@@ -228,6 +244,9 @@ async def connectivity_check() -> dict:
         "engine_name": s.engine,
         "listener_count": s.listener_count,
         "queue_length": len(s.deck_a.queue) + len(s.deck_b.queue),
+        "bytes_pushed": bytes_pushed,
+        "last_chunk_age_seconds": round(last_chunk_age, 1) if last_chunk_age >= 0 else None,
+        "audio_flowing": has_audio_flow,
     }
 
 

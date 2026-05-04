@@ -44,6 +44,11 @@ class IcyServer:
         self._broadcast_task: Optional[asyncio.Task] = None
         self._current_track: str = ""
         self._running: bool = False
+        # Counters for the diagnostic — answer 'is the engine actually feeding
+        # me audio?' definitively without having to look at logs.
+        self.bytes_pushed: int = 0
+        self.bytes_broadcast: int = 0
+        self.last_chunk_at: float = 0.0
 
     @property
     def listener_count(self) -> int:
@@ -106,6 +111,9 @@ class IcyServer:
     async def push_chunk(self, data: bytes) -> None:
         if not data or not self._running:
             return
+        import time as _time
+        self.bytes_pushed += len(data)
+        self.last_chunk_at = _time.time()
         try:
             self._source_queue.put_nowait(data)
         except asyncio.QueueFull:
@@ -231,23 +239,28 @@ class IcyServer:
         await writer.drain()
 
     async def _serve_stream(self, writer: asyncio.StreamWriter, peer) -> None:
-        # HTTP/1.0 status line + icy-* headers. Same wire format Icecast2
-        # sends to listeners — VLC/Winamp/foobar/browsers all parse this
-        # correctly, AND it's parseable by urllib (used by our diagnostic
-        # and listener-count poll). The legacy "ICY 200 OK" status line
-        # is for SOURCE connections in older SHOUTcast servers, not
-        # listeners — using it here breaks any standard HTTP client.
+        # HTTP/1.0 + icy-* headers, mirroring real Icecast2's listener response.
+        # VLC, Winamp, foobar, and Chrome's <audio> element all parse this.
+        # Important details:
+        # - Accept-Ranges: none — tells Chrome we don't support range requests,
+        #   so it falls back to plain streaming instead of expecting 206 partial.
+        # - No Content-Length — this is an infinite stream.
+        # - Cache-Control + Pragma — Icecast2 includes these and some browsers
+        #   refuse to play audio that looks cacheable.
         headers = (
             "HTTP/1.0 200 OK\r\n"
-            f"Server: dj_booth\r\n"
+            "Server: dj_booth\r\n"
             f"icy-name: {self.stream_name}\r\n"
             f"icy-description: {self.stream_description}\r\n"
             f"icy-genre: {self.stream_genre}\r\n"
             "icy-pub: 0\r\n"
             "icy-br: 192\r\n"
             "Content-Type: audio/mpeg\r\n"
-            "Cache-Control: no-cache\r\n"
+            "Cache-Control: no-cache, no-store\r\n"
+            "Pragma: no-cache\r\n"
+            "Accept-Ranges: none\r\n"
             "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Allow-Headers: Range\r\n"
             "Connection: close\r\n"
             "\r\n"
         )
