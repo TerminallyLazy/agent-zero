@@ -125,11 +125,16 @@ class IcyServer:
                 pass
 
     async def _broadcast_loop(self) -> None:
-        try:
-            while True:
+        # Broadcast loop must NEVER die on a single error — if it did, every
+        # listener would silently stop receiving audio while the engine kept
+        # pushing chunks into a now-orphaned queue. Catch per-iteration so a
+        # bad listener can't kill the broadcast.
+        while True:
+            try:
                 chunk = await self._source_queue.get()
                 if not chunk:
                     continue
+                self.bytes_broadcast += len(chunk)
                 dead: Set[asyncio.Queue] = set()
                 for q in self._listeners:
                     try:
@@ -137,11 +142,19 @@ class IcyServer:
                     except asyncio.QueueFull:
                         dead.add(q)
                 if dead:
+                    # Send a sentinel so the listener handler exits cleanly
+                    # instead of hanging on q.get() forever.
+                    for q in dead:
+                        try:
+                            q.put_nowait(b"")
+                        except Exception:
+                            pass
                     self._listeners -= dead
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("dj_booth IcyServer broadcast loop error")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("dj_booth IcyServer broadcast iteration error")
+                await asyncio.sleep(0.05)
 
     async def _handle_client(self, reader: asyncio.StreamReader,
                              writer: asyncio.StreamWriter) -> None:

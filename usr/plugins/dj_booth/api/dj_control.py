@@ -118,6 +118,16 @@ class DjControl(ApiHandler):
                 out = asdict(get_state())
                 out["connectivity"] = report
                 return out
+            elif action == "test_audio":
+                # Bypass ffmpeg: push silent MP3 frames straight to the broadcast
+                # queue for a few seconds. If listeners hear silence (audible to
+                # the player but no music), streaming layer is fine and the bug
+                # is in the encoder. If listeners hear nothing, streaming layer
+                # itself is broken.
+                report = await run_async(lifecycle.inject_test_audio(seconds=6.0), timeout=15.0)
+                out = asdict(get_state())
+                out["test_audio"] = report
+                return out
             elif action == "sync_bpm":
                 src_bpm = float(input.get("source_bpm", 0.0))
                 tgt_bpm = float(input.get("target_bpm", 0.0))

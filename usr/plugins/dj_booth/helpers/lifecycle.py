@@ -179,6 +179,46 @@ async def _self_check_origin(port: int, mount: str) -> tuple[bool, str]:
     return await loop.run_in_executor(None, _check)
 
 
+async def inject_test_audio(seconds: float = 8.0) -> dict:
+    """Push a stream of valid silent MP3 frames directly into the IcyServer
+    for a few seconds, bypassing ffmpeg entirely. Lets the user prove that
+    'click stream URL → hear audio' works at the network layer, isolating
+    encoder problems from streaming-server problems.
+
+    Each MP3 silence frame at 192kbps/44.1kHz/stereo is 627 bytes.
+    """
+    from usr.plugins.dj_booth.helpers.icecast import IcecastManager
+    ice = IcecastManager.get()
+    server = getattr(ice, "python_server", None)
+    if server is None:
+        return {"ok": False, "detail": "Test only works in Python server mode (no icecast2 binary)."}
+
+    # Pre-built silent MP3 frame: 192 kbps, 44.1 kHz, stereo, single frame.
+    # Header: FF FB B0 64 = MPEG1 Layer3, 192k, 44100 Hz, stereo, no padding,
+    # private=0, no protection. Body is all zeros (silence). Frame size at this
+    # config = 626 bytes payload + 1 header byte handled by ffmpeg encoders;
+    # we use the simpler form with just a valid header followed by zero payload
+    # bytes. Most browsers/players accept this as sync silence.
+    frame = bytes([0xFF, 0xFB, 0xB0, 0x64]) + bytes(623)
+
+    # 38.28 frames per second at 44.1k → push roughly that many per second
+    frames_per_second = 38
+    total_frames = int(seconds * frames_per_second)
+    pushed = 0
+    for _ in range(total_frames):
+        await server.push_chunk(frame)
+        pushed += len(frame)
+        # Pace it so browsers consume in real time
+        await asyncio.sleep(1.0 / frames_per_second)
+
+    return {
+        "ok": True,
+        "detail": f"Pushed {pushed} bytes of silent MP3 ({seconds}s) directly into the broadcast queue.",
+        "bytes_pushed": server.bytes_pushed,
+        "listener_count": _state.get_state().listener_count,
+    }
+
+
 async def connectivity_check() -> dict:
     """Manual diagnostic: report whether the origin server, mount, and engine
     are healthy. Wired to api/dj_control.py action='connectivity_check' for

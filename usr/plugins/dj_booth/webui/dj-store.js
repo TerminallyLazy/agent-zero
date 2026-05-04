@@ -314,6 +314,30 @@ export const store = createStore("djBoothStore", {
         }
     },
 
+    isTesting: false,
+    async testAudio() {
+        // Independent test: bypasses ffmpeg, streams silent MP3 frames
+        // directly into the broadcast queue for ~6 seconds. If you can
+        // hear silence in the built-in player, the streaming + browser
+        // path works and the bug is in the encoder.
+        this.isTesting = true;
+        toastFrontendInfo("Pushing 6 seconds of silent test audio (bypasses ffmpeg)...", "DJ Booth");
+        try {
+            const r = await this._control("test_audio");
+            const t = r?.test_audio;
+            if (t?.ok) {
+                toastFrontendSuccess(
+                    "Test push complete. If your built-in player ran for ~6s, the streaming path is fine — the issue is the encoder. If it didn't, listeners can't connect.",
+                    "DJ Booth",
+                );
+            } else {
+                toastFrontendError(`Test push failed: ${t?.detail || "unknown"}`, "DJ Booth");
+            }
+        } finally {
+            this.isTesting = false;
+        }
+    },
+
     diagnoseReport: null,
     async diagnose(silentIfOk = false) {
         const r = await this._control("connectivity_check");

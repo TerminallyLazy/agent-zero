@@ -116,6 +116,13 @@
         <button class="djb-btn" x-show="$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.diagnose()"
                 title="Run a connectivity check on the stream">🩺 Diagnose</button>
+        <button class="djb-btn" x-show="$store.djBoothStore.isRunning"
+                @click="$store.djBoothStore.testAudio()"
+                :disabled="$store.djBoothStore.isTesting"
+                title="Push 6s of silent test audio bypassing the encoder. If you hear silence in the built-in player, the stream itself works and the bug is in ffmpeg.">
+          <span x-show="!$store.djBoothStore.isTesting">🔊 Test Audio</span>
+          <span x-show="$store.djBoothStore.isTesting">Testing...</span>
+        </button>
         <button class="djb-btn start" x-show="!$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.start()">Start</button>
         <button class="djb-btn stop" x-show="$store.djBoothStore.isRunning"
