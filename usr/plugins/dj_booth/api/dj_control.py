@@ -60,22 +60,35 @@ class DjControl(ApiHandler):
                 )
             elif action == "scan_library":
                 # Library scan is sync + cheap — no need to schedule on the runtime.
-                # Auto-discover plausible music dirs in addition to what's configured
-                # so users don't have to know about the container's filesystem layout.
-                from usr.plugins.dj_booth.helpers.library import discover_music_dirs
+                # Use multi-path discovery when available; fall back gracefully
+                # if older plugin code is still cached in this Python process.
+                from usr.plugins.dj_booth.helpers import library as library_mod
                 lib = _get_library()
                 override = input.get("dir") or input.get("paths")
                 if override:
                     paths = override if isinstance(override, list) else [override]
                 else:
-                    paths = discover_music_dirs(cfg.get("music_dir", ""))
-                count = lib.scan(paths)
+                    discover = getattr(library_mod, "discover_music_dirs", None)
+                    if callable(discover):
+                        paths = discover(cfg.get("music_dir", ""))
+                    else:
+                        paths = cfg.get("music_dir", "/a0/usr/workdir/music")
+                try:
+                    count = lib.scan(paths)
+                except TypeError:
+                    # Older scan signature didn't accept a list of paths.
+                    fallback = paths[0] if isinstance(paths, list) and paths else paths
+                    count = lib.scan(fallback)
                 s = get_state()
                 s.library_count = count
-                s.last_scan_at = lib.last_scan_at
-                s.scanned_paths = list(lib.scanned_paths)
-                s.scanned_path_counts = dict(lib.scanned_path_counts)
-                s.scan_in_progress = False
+                for attr_name, value in (
+                    ("last_scan_at", getattr(lib, "last_scan_at", 0.0)),
+                    ("scanned_paths", list(getattr(lib, "scanned_paths", []) or [])),
+                    ("scanned_path_counts", dict(getattr(lib, "scanned_path_counts", {}) or {})),
+                    ("scan_in_progress", False),
+                ):
+                    if hasattr(s, attr_name):
+                        setattr(s, attr_name, value)
             elif action == "set_pitch":
                 await run_async(
                     lifecycle.set_pitch(input.get("deck", "a"), float(input.get("semitones", 0.0))),

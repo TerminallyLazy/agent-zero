@@ -44,7 +44,7 @@ class UploadTrack(ApiHandler):
         # in a sibling module doesn't prevent A0 from loading this handler at all.
         from werkzeug.utils import secure_filename
         from helpers.plugins import get_plugin_config
-        from usr.plugins.dj_booth.helpers.library import LibraryManager, discover_music_dirs
+        from usr.plugins.dj_booth.helpers import library as library_mod
         from usr.plugins.dj_booth.helpers.state import get_state
 
         if "files[]" not in request.files:
@@ -94,13 +94,27 @@ class UploadTrack(ApiHandler):
         if successful:
             from usr.plugins.dj_booth.api import dj_control
             lib = dj_control._get_library()
-            paths = discover_music_dirs(music_dir)
-            count = lib.scan(paths)
+            # Prefer multi-path discovery if the running plugin has the newer
+            # library module; fall back to single-dir scan when it doesn't.
+            # Also handle older LibraryManager.scan that only accepts a str.
+            discover = getattr(library_mod, "discover_music_dirs", None)
+            try:
+                if callable(discover):
+                    count = lib.scan(discover(music_dir))
+                else:
+                    count = lib.scan(music_dir)
+            except TypeError:
+                # Older scan signature didn't accept a list — single dir.
+                count = lib.scan(music_dir)
             s = get_state()
             s.library_count = count
-            s.last_scan_at = lib.last_scan_at
-            s.scanned_paths = list(lib.scanned_paths)
-            s.scanned_path_counts = dict(lib.scanned_path_counts)
+            for attr_name, value in (
+                ("last_scan_at", getattr(lib, "last_scan_at", 0.0)),
+                ("scanned_paths", list(getattr(lib, "scanned_paths", []) or [])),
+                ("scanned_path_counts", dict(getattr(lib, "scanned_path_counts", {}) or {})),
+            ):
+                if hasattr(s, attr_name):
+                    setattr(s, attr_name, value)
 
         return {
             "uploaded": successful,
