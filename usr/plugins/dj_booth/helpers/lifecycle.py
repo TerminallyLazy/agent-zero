@@ -231,43 +231,84 @@ async def connectivity_check() -> dict:
     }
 
 
+async def _cancel_task(task: Optional[asyncio.Task], name: str, timeout: float = 2.0) -> None:
+    """Cancel a task, await its completion with a hard timeout, swallow ALL errors.
+    Used by stop_stack so a misbehaving task can never block the stream from
+    being marked off."""
+    if task is None:
+        return
+    try:
+        task.cancel()
+    except Exception:
+        pass
+    try:
+        await asyncio.wait_for(task, timeout=timeout)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        pass
+    except BaseException:
+        log.exception("dj_booth: error awaiting task '%s'", name)
+
+
 async def stop_stack() -> None:
-    global _engine, _health_task, _spectrum_task
+    """Tear everything down. Bulletproof: state.is_running flips to False
+    immediately, every cleanup step is wrapped in a timeout, and reset_state
+    runs in a finally block so no individual failure can leave the booth
+    in a permanently 'running' state."""
+    global _engine, _health_task, _spectrum_task, _share_task
     s = _state.get_state()
+
+    # Flip is_running off FIRST so the UI sees 'stopped' the moment Stop is
+    # clicked, even if the cleanup below is slow or partially fails.
+    s.is_running = False
+    s.spectrum = []
+
     lock = _state.get_lifecycle_lock()
-    async with lock:
-        if _spectrum_task:
-            _spectrum_task.cancel()
-            try:
-                await _spectrum_task
-            except asyncio.CancelledError:
-                pass
-            _spectrum_task = None
-        _state.get_state().spectrum = []
-        if _health_task:
-            _health_task.cancel()
-            try:
-                await _health_task
-            except asyncio.CancelledError:
-                pass
-            _health_task = None
+    try:
+        await asyncio.wait_for(lock.acquire(), timeout=10.0)
+    except asyncio.TimeoutError:
+        log.error("dj_booth: stop_stack could not acquire lifecycle lock — forcing reset")
+        _state.reset_state(keep_library=True, keep_error=False)
+        return
+
+    try:
+        # Cancel background tasks (catch ALL — never let a hung task block stop).
+        await _cancel_task(_spectrum_task, "spectrum_task")
+        _spectrum_task = None
+        await _cancel_task(_health_task, "health_task")
+        _health_task = None
+        await _cancel_task(_share_task, "share_task")
+        _share_task = None
+
+        # Stop the audio engine (ffmpeg / liquidsoap).
         if _engine is not None:
             try:
-                await _engine.stop()
-            except Exception:
-                log.exception("dj_booth: engine stop error")
+                await asyncio.wait_for(_engine.stop(), timeout=5.0)
+            except (asyncio.TimeoutError, Exception):
+                log.exception("dj_booth: engine stop did not complete cleanly")
             _engine = None
+
+        # Stop the streaming server (icecast2 subprocess OR in-process IcyServer).
         try:
-            await IcecastManager.get().stop()
-        except Exception:
-            log.exception("dj_booth: icecast stop error")
-        # Auto-close any active public-share tunnel when the stream stops
+            await asyncio.wait_for(IcecastManager.get().stop(), timeout=5.0)
+        except (asyncio.TimeoutError, Exception):
+            log.exception("dj_booth: icecast/icy server stop did not complete cleanly")
+
+        # Tear down the public Cloudflare tunnel if it's up. Sync method —
+        # run in executor so a slow cloudflared shutdown can't block us.
         try:
             from usr.plugins.dj_booth.helpers.stream_tunnel import StreamTunnel
-            StreamTunnel.get().stop()
-        except Exception:
-            log.exception("dj_booth: tunnel stop error")
+            tunnel = StreamTunnel.get()
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(loop.run_in_executor(None, tunnel.stop), timeout=5.0)
+        except (asyncio.TimeoutError, Exception):
+            log.exception("dj_booth: tunnel stop did not complete cleanly")
+    finally:
+        # Always reset state so the UI never sees 'running' after a Stop click.
         _state.reset_state(keep_library=True, keep_error=False)
+        try:
+            lock.release()
+        except RuntimeError:
+            pass
 
 
 async def queue_track(path: str, deck: str = "a") -> None:

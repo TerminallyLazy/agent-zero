@@ -69,27 +69,39 @@ class IcyServer:
 
     async def stop(self) -> None:
         self._running = False
-        if self._broadcast_task:
-            self._broadcast_task.cancel()
-            try:
-                await self._broadcast_task
-            except asyncio.CancelledError:
-                pass
-            self._broadcast_task = None
-        if self._server:
-            self._server.close()
-            try:
-                await self._server.wait_closed()
-            except Exception:
-                pass
-            self._server = None
-        # Drain any pending listener queues so connected clients drop cleanly
+
+        # Tell every connected listener to terminate by pushing a sentinel.
+        # Do this BEFORE wait_closed() so the server can finish closing —
+        # otherwise wait_closed() blocks indefinitely on long-lived stream
+        # connections (e.g. an active Cloudflare tunnel listener).
         for q in list(self._listeners):
             try:
                 q.put_nowait(b"")
             except Exception:
                 pass
         self._listeners.clear()
+
+        if self._broadcast_task:
+            self._broadcast_task.cancel()
+            try:
+                await asyncio.wait_for(self._broadcast_task, timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            except Exception:
+                log.exception("dj_booth IcyServer broadcast task did not stop cleanly")
+            self._broadcast_task = None
+
+        if self._server:
+            try:
+                self._server.close()
+                # Hard timeout — if a stuck listener prevents close, abort cleanup
+                # rather than blocking the whole stop_stack call.
+                await asyncio.wait_for(self._server.wait_closed(), timeout=3.0)
+            except asyncio.TimeoutError:
+                log.warning("dj_booth IcyServer wait_closed timed out — leaving listeners")
+            except Exception:
+                log.exception("dj_booth IcyServer close error")
+            self._server = None
 
     async def push_chunk(self, data: bytes) -> None:
         if not data or not self._running:
