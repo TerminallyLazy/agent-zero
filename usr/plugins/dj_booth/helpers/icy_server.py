@@ -231,9 +231,15 @@ class IcyServer:
         await writer.drain()
 
     async def _serve_stream(self, writer: asyncio.StreamWriter, peer) -> None:
-        # ICY-compatible response headers
+        # HTTP/1.0 status line + icy-* headers. Same wire format Icecast2
+        # sends to listeners — VLC/Winamp/foobar/browsers all parse this
+        # correctly, AND it's parseable by urllib (used by our diagnostic
+        # and listener-count poll). The legacy "ICY 200 OK" status line
+        # is for SOURCE connections in older SHOUTcast servers, not
+        # listeners — using it here breaks any standard HTTP client.
         headers = (
-            "ICY 200 OK\r\n"
+            "HTTP/1.0 200 OK\r\n"
+            f"Server: dj_booth\r\n"
             f"icy-name: {self.stream_name}\r\n"
             f"icy-description: {self.stream_description}\r\n"
             f"icy-genre: {self.stream_genre}\r\n"

@@ -425,11 +425,47 @@
       <div class="djb-help" x-show="$store.djBoothStore.isRunning">
         <h3>Listener Help</h3>
 
+        <!-- Built-in player: lets the DJ hear what listeners hear, with no
+             external app. Most reliable signal that the stream actually works. -->
+        <div style="background: #0a0a0f; padding: 0.75rem; border-radius: 6px;
+                    margin-bottom: 0.75rem; display: flex; gap: 0.75rem;
+                    align-items: center; flex-wrap: wrap;">
+          <strong style="color: #00d4ff; font-size: 0.85rem; white-space: nowrap;">🎧 Listen here:</strong>
+          <audio controls preload="none" style="flex: 1; min-width: 280px;"
+                 :src="$store.djBoothStore.status?.stream_url || ''"></audio>
+          <span style="font-size: 0.75rem; color: #888;">
+            Press play. If you hear audio, the stream is working.
+          </span>
+        </div>
+
+        <!-- Connection status grid — replaces the old vague hint with a clear
+             per-layer health indicator updated by the Diagnose button. -->
+        <div x-show="$store.djBoothStore.diagnoseReport"
+             style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+                    background: #0a0a0f; padding: 0.5rem 0.75rem; border-radius: 4px;
+                    margin-bottom: 0.75rem; font-size: 0.8rem;">
+          <div>Status endpoint:
+            <span :style="`color: ${$store.djBoothStore.diagnoseReport?.status_endpoint_ok ? '#00ff88' : '#ff006e'}`"
+                  x-text="$store.djBoothStore.diagnoseReport?.status_endpoint_ok ? '✓ ok' : ('✗ ' + ($store.djBoothStore.diagnoseReport?.status_endpoint_error || 'fail'))"></span>
+          </div>
+          <div>Stream mount:
+            <span :style="`color: ${$store.djBoothStore.diagnoseReport?.mount_ok ? '#00ff88' : '#ff006e'}`"
+                  x-text="$store.djBoothStore.diagnoseReport?.mount_ok ? '✓ ok' : ('✗ ' + ($store.djBoothStore.diagnoseReport?.mount_error || 'fail'))"></span>
+          </div>
+          <div>Audio engine:
+            <span :style="`color: ${$store.djBoothStore.diagnoseReport?.engine_alive ? '#00ff88' : '#ff006e'}`"
+                  x-text="$store.djBoothStore.diagnoseReport?.engine_alive ? '✓ running' : '✗ not running'"></span>
+          </div>
+          <div>Listeners connected:
+            <strong x-text="$store.djBoothStore.diagnoseReport?.listener_count || 0"></strong>
+          </div>
+        </div>
+
         <!-- Local link — works on this computer / same network -->
         <div class="djb-help-row">
           <a class="djb-tunein"
              :href="$store.djBoothStore.status?.stream_url || '#'"
-             target="_blank" rel="noopener">▶ Tune in (this computer / LAN)</a>
+             target="_blank" rel="noopener">▶ Open in player (LAN)</a>
           <button class="djb-btn"
                   @click="$store.djBoothStore.copyStreamUrl()">Copy LAN URL</button>
           <span style="font-family: monospace; font-size: 0.8rem; color: #888;"
