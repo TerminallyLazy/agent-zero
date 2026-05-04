@@ -93,7 +93,12 @@ export const store = createStore("djBoothStore", {
 
     async start() {
         const r = await this._control("start");
-        if (r && !r.error) toastFrontendSuccess("Stream started", "DJ Booth");
+        if (!r || r.error) return;
+        toastFrontendSuccess("Stream started — verifying...", "DJ Booth");
+        // Self-test happens server-side too, but we run an explicit check
+        // immediately after Start so the user knows the server is reachable
+        // before they bother sharing the link.
+        setTimeout(() => this.diagnose(true), 600);
     },
     async stop() {
         const r = await this._control("stop");
@@ -291,6 +296,46 @@ export const store = createStore("djBoothStore", {
             this.library.page = 0;
             this.fetchLibrary();
         }, 300);
+    },
+
+    // Play the track on the selected deck right now: queue it, then if
+    // there's already something playing on that deck, skip to it.
+    async playNow(path) {
+        const deck = this.selectedDeck || "a";
+        // Queue first so the deck has something to advance to
+        const r = await this._control("queue_track", { path, deck });
+        if (!r || r.error) return;
+        const ds = deck === "a" ? this.deckA : this.deckB;
+        if (ds.current_track) {
+            await this._control("skip", { deck });
+            toastFrontendInfo(`Now playing on Deck ${deck.toUpperCase()}`, "DJ Booth");
+        } else {
+            toastFrontendInfo(`Queued on Deck ${deck.toUpperCase()} — should start playing in a moment`, "DJ Booth");
+        }
+    },
+
+    diagnoseReport: null,
+    async diagnose(silentIfOk = false) {
+        const r = await this._control("connectivity_check");
+        const c = r?.connectivity;
+        this.diagnoseReport = c;
+        if (!c) {
+            toastFrontendError("Diagnostic failed — couldn't run the check.", "DJ Booth");
+            return;
+        }
+        if (c.ok) {
+            if (!silentIfOk) {
+                toastFrontendSuccess("✓ Stream is healthy and reachable.", "DJ Booth");
+            }
+            return;
+        }
+        // Build a useful single-line summary for the toast
+        const reasons = [];
+        if (!c.is_running) reasons.push("stream is off");
+        if (!c.engine_alive) reasons.push("audio engine not running");
+        if (!c.status_endpoint_ok) reasons.push(`status endpoint ${c.status_endpoint_code || "unreachable"}`);
+        if (!c.mount_ok) reasons.push(`mount ${c.mount_code || "unreachable"}`);
+        toastFrontendError(`Stream issue: ${reasons.join(", ") || "unknown"}`, "DJ Booth");
     },
 
     async copyStreamUrl() {

@@ -58,13 +58,23 @@
     .djb-mixer-section label { font-size: 0.75rem; color: #aaa; }
     .djb-cf { background: linear-gradient(to right, #00d4ff, #1a1a2e 50%, #ff006e);
               border-radius: 4px; height: 10px; }
-    .djb-lib-row { display: grid; grid-template-columns: 1fr 1fr 60px 100px 50px 50px;
+    .djb-lib-row { display: grid; grid-template-columns: 50px 1fr 1fr 60px 100px 50px 50px;
                    gap: 0.5rem; padding: 0.3rem 0.4rem; cursor: pointer;
                    border-radius: 3px; align-items: center; }
     .djb-lib-row:hover { background: rgba(0, 212, 255, 0.1); }
     .djb-lib-btn { padding: 0.15rem 0.4rem; font-size: 0.7rem; }
     .djb-lib-btn.a { color: #00d4ff; border-color: #00d4ff; }
     .djb-lib-btn.b { color: #ff006e; border-color: #ff006e; }
+    .djb-play-btn { padding: 0.25rem 0.5rem; font-size: 0.85rem; font-weight: bold;
+                    background: #00d4ff; color: #001a2e; border: none; border-radius: 4px;
+                    cursor: pointer; }
+    .djb-play-btn:hover { background: #5fe3ff; }
+    .djb-play-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .djb-howto { background: rgba(0, 212, 255, 0.06); border: 1px solid rgba(0, 212, 255, 0.3);
+                 padding: 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; }
+    .djb-howto strong { color: #00d4ff; }
+    .djb-howto ol { margin: 0.5rem 0 0 1.25rem; padding: 0; }
+    .djb-howto li { margin: 0.25rem 0; }
     .djb-help { background: #1a1a2e; padding: 1rem; border-radius: 8px;
                 margin-top: 1rem; border-left: 3px solid #00ff88; }
     .djb-help h3 { color: #00ff88; margin-top: 0; font-size: 0.85rem;
@@ -103,10 +113,28 @@
              x-show="$store.djBoothStore.isRunning"></div>
         <button class="djb-btn" x-show="$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.copyStreamUrl()">Copy URL</button>
+        <button class="djb-btn" x-show="$store.djBoothStore.isRunning"
+                @click="$store.djBoothStore.diagnose()"
+                title="Run a connectivity check on the stream">🩺 Diagnose</button>
         <button class="djb-btn start" x-show="!$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.start()">Start</button>
         <button class="djb-btn stop" x-show="$store.djBoothStore.isRunning"
                 @click="$store.djBoothStore.stop()">Stop</button>
+      </div>
+
+      <!-- Inline error/warning banner — shown when something went wrong on Start
+           or when the diagnostic flagged a problem. Plain language, dismissible. -->
+      <div x-show="$store.djBoothStore.status?.error"
+           style="background: rgba(255, 0, 110, 0.15); border: 1px solid #ff006e;
+                  padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem;
+                  display: flex; align-items: center; gap: 0.75rem;">
+        <span style="font-size: 1.2rem;">⚠️</span>
+        <div style="flex: 1;">
+          <strong>Something went wrong:</strong>
+          <span x-text="$store.djBoothStore.status?.error" style="word-break: break-word;"></span>
+        </div>
+        <button class="djb-btn sm"
+                @click="$store.djBoothStore.diagnose()">Diagnose</button>
       </div>
 
       <div class="djb-grid">
@@ -342,13 +370,30 @@
           </ul>
         </details>
 
+        <!-- How-to-play callout: visible whenever the stream isn't running.
+             Most users see this once after Add Music and before clicking Start. -->
+        <div class="djb-howto" x-show="!$store.djBoothStore.isRunning && $store.djBoothStore.library.tracks.length">
+          <strong>Ready to play! Quick guide:</strong>
+          <ol>
+            <li>Click the green <strong>Start</strong> button at the top of this panel.</li>
+            <li>Click the blue <strong>▶ Play</strong> button on any track below.</li>
+            <li>Click <strong>🌐 Share Online</strong> in Listener Help to get a public link anyone can listen to.</li>
+          </ol>
+        </div>
+
         <input class="djb-search" type="text" placeholder="search title / artist / album / genre"
                :value="$store.djBoothStore.librarySearch"
                @input.debounce.300ms="$store.djBoothStore.onSearchChange($event.target.value)">
         <div class="djb-list lib">
           <template x-for="t in $store.djBoothStore.library.tracks" :key="t.path">
             <div class="djb-lib-row" :title="t.path"
-                 @dblclick="$store.djBoothStore.queueTrack(t.path, $store.djBoothStore.selectedDeck)">
+                 @dblclick="$store.djBoothStore.playNow(t.path)">
+              <button class="djb-play-btn"
+                      @click.stop="$store.djBoothStore.playNow(t.path)"
+                      :disabled="!$store.djBoothStore.isRunning"
+                      :title="$store.djBoothStore.isRunning ? 'Play this track now on the selected deck' : 'Click Start at the top first'">
+                ▶ Play
+              </button>
               <span x-text="t.title"></span>
               <span x-text="t.artist" style="color:#aaa;"></span>
               <span x-text="t.format" style="color:#666;"></span>
@@ -360,9 +405,11 @@
                         title="Analyze BPM + key + waveform">⚡</button>
               </div>
               <button class="djb-btn djb-lib-btn a"
-                      @click.stop="$store.djBoothStore.queueTrack(t.path, 'a')">→A</button>
+                      @click.stop="$store.djBoothStore.queueTrack(t.path, 'a')"
+                      title="Queue on Deck A (without skipping current track)">+A</button>
               <button class="djb-btn djb-lib-btn b"
-                      @click.stop="$store.djBoothStore.queueTrack(t.path, 'b')">→B</button>
+                      @click.stop="$store.djBoothStore.queueTrack(t.path, 'b')"
+                      title="Queue on Deck B">+B</button>
             </div>
           </template>
           <div class="djb-empty" x-show="!$store.djBoothStore.library.tracks.length"

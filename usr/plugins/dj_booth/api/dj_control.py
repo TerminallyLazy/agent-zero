@@ -111,6 +111,13 @@ class DjControl(ApiHandler):
                 await run_async(lifecycle.start_public_share(), timeout=5.0)
             elif action == "stop_share":
                 await run_async(lifecycle.stop_public_share(), timeout=10.0)
+            elif action == "connectivity_check":
+                report = await run_async(lifecycle.connectivity_check(), timeout=10.0)
+                # Return the diagnostic alongside the standard state so the UI
+                # gets one consistent shape.
+                out = asdict(get_state())
+                out["connectivity"] = report
+                return out
             elif action == "sync_bpm":
                 src_bpm = float(input.get("source_bpm", 0.0))
                 tgt_bpm = float(input.get("target_bpm", 0.0))
