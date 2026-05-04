@@ -157,11 +157,41 @@ export const store = createStore("djBoothStore", {
         try {
             const fd = new FormData();
             for (const f of audioFiles) fd.append("files[]", f, f.name);
-            const res = await fetch("/api/plugins/dj_booth/upload_track", {
-                method: "POST",
-                body: fd,
-            });
-            const data = await res.json();
+
+            // Use A0's fetchApi wrapper if available — it adds the X-CSRF-Token
+            // header. Falls back to plain fetch (which works via cookie CSRF
+            // when the cookie is set) if the helper isn't loaded yet.
+            let res;
+            try {
+                const apiMod = await import("/js/api.js");
+                res = await apiMod.fetchApi("/api/plugins/dj_booth/upload_track", {
+                    method: "POST",
+                    body: fd,
+                });
+            } catch {
+                res = await fetch("/api/plugins/dj_booth/upload_track", {
+                    method: "POST",
+                    body: fd,
+                    credentials: "same-origin",
+                });
+            }
+
+            // Read body once as text; try JSON first, fall back to raw text.
+            // This is the difference between a useful error and "SyntaxError: <".
+            const raw = await res.text();
+            let data;
+            try { data = JSON.parse(raw); }
+            catch { data = null; }
+
+            if (!res.ok) {
+                const detail = data?.error || raw.slice(0, 240) || `${res.status} ${res.statusText}`;
+                toastFrontendError(`Upload failed (${res.status}): ${detail}`, "DJ Booth");
+                return;
+            }
+            if (!data) {
+                toastFrontendError(`Upload returned an unexpected response: ${raw.slice(0, 200)}`, "DJ Booth");
+                return;
+            }
             if (data.error) {
                 toastFrontendError(data.error, "DJ Booth");
                 return;
@@ -177,7 +207,7 @@ export const store = createStore("djBoothStore", {
             await this.fetchLibrary();
             await this.fetchStatus();
         } catch (e) {
-            toastFrontendError(`Upload failed: ${e}`, "DJ Booth");
+            toastFrontendError(`Upload failed: ${e?.message || e}`, "DJ Booth");
         } finally {
             this.isUploading = false;
         }

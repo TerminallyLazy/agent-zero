@@ -10,27 +10,59 @@ land in /a0/usr/workdir/music inside the container.
 """
 from __future__ import annotations
 
+import logging
 import os
-from werkzeug.utils import secure_filename
+import traceback
+
 from helpers.api import ApiHandler, Request
-from helpers.plugins import get_plugin_config
 
-from usr.plugins.dj_booth.api.dj_control import _get_library
-from usr.plugins.dj_booth.helpers.library import discover_music_dirs
-from usr.plugins.dj_booth.helpers.state import get_state
 
+log = logging.getLogger(__name__)
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".ogg", ".oga", ".m4a", ".aac", ".wav", ".aiff", ".aif"}
 
 
 class UploadTrack(ApiHandler):
     async def process(self, input: dict, request: Request) -> dict:
+        # Catch absolutely everything and return a JSON error rather than
+        # letting Flask render an HTML 500 page. The frontend always parses
+        # res.json(); HTML breaks it.
+        try:
+            return await self._do_upload(request)
+        except Exception as e:
+            log.exception("dj_booth: upload error")
+            return {
+                "error": f"{type(e).__name__}: {e}",
+                "trace": traceback.format_exc().splitlines()[-5:],
+                "uploaded": [],
+                "rejected_non_audio": [],
+                "failed": [],
+            }
+
+    async def _do_upload(self, request: Request) -> dict:
+        # Imports done here (not at module top) so a transient import error
+        # in a sibling module doesn't prevent A0 from loading this handler at all.
+        from werkzeug.utils import secure_filename
+        from helpers.plugins import get_plugin_config
+        from usr.plugins.dj_booth.helpers.library import LibraryManager, discover_music_dirs
+        from usr.plugins.dj_booth.helpers.state import get_state
+
         if "files[]" not in request.files:
-            return {"error": "No files in upload."}
+            # Friendlier hint than just "no files".
+            return {
+                "error": "No files received. Try drag-and-dropping again, or use the + Add Music button.",
+                "uploaded": [], "rejected_non_audio": [], "failed": [],
+            }
 
         cfg = get_plugin_config("dj_booth") or {}
         music_dir = cfg.get("music_dir", "/a0/usr/workdir/music")
-        os.makedirs(music_dir, exist_ok=True)
+        try:
+            os.makedirs(music_dir, exist_ok=True)
+        except Exception as e:
+            return {
+                "error": f"Couldn't create music folder '{music_dir}': {e}",
+                "uploaded": [], "rejected_non_audio": [], "failed": [],
+            }
 
         uploaded = request.files.getlist("files[]")
         successful: list[str] = []
@@ -45,7 +77,6 @@ class UploadTrack(ApiHandler):
                 continue
             safe = secure_filename(raw_name) or f"track{ext}"
             dst = os.path.join(music_dir, safe)
-            # Avoid overwriting existing files: append (1), (2)...
             base, e = os.path.splitext(dst)
             n = 1
             while os.path.exists(dst):
@@ -57,10 +88,12 @@ class UploadTrack(ApiHandler):
             except Exception as ex:
                 failed.append({"name": raw_name, "error": str(ex)})
 
-        # Auto-scan so the new files show up immediately in the library list.
-        # Sync scan in this thread is fine — uploads block until done anyway.
+        # Auto-rescan so the new files show up immediately. Use a fresh
+        # LibraryManager singleton lookup rather than importing _get_library
+        # from dj_control (avoids any circular-import risk during dispatch).
         if successful:
-            lib = _get_library()
+            from usr.plugins.dj_booth.api import dj_control
+            lib = dj_control._get_library()
             paths = discover_music_dirs(music_dir)
             count = lib.scan(paths)
             s = get_state()
