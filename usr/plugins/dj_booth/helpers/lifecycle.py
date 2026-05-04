@@ -230,8 +230,17 @@ async def connectivity_check() -> dict:
 
     has_audio_flow = bytes_pushed > 0 and (last_chunk_age < 0 or last_chunk_age < 30)
 
+    # Surface the last engine error if there is one — this is the difference
+    # between "no audio yet — click Play" and "ffmpeg can't find libmp3lame".
+    engine_last_error = ""
+    try:
+        if _engine is not None:
+            engine_last_error = getattr(_engine, "last_error", "") or ""
+    except Exception:
+        pass
+
     return {
-        "ok": status_ok and mount_ok and engine_alive,
+        "ok": status_ok and mount_ok and engine_alive and not engine_last_error,
         "is_running": s.is_running,
         "stream_url": s.stream_url,
         "status_endpoint_ok": status_ok,
@@ -242,6 +251,7 @@ async def connectivity_check() -> dict:
         "mount_error": mount_err,
         "engine_alive": engine_alive,
         "engine_name": s.engine,
+        "engine_last_error": engine_last_error,
         "listener_count": s.listener_count,
         "queue_length": len(s.deck_a.queue) + len(s.deck_b.queue),
         "bytes_pushed": bytes_pushed,

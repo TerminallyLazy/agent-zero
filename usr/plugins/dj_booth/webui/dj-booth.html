@@ -476,6 +476,12 @@
                         ? '⚠️ stalled ' + $store.djBoothStore.diagnoseReport?.last_chunk_age_seconds + 's ago'
                         : '⚠️ no audio yet — click Play on a track')"></span>
           </div>
+          <div style="grid-column: span 2; color: #ff006e;"
+               x-show="$store.djBoothStore.diagnoseReport?.engine_last_error">
+            <strong>Engine error:</strong>
+            <code style="font-size: 0.75rem; word-break: break-word;"
+                  x-text="$store.djBoothStore.diagnoseReport?.engine_last_error"></code>
+          </div>
         </div>
 
         <!-- Local link — works on this computer / same network -->

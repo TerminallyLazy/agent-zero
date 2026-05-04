@@ -156,6 +156,10 @@ class FfmpegEngine:
         self._current_proc: Optional[asyncio.subprocess.Process] = None
         self._current_path: str = ""
         self._failure_streak: int = 0
+        # Last ffmpeg failure detail — exposed via state so the UI can show
+        # the user *why* their stream is silent ("libmp3lame not found",
+        # "ffmpeg: command not found", etc.) instead of just looking healthy.
+        self.last_error: str = ""
 
     async def start(self, config: dict, initial_tracks: list[str]) -> None:
         self.config = config
@@ -295,43 +299,87 @@ class FfmpegEngine:
                             "-content_type", "audio/mpeg", "-f", "mp3",
                             icecast_url,
                         ]
-                # Python mode: capture stdout and relay to IcyServer
+                # Capture stderr in BOTH modes so we can surface what went
+                # wrong if ffmpeg fails (libmp3lame missing, file not found,
+                # codec error, etc.). Without this every failure looked
+                # identical to the engine and the user.
+                stderr_buf = bytearray()
                 if use_python:
                     self._current_proc = await asyncio.create_subprocess_exec(
                         *cmd,
                         stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.PIPE,
                     )
                     if self._current_path and icy_server is not None:
-                        # Update now-playing metadata for status endpoint
                         icy_server.set_current_track(self._current_path)
-                    while True:
-                        chunk = await self._current_proc.stdout.read(4096)
-                        if not chunk:
-                            break
-                        if icy_server is not None:
-                            await icy_server.push_chunk(chunk)
-                    rc = await self._current_proc.wait()
+
+                    async def _drain_stderr():
+                        try:
+                            while True:
+                                line = await self._current_proc.stderr.readline()
+                                if not line:
+                                    break
+                                stderr_buf.extend(line)
+                        except Exception:
+                            pass
+
+                    stderr_task = asyncio.create_task(_drain_stderr())
+                    try:
+                        while True:
+                            chunk = await self._current_proc.stdout.read(4096)
+                            if not chunk:
+                                break
+                            if icy_server is not None:
+                                await icy_server.push_chunk(chunk)
+                        rc = await self._current_proc.wait()
+                    finally:
+                        stderr_task.cancel()
+                        try:
+                            await asyncio.wait_for(stderr_task, timeout=0.5)
+                        except (asyncio.CancelledError, asyncio.TimeoutError):
+                            pass
                 else:
                     self._current_proc = await asyncio.create_subprocess_exec(
                         *cmd,
                         stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.PIPE,
                     )
-                    rc = await self._current_proc.wait()
+                    _stdout, stderr_data = await self._current_proc.communicate()
+                    if stderr_data:
+                        stderr_buf.extend(stderr_data)
+                    rc = self._current_proc.returncode or 0
 
-                if rc != 0 and self._current_path:
+                if rc != 0:
+                    err_text = stderr_buf.decode(errors="replace").strip()
+                    short = (err_text.splitlines()[-1] if err_text else f"rc={rc}")[:200]
+                    self.last_error = (
+                        f"ffmpeg failed (rc={rc}) on "
+                        f"{self._current_path or 'silence'}: {short}"
+                    )
                     self._failure_streak += 1
-                    log.warning("dj_booth ffmpeg failed for %s rc=%d", self._current_path, rc)
+                    log.warning("dj_booth ffmpeg failed: %s", self.last_error)
                     if self._failure_streak >= 3:
-                        log.error("dj_booth ffmpeg engine: 3 consecutive failures, exiting loop")
+                        log.error("dj_booth ffmpeg engine: 3 consecutive failures, exiting loop. last error: %s", self.last_error)
                         return
+                    # Brief backoff so we don't spin on a permanent failure
+                    # (e.g. missing codec) — user will see last_error in state.
+                    await asyncio.sleep(1.0)
                 else:
                     self._failure_streak = 0
+                    self.last_error = ""
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except FileNotFoundError as e:
+                # ffmpeg binary itself isn't on PATH — fatal, no point retrying.
+                self.last_error = f"ffmpeg binary not found: {e}"
+                log.error("dj_booth: ffmpeg binary missing; engine exiting")
+                return
+            except Exception as e:
+                self.last_error = f"ffmpeg loop error: {e}"
                 log.exception("dj_booth ffmpeg loop error")
+                self._failure_streak += 1
+                if self._failure_streak >= 5:
+                    return
                 await asyncio.sleep(0.5)
 
 
