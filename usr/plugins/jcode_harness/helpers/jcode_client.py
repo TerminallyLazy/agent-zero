@@ -16,8 +16,17 @@ import asyncio
 import platform
 
 from usr.plugins.jcode_harness.helpers.protocol import (
+    BackgroundTool,
+    Cancel,
+    CancelSoftInterrupts,
+    GetHistory,
+    Message,
+    Ping,
+    ResumeSession,
     ServerEvent,
     SessionId,
+    SoftInterrupt,
+    StdinResponse,
     Subscribe,
     decode_event,
     encode_request,
@@ -86,6 +95,85 @@ class JcodeClient:
         ev = await self._recv_until(lambda e: e.type == "session")
         self._subscribed = True
         return ev  # type: ignore[return-value]
+
+    # ------------------------------------------------------------------
+    # Request methods (one per Request variant the harness emits)
+    # ------------------------------------------------------------------
+
+    async def send_message(
+        self,
+        content: str,
+        images: list[tuple[str, str]] | None = None,
+        msg_id: int | None = None,
+    ) -> int:
+        """Emit a ``message`` request. Returns the assigned id."""
+        req_id = msg_id if msg_id is not None else self._next_id()
+        await self._send(Message(id=req_id, content=content, images=images or []))
+        return req_id
+
+    async def soft_interrupt(
+        self,
+        content: str,
+        urgent: bool = False,
+        msg_id: int | None = None,
+    ) -> int:
+        """Inject a soft interrupt at the next safe point. Returns the id."""
+        req_id = msg_id if msg_id is not None else self._next_id()
+        await self._send(SoftInterrupt(id=req_id, content=content, urgent=urgent))
+        return req_id
+
+    async def cancel_soft_interrupts(self) -> None:
+        """Drop any queued but undelivered soft interrupts on the server."""
+        await self._send(CancelSoftInterrupts(id=self._next_id()))
+
+    async def cancel(self) -> None:
+        """Hard-cancel the current generation."""
+        await self._send(Cancel(id=self._next_id()))
+
+    async def background_tool(self, request_id: int | None = None) -> int:
+        """Move the currently executing tool to background.
+
+        Per ``jcode/crates/jcode-protocol/src/lib.rs:87`` the BackgroundTool
+        variant carries a single ``id: u64`` field, which the server treats as
+        an opaque request id (see ``Request::request_id_for`` line 1337). The
+        request always backgrounds the *currently executing* tool — it does
+        not target a specific tool by id. We therefore allocate a monotonic
+        request id by default and let callers override only for tests.
+        """
+        req_id = request_id if request_id is not None else self._next_id()
+        await self._send(BackgroundTool(id=req_id))
+        return req_id
+
+    async def stdin_response(self, request_id: str, input: str) -> None:
+        """Reply to a daemon-issued ``stdin_request``."""
+        await self._send(
+            StdinResponse(id=self._next_id(), request_id=request_id, input=input)
+        )
+
+    async def resume_session(
+        self,
+        session_id: str,
+        client_instance_id: str,
+        allow_session_takeover: bool = True,
+    ) -> None:
+        """Resume an existing session by id."""
+        await self._send(
+            ResumeSession(
+                id=self._next_id(),
+                session_id=session_id,
+                client_instance_id=client_instance_id,
+                client_has_local_history=False,
+                allow_session_takeover=allow_session_takeover,
+            )
+        )
+
+    async def ping(self) -> None:
+        """Liveness probe; daemon replies with a Pong event."""
+        await self._send(Ping(id=self._next_id()))
+
+    async def get_history(self) -> None:
+        """Request the full session history snapshot."""
+        await self._send(GetHistory(id=self._next_id()))
 
     async def close(self) -> None:
         """Idempotent close — safe to call multiple times."""

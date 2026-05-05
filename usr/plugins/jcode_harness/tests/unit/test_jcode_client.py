@@ -193,3 +193,216 @@ async def test_close_is_idempotent():
         await client.close()  # second close must be a no-op
     finally:
         await daemon.stop()
+
+
+# ---------------------------------------------------------------------------
+# Request method tests (Task 3.5)
+# ---------------------------------------------------------------------------
+
+
+async def _drain_n_lines(daemon, n: int):
+    """Connect a client + collect ``n`` request lines from the fake daemon."""
+
+    async def script(daemon, reader, writer):
+        for _ in range(n):
+            line = await reader.readline()
+            if not line:
+                return
+            daemon.received_lines.append(line)
+
+    daemon._script = script  # rebind script before .start() is called by caller
+    return daemon
+
+
+async def _make_collecting_daemon(n_lines: int) -> _FakeDaemon:
+    async def script(d, reader, writer):
+        for _ in range(n_lines):
+            line = await reader.readline()
+            if not line:
+                return
+            d.received_lines.append(line)
+
+    daemon = _FakeDaemon(script)
+    await daemon.start()
+    return daemon
+
+
+async def test_send_message_emits_message_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        rid = await client.send_message("hello", images=[("png", "abc")], msg_id=42)
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert rid == 42
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "message"
+    assert obj["id"] == 42
+    assert obj["content"] == "hello"
+    assert obj["images"] == [["png", "abc"]]
+
+
+async def test_send_message_assigns_id_when_omitted():
+    daemon = await _make_collecting_daemon(2)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        rid1 = await client.send_message("a")
+        rid2 = await client.send_message("b")
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert rid2 == rid1 + 1
+
+
+async def test_soft_interrupt_emits_correct_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.soft_interrupt("stop now", urgent=True)
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "soft_interrupt"
+    assert obj["content"] == "stop now"
+    assert obj["urgent"] is True
+
+
+async def test_cancel_soft_interrupts_emits_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.cancel_soft_interrupts()
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "cancel_soft_interrupts"
+    assert isinstance(obj["id"], int)
+
+
+async def test_cancel_emits_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.cancel()
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "cancel"
+
+
+async def test_background_tool_emits_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        rid = await client.background_tool()
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "background_tool"
+    assert obj["id"] == rid
+
+
+async def test_stdin_response_emits_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.stdin_response(request_id="rq-1", input="yes\n")
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "stdin_response"
+    assert obj["request_id"] == "rq-1"
+    assert obj["input"] == "yes\n"
+
+
+async def test_resume_session_emits_request_with_takeover_true_default():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.resume_session(session_id="fox-9", client_instance_id="iid")
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "resume_session"
+    assert obj["session_id"] == "fox-9"
+    assert obj["client_instance_id"] == "iid"
+    assert obj["allow_session_takeover"] is True
+
+
+async def test_ping_emits_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.ping()
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "ping"
+
+
+async def test_get_history_emits_request():
+    daemon = await _make_collecting_daemon(1)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.get_history()
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    obj = json.loads(daemon.received_lines[0])
+    assert obj["type"] == "get_history"
+
+
+async def test_id_counter_increments_across_method_types():
+    daemon = await _make_collecting_daemon(4)
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        await client.ping()
+        await client.cancel()
+        await client.get_history()
+        await client.cancel_soft_interrupts()
+        await asyncio.sleep(0.01)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    ids = [json.loads(line)["id"] for line in daemon.received_lines]
+    assert ids == [1, 2, 3, 4]
