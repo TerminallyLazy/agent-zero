@@ -142,7 +142,7 @@ docs/superpowers/spikes/
 
 | # | Chunk | Approx Tasks |
 |---|-------|--------------|
-| 0 | Pre-implementation spikes | 7 |
+| 0 | Pre-implementation spikes | 9 + rollup |
 | 1 | Scaffolding & manifest | 4 |
 | 2 | Wire protocol codec + golden fixtures | 6 |
 | 3 | JcodeClient (async NDJSON) | 8 |
@@ -360,23 +360,55 @@ Per spec §5.7, v1 doesn't intercept any A0 internal call sites. Mark spike as *
 
 - [ ] **Step 2: Commit a 3-line "skipped, see §5.7" placeholder**
 
-### Task 0.8: Roll up spike findings into plan addenda
+### Task 0.8: Spike — `jcode login --print-auth-url --json` flag exists
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-05-05-jcode-harness-plugin.md` (this file)
+- Create: `docs/superpowers/spikes/2026-05-05-spike-login-print-auth-url.md`
 
-- [ ] **Step 1: Re-read all 7 spike docs**
+- [ ] **Step 1: Probe**
 
-- [ ] **Step 2: Append "Spike Findings Addendum" section to plan**
+```bash
+~/.jcode/builds/stable/jcode login --help 2>&1 | head -30
+~/.jcode/builds/stable/jcode login --provider claude --print-auth-url --json 2>&1 | head -10
+```
 
-Update each chunk's tasks where a spike finding changes the approach (e.g., if `session list` doesn't exist, Chunk 11.1 changes to journal-file reader).
+- [ ] **Step 2: Document outcome**
+
+If flag exists: schema for `auth_url`, `user_code`, expiry. If absent: identify alternative path (e.g., `jcode login --provider X` interactive, parse stdout for URL).
+
+- [ ] **Step 3: Update Task 11.3 implementation per finding.**
+
+- [ ] **Step 4: Commit**
+
+### Task 0.9: Spike — `jcode provider remove --json` subcommand exists
+
+**Files:**
+- Create: `docs/superpowers/spikes/2026-05-05-spike-provider-remove.md`
+
+- [ ] **Step 1: Probe**
+
+```bash
+~/.jcode/builds/stable/jcode provider --help 2>&1
+~/.jcode/builds/stable/jcode provider remove _a0_imported_test --json 2>&1 || true
+```
+
+- [ ] **Step 2: Document outcome; update Task 6.4 + Task 11.5 if subcommand differs.**
 
 - [ ] **Step 3: Commit**
 
-```bash
-git add docs/superpowers/plans/2026-05-05-jcode-harness-plugin.md
-git commit -m "plan: roll up Chunk 0 spike findings into plan addenda"
-```
+### Task 0.10: Roll spike findings into plan addenda
+
+(Renumber: this replaces the original 0.8 rollup, which now becomes 0.10.)
+
+**Files:**
+- Modify: `docs/superpowers/plans/2026-05-05-jcode-harness-plugin.md`
+
+- [ ] **Step 1: Re-read all 9 spike docs**
+- [ ] **Step 2: Append "Spike Findings Addendum" section**
+- [ ] **Step 3: Update each downstream task referencing spike-gated APIs**
+- [ ] **Step 4: Commit**
+
+_(Original Task 0.8 rollup renumbered to Task 0.10 above.)_
 
 ---
 
@@ -1781,19 +1813,18 @@ def health(self) -> dict:
 - [ ] **Step 1: Wrap A0 notification API**
 
 ```python
-from python.helpers.notification import AgentNotification
+from helpers.notification import NotificationManager, NotificationType, NotificationPriority
 
-def info(msg: str, title: str = "jcode"):
-    AgentNotification.info(title=title, body=msg)
+def _send(t: NotificationType, msg: str, title: str = "jcode"):
+    NotificationManager.send_notification(
+        type=t, priority=NotificationPriority.NORMAL,
+        message=msg, title=title,
+    )
 
-def success(msg: str, title: str = "jcode"):
-    AgentNotification.success(title=title, body=msg)
-
-def warning(msg: str, title: str = "jcode"):
-    AgentNotification.warning(title=title, body=msg)
-
-def error(msg: str, title: str = "jcode"):
-    AgentNotification.error(title=title, body=msg)
+def info(msg: str, title: str = "jcode"):    _send(NotificationType.INFO, msg, title)
+def success(msg: str, title: str = "jcode"): _send(NotificationType.SUCCESS, msg, title)
+def warning(msg: str, title: str = "jcode"): _send(NotificationType.WARNING, msg, title)
+def error(msg: str, title: str = "jcode"):   _send(NotificationType.ERROR, msg, title)
 ```
 
 - [ ] **Step 2: Commit**
@@ -1807,9 +1838,18 @@ def error(msg: str, title: str = "jcode"):
 **Files:**
 - Create: `usr/plugins/jcode_harness/hooks.py`
 
+> **AGENTS.plugins.md confirms:** hooks may be sync or async. Async hooks are awaited.
+> `install()` and `pre_update()` are the only guaranteed entry points.
+
+> **Honor user-supplied `binary.path`:** if `default_config.yaml`'s `binary.path` is set
+> (non-empty) and points to an executable file, use it directly — skip both PATH detection
+> and download. This enables offline / air-gapped installs.
+
 - [ ] **Step 1: Test** — mock fetch + verify; assert `~/.amplihack/jcode/install.json` written.
 
-- [ ] **Step 2: Implementation**
+- [ ] **Step 2: Test user-supplied binary path short-circuit.**
+
+- [ ] **Step 3: Implementation**
 
 ```python
 # hooks.py
@@ -1833,11 +1873,17 @@ INSTALL_META = lambda: amplihack_root() / "jcode" / "install.json"
 async def install():
     notify.info("Setting up jcode harness…")
 
-    # 1. PATH detect
-    existing = locate_jcode_binary()
-    if existing:
-        notify.success(f"Found existing jcode at {existing}")
+    # 0. User-supplied path takes priority (offline/air-gapped support)
+    from helpers import plugins as a0_plugins
+    cfg = a0_plugins.get_plugin_config("jcode_harness") or {}
+    user_path = (cfg.get("binary") or {}).get("path", "").strip()
+    if user_path and Path(user_path).is_file() and os.access(user_path, os.X_OK):
+        binary_path = user_path
+        notify.success(f"Using user-supplied jcode at {binary_path}")
+    elif (existing := locate_jcode_binary()):
+        # 1. PATH detect
         binary_path = existing
+        notify.success(f"Found existing jcode at {existing}")
     else:
         # 2. Download release
         notify.info("Downloading jcode binary…")
@@ -2209,7 +2255,7 @@ def purge_imported_profiles(jcode_bin: str) -> list[str]:
 Each tool subclasses `python.helpers.tool.Tool`. Pattern:
 
 ```python
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 
 class JcodeXxx(Tool):
     async def execute(self, **kwargs) -> Response:
@@ -2226,26 +2272,44 @@ class JcodeXxx(Tool):
 
 - [ ] **Step 1: Test e2e (integration tier)**
 
+`Tool.__init__` requires `(agent, name, method, args, message, loop_data, **kwargs)` per
+`helpers/tool.py:19`. Construct with all positional args; do not use `__new__` bypass.
+
 ```python
 @pytest.mark.asyncio
-async def test_jcode_session_streams_text(real_daemon):
+async def test_jcode_session_streams_text(real_daemon, fake_agent):
     """Sends a 'hello' message, expects text deltas + done."""
     from usr.plugins.jcode_harness.tools.jcode_session import JcodeSession
-    tool = JcodeSession.__new__(JcodeSession)  # bypass A0 init
-    tool.agent = MagicMock()
-    tool.agent.config.profile = ""
-    tool.agent.context.id = "test-ctx-1"
-    progress = []
-    tool.set_progress = AsyncMock(side_effect=lambda c: progress.append(c))
+    progress: list[str] = []
+    tool = JcodeSession(
+        agent=fake_agent, name="jcode_session", method=None,
+        args={}, message="", loop_data=None,
+    )
+    tool.set_progress = lambda c: progress.append(c) or asyncio.sleep(0)  # type: ignore
     resp = await tool.execute(task="say hello")
     assert any("hello" in p.lower() for p in progress)
     assert resp.message
 ```
 
+`fake_agent` fixture goes in `tests/integration/conftest.py`:
+
+```python
+@pytest.fixture
+def fake_agent():
+    from unittest.mock import MagicMock
+    a = MagicMock()
+    a.agent_name = "test"
+    a.config.profile = ""
+    a.context.id = "test-ctx-1"
+    a.context.log.log = MagicMock()
+    a.hist_add_tool_result = MagicMock()
+    return a
+```
+
 - [ ] **Step 2: Implementation**
 
 ```python
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 from usr.plugins.jcode_harness.helpers.daemon import DaemonSupervisor, locate_jcode_binary
 from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
 from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
@@ -2326,6 +2390,54 @@ class JcodeGrep(Tool):
 ```
 
 - [ ] **Step 3: Commit**
+
+### Task 7.2.B: Wire MemoryInjected → A0 side panel (coverage gap from spec §9.3)
+
+**Files:**
+- Modify: `usr/plugins/jcode_harness/tools/jcode_session.py`
+- Modify: `usr/plugins/jcode_harness/extensions/webui/side-panel-start/jcode_panel.js`
+
+- [ ] **Step 1: In `jcode_session.execute()`, when `MemoryInjected` arrives, push a
+  side-panel-update event into A0 via the agent's log/notification API.**
+
+```python
+elif ev.type == "memory_injected":
+    payload = {"count": ev.count, "prompt_chars": ev.prompt_chars,
+                "computed_age_ms": ev.computed_age_ms}
+    self.agent.context.log.log(type="memory_injected", content=str(payload),
+                                kvps=payload)
+```
+
+- [ ] **Step 2: Test that A0 log captures the event.**
+- [ ] **Step 3: Commit.**
+
+### Task 7.2.C: Wire A0 cancel button → soft_interrupt (coverage gap from spec §6.2)
+
+**Files:**
+- Modify: `usr/plugins/jcode_harness/tools/jcode_session.py`
+
+- [ ] **Step 1: Subscribe to A0's interrupt signal during session execute.**
+
+```python
+# Inside execute(), before `async for ev`:
+async def watch_interrupts():
+    while True:
+        await asyncio.sleep(0.5)
+        if self.agent.context.streaming_agent and self.agent.context.streaming_agent.cancel_requested:
+            await client.soft_interrupt(content="user requested cancel", urgent=False)
+            self.agent.context.streaming_agent.cancel_requested = False
+            return
+
+watcher = asyncio.create_task(watch_interrupts())
+try:
+    async for ev in client.events():
+        ...
+finally:
+    watcher.cancel()
+```
+
+- [ ] **Step 2: Test that single-stop button issues `soft_interrupt`, double-stop issues `cancel`.**
+- [ ] **Step 3: Commit.**
 
 ### Task 7.3: jcode_memory
 
@@ -2433,29 +2545,38 @@ class JcodeSwarmMsg(Tool):
 
 ### Task 7.7: jcode_self_dev (gated)
 
+A0 has no documented "discover" hook on Tool subclasses to skip registration. v1 strategy: ship
+the tool always, but it self-checks at invocation time and returns a clean error if `cargo` is
+absent. The system prompt for the `jcode_coder` profile additionally avoids advertising
+self-dev when `features.self_dev: false` in plugin config.
+
 ```python
+import shutil
+from helpers.tool import Tool, Response
+
 class JcodeSelfDev(Tool):
     async def execute(self, task: str, **kw) -> Response:
         if not shutil.which("cargo"):
             return Response(
-                message="Self-dev requires Rust toolchain. Install from https://rustup.rs",
+                message=("Self-dev requires the Rust toolchain. Install from "
+                         "https://rustup.rs and re-enable in plugin settings."),
                 break_loop=False,
             )
-        # behaves like jcode_session but routes prompt to selfdev session
-        prompt = f"Enter selfdev mode and: {task}"
-        # delegate to JcodeSession.execute(task=prompt)
-        return await JcodeSession().execute(task=prompt)
-
-    @classmethod
-    def discover(cls):
-        """A0 tool discovery hook — return None if Rust absent."""
-        if not shutil.which("cargo"):
-            return None
-        return cls
+        # Delegate to the embedded session tool with a selfdev-flagged prompt
+        from usr.plugins.jcode_harness.tools.jcode_session import JcodeSession
+        # Construct via the same args A0 would inject when calling a Tool
+        sess = JcodeSession(
+            agent=self.agent, name="jcode_session", method=None,
+            args={}, message="", loop_data=self.loop_data,
+        )
+        return await sess.execute(task=f"Enter selfdev mode and: {task}")
 ```
 
-- [ ] **Test absent-cargo path returns clean error**
-- [ ] **Commit**
+- [ ] **Step 1: Write test for absent-cargo branch — assert returned message contains rustup URL.**
+- [ ] **Step 2: Write test for present-cargo branch — assert delegates to JcodeSession.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run tests, expect PASS.**
+- [ ] **Step 5: Commit.**
 
 ---
 
@@ -2468,7 +2589,7 @@ class JcodeSelfDev(Tool):
 
 ```python
 """Register jcode tools and pre-warm daemon on agent init."""
-from python.helpers.extension import Extension
+from helpers.extension import Extension
 
 class JcodeRegister(Extension):
     async def execute(self, **kw):
@@ -2494,7 +2615,7 @@ class JcodeRegister(Extension):
 
 ```python
 """Warm-up extension for jcode_coder profile (no loop short-circuit)."""
-from python.helpers.extension import Extension
+from helpers.extension import Extension
 
 class JcodeWarmup(Extension):
     async def execute(self, loop_data=None, **kw):
@@ -2636,9 +2757,23 @@ Confirm all errors surface through `notificationStore.frontendError/Success/Warn
 
 ### Task 10.1: agents/jcode_coder/agent.yaml
 
-Already specified in spec §5.9. Just commit the file.
+**Files:**
+- Create: `usr/plugins/jcode_harness/agents/jcode_coder/agent.yaml`
 
-- [ ] Commit.
+- [ ] **Step 1: Write file with explicit content from spec §5.9:**
+
+```yaml
+title: jcode Coder
+description: Routes coding work through the jcode harness via the jcode_session tool.
+context: |
+  For any non-trivial coding task — refactoring, multi-file edits, debugging, code search,
+  test writing — call jcode_session with the task description. The jcode harness has memory
+  graph, skill auto-injection, agentgrep, and 28 native tools that outperform direct edits
+  for sustained coding work. Use direct tools only for one-line changes or chat replies.
+prompts: {}
+```
+
+- [ ] **Step 2: Commit.**
 
 ### Task 10.2: execute.py cleanup test
 
@@ -2652,53 +2787,120 @@ Already specified in spec §5.9. Just commit the file.
 
 ### Task 11.1: api/list_sessions.py
 
+> **Gated on Spike 0.2 outcome.** If `jcode session list --json` does not exist, replace the
+> subprocess call with the chosen fallback (likely `jcode --resume --json` no-id form, or direct
+> read of `~/.jcode/sessions/`).
+
 ```python
-from python.helpers.api import ApiHandler
+from helpers.api import ApiHandler, Request
 import subprocess, json
 
 from usr.plugins.jcode_harness.helpers.daemon import locate_jcode_binary
 
 class ListSessions(ApiHandler):
-    async def handle(self, request):
+    @classmethod
+    def get_methods(cls): return ["GET", "POST"]
+
+    async def process(self, input: dict, request: Request) -> dict:
         bin_path = locate_jcode_binary()
         if not bin_path:
             return {"sessions": [], "error": "jcode not installed"}
         try:
+            # SUBCOMMAND PATH (verify per Spike 0.2):
             out = subprocess.check_output([bin_path, "session", "list", "--json"], text=True)
             return {"sessions": json.loads(out)}
+        except FileNotFoundError:
+            return {"sessions": [], "error": "binary moved"}
         except subprocess.CalledProcessError as e:
             return {"sessions": [], "error": str(e)}
 ```
 
-- [ ] Test + commit.
+- [ ] **Step 1: Spike 0.2 must be complete; subcommand confirmed or fallback chosen.**
+- [ ] **Step 2: Write test that mocks subprocess → returns parsed sessions.**
+- [ ] **Step 3: Implement; if Spike 0.2 returned fallback, swap subprocess invocation.**
+- [ ] **Step 4: Run test, commit.**
 
 ### Task 11.2: api/resume_session.py
 
-- [ ] Implementation + commit.
+```python
+from helpers.api import ApiHandler, Request
+from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSupervisor, locate_jcode_binary,
+)
+from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
+from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
+from usr.plugins.jcode_harness.helpers.persistence import get_or_create_client_instance_id
+import os
+
+class ResumeSession(ApiHandler):
+    async def process(self, input: dict, request: Request) -> dict:
+        session_id = input["session_id"]
+        wd = input.get("working_dir") or os.getcwd()
+        bin_path = locate_jcode_binary()
+        if not bin_path:
+            return {"ok": False, "error": "jcode not installed"}
+        sup = DaemonSupervisor(bin_path, jcode_runtime_dir())
+        sock = await sup.ensure_running(wd)
+        a0_ctx_id = input.get("a0_ctx_id", "default")
+        cid = get_or_create_client_instance_id(a0_ctx_id)
+        client = JcodeClient()
+        await client.connect(sock)
+        try:
+            await client.subscribe(wd, session_id, cid, True)
+            history_ev = await client._recv_until(lambda e: e.type == "history")
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "messages": len(history_ev.messages),
+                "provider_session_id": getattr(history_ev, "provider_session_id", None),
+            }
+        finally:
+            await client.close()
+```
+
+- [ ] **Step 1: Test with mocked client.**
+- [ ] **Step 2: Implement; commit.**
 
 ### Task 11.3: api/login_provider.py
 
+> **Gated on a new spike (Task 0.x) verifying `jcode login --provider <p> --print-auth-url --json` flag.**
+> If the flag does not exist, fall back to non-interactive flow specific to provider (e.g.
+> reading existing creds, instructing user to run CLI manually).
+
 ```python
+from helpers.api import ApiHandler, Request
+import subprocess, json
+from usr.plugins.jcode_harness.helpers.daemon import locate_jcode_binary
+
 class LoginProvider(ApiHandler):
-    async def handle(self, request):
-        body = await request.json()
-        provider = body["provider"]
+    async def process(self, input: dict, request: Request) -> dict:
+        provider = input["provider"]
         bin_path = locate_jcode_binary()
-        out = subprocess.check_output(
-            [bin_path, "login", "--provider", provider, "--print-auth-url", "--json"],
-            text=True,
-        )
-        data = json.loads(out)
-        return {"auth_url": data.get("auth_url"), "user_code": data.get("user_code")}
+        try:
+            out = subprocess.check_output(
+                [bin_path, "login", "--provider", provider, "--print-auth-url", "--json"],
+                text=True, stderr=subprocess.STDOUT,
+            )
+            data = json.loads(out)
+            return {"auth_url": data.get("auth_url"), "user_code": data.get("user_code")}
+        except subprocess.CalledProcessError as e:
+            return {"error": e.output, "auth_url": None}
 ```
 
-- [ ] Test + commit.
+- [ ] **Step 1: Spike confirms `--print-auth-url --json` flag exists.**
+- [ ] **Step 2: Test with mock subprocess.**
+- [ ] **Step 3: Implement; commit.**
 
 ### Task 11.4: api/daemon_status.py
 
 ```python
+from helpers.api import ApiHandler, Request
+
 class DaemonStatus(ApiHandler):
-    async def handle(self, request):
+    @classmethod
+    def get_methods(cls): return ["GET", "POST"]
+
+    async def process(self, input: dict, request: Request) -> dict:
         from usr.plugins.jcode_harness.helpers.daemon import (
             DaemonSupervisor, locate_jcode_binary,
         )
@@ -2710,24 +2912,62 @@ class DaemonStatus(ApiHandler):
         return sup.health()
 ```
 
-- [ ] Test + commit.
+- [ ] **Step 1: Test returns expected health dict shape.**
+- [ ] **Step 2: Implement; commit.**
 
 ### Task 11.5: api/purge_imported_profiles.py
 
+> Gated on Task 6.4 spike: `jcode provider remove <name> --json` subcommand verified.
+
 ```python
+from helpers.api import ApiHandler, Request
+
 class PurgeImported(ApiHandler):
-    async def handle(self, request):
+    async def process(self, input: dict, request: Request) -> dict:
         from usr.plugins.jcode_harness.helpers.provider_import import purge_imported_profiles
         from usr.plugins.jcode_harness.helpers.daemon import locate_jcode_binary
         purged = purge_imported_profiles(locate_jcode_binary())
         return {"purged": purged}
 ```
 
-- [ ] Test + commit.
+- [ ] **Step 1: Test returns purged list shape.**
+- [ ] **Step 2: Implement; commit.**
 
 ---
 
 ## Chunk 12: Integration & acceptance tests
+
+### Task 12.0: Declare test-only dependencies
+
+**Files:**
+- Modify: `requirements.dev.txt` (or plugin-local equivalent)
+
+- [ ] **Step 1: Verify what is already pinned**
+
+```bash
+grep -E "pytest|playwright|pyyaml|psutil|pytest-benchmark" /Users/lazy/Desktop/agent-zero/requirements*.txt
+```
+
+- [ ] **Step 2: Add missing dev deps**
+
+```
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-mock>=3.12
+pytest-benchmark>=4.0
+playwright>=1.42
+psutil>=5.9
+PyYAML>=6.0
+```
+
+- [ ] **Step 3: Install in dev container**
+
+```bash
+pip install -r requirements.dev.txt
+playwright install chromium
+```
+
+- [ ] **Step 4: Commit.**
 
 ### Task 12.1: conftest.py spawns real daemon for integration tier
 
