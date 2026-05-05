@@ -1,0 +1,11 @@
+name: jcode_harness
+title: jcode Coding Harness
+description: Embeds the jcode coding agent (memory graph, skills, swarm, 28 tools) into Agent Zero.
+version: 0.1.0
+settings_sections:
+  - agent
+  - developer
+  - external
+per_project_config: true
+per_agent_config: true
+always_enabled: false
