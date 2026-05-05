@@ -51,15 +51,23 @@ class JcodeClient:
         self._reconnect_max_delay: float = 30.0
 
     async def connect(self, socket_path: str) -> None:
-        """Open a Unix-socket connection to ``socket_path``.
+        """Open a connection to ``socket_path``.
 
-        On Windows the daemon exposes a named pipe; that transport is wired in
-        Task 3.8. For now we raise ``NotImplementedError`` so callers fail loud
-        rather than silently dropping to localhost TCP or similar.
+        POSIX uses ``asyncio.open_unix_connection``. Windows delegates to the
+        named-pipe transport stub
+        :mod:`usr.plugins.jcode_harness.helpers.transport_windows`, which today
+        raises :class:`NotImplementedError`; full pipe support (per spec §8.4)
+        lands in v1.1. WSL2 is the recommended Windows path until then.
         """
         if platform.system() == "Windows":
-            raise NotImplementedError("Windows transport not yet implemented")
-        self._reader, self._writer = await asyncio.open_unix_connection(socket_path)
+            from usr.plugins.jcode_harness.helpers.transport_windows import (
+                open_named_pipe,
+            )
+            self._reader, self._writer = await open_named_pipe(socket_path)
+        else:
+            self._reader, self._writer = await asyncio.open_unix_connection(
+                socket_path
+            )
         self._socket_path = socket_path
 
     async def _send(self, req) -> None:
