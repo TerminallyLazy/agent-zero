@@ -496,3 +496,202 @@ def test_pre_update_skips_when_binary_missing(
         "missing" in m.lower() or "nothing" in m.lower()
         for kind, m in recorder.events if kind == "info"
     )
+
+
+# ---------------------------------------------------------------------------
+# maybe_auto_update()
+# ---------------------------------------------------------------------------
+
+
+def _seed_meta(hooks_mod, version: str) -> Path:
+    meta = hooks_mod._install_meta_path()
+    meta.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    meta.write_text(
+        json.dumps(
+            {
+                "binary_path": "/bin/jcode",
+                "version": version,
+                "installed_at": 0,
+                "self_dev_available": False,
+            }
+        )
+    )
+    meta.chmod(0o600)
+    return meta
+
+
+def test_auto_update_skipped_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    _patch_hooks_path_home(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(
+        hooks_mod, "_get_plugin_config",
+        lambda: {"binary": {"auto_update": False}},
+    )
+
+    fetch_calls = []
+    monkeypatch.setattr(
+        hooks_mod, "fetch_latest_release_metadata",
+        lambda: fetch_calls.append(1) or {},
+    )
+
+    _run(hooks_mod.maybe_auto_update())
+    assert fetch_calls == []
+
+
+def test_auto_update_skipped_when_no_meta(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    _patch_hooks_path_home(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(hooks_mod, "_get_plugin_config", lambda: {})
+    fetch_calls = []
+    monkeypatch.setattr(
+        hooks_mod, "fetch_latest_release_metadata",
+        lambda: fetch_calls.append(1) or {},
+    )
+
+    # Ensure meta does not exist
+    assert not hooks_mod._install_meta_path().exists()
+
+    _run(hooks_mod.maybe_auto_update())
+    assert fetch_calls == []
+
+
+def test_auto_update_skipped_when_already_current(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    _patch_hooks_path_home(monkeypatch, tmp_path)
+    monkeypatch.setattr(hooks_mod, "_get_plugin_config", lambda: {})
+
+    _seed_meta(hooks_mod, "v0.11.10")
+    monkeypatch.setattr(
+        hooks_mod, "fetch_latest_release_metadata",
+        lambda: {"tag_name": "v0.11.10", "assets": []},
+    )
+    download_calls = []
+    monkeypatch.setattr(
+        hooks_mod, "download_and_verify",
+        lambda *a, **kw: download_calls.append(a),
+    )
+
+    _run(hooks_mod.maybe_auto_update())
+    assert download_calls == []
+
+
+def test_auto_update_runs_when_version_differs(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    _patch_hooks_path_home(monkeypatch, tmp_path)
+    monkeypatch.setattr(hooks_mod, "_get_plugin_config", lambda: {})
+
+    meta_path = _seed_meta(hooks_mod, "v0.11.9")
+
+    monkeypatch.setattr(
+        hooks_mod, "fetch_latest_release_metadata",
+        lambda: {"tag_name": "v0.11.10", "assets": []},
+    )
+    monkeypatch.setattr(hooks_mod, "detect_release_asset_target", lambda: "macos-aarch64")
+    monkeypatch.setattr(hooks_mod, "pick_asset", lambda r, t: ("u1", "u2"))
+    download_calls = []
+    monkeypatch.setattr(
+        hooks_mod, "download_and_verify",
+        lambda a, s, p: download_calls.append((a, s, p)),
+    )
+    monkeypatch.setattr(hooks_mod, "locate_jcode_binary", lambda: None)
+
+    _run(hooks_mod.maybe_auto_update())
+
+    assert len(download_calls) == 1
+    new_meta = json.loads(meta_path.read_text())
+    assert new_meta["version"] == "v0.11.10"
+    # 0600 perms preserved
+    assert stat.S_IMODE(meta_path.stat().st_mode) == 0o600
+
+
+def test_auto_update_swallows_fetch_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    _patch_hooks_path_home(monkeypatch, tmp_path)
+    monkeypatch.setattr(hooks_mod, "_get_plugin_config", lambda: {})
+    _seed_meta(hooks_mod, "v0.11.9")
+
+    def _boom():
+        raise RuntimeError("github down")
+
+    monkeypatch.setattr(hooks_mod, "fetch_latest_release_metadata", _boom)
+
+    # Must not raise
+    _run(hooks_mod.maybe_auto_update())
+
+    assert any(
+        "auto-update" in m.lower() or "github down" in m.lower()
+        for kind, m in recorder.events if kind == "warning"
+    )
+
+
+def test_auto_update_stops_daemon_before_swap(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    _patch_hooks_path_home(monkeypatch, tmp_path)
+    monkeypatch.setattr(hooks_mod, "_get_plugin_config", lambda: {})
+    _seed_meta(hooks_mod, "v0.11.9")
+
+    monkeypatch.setattr(
+        hooks_mod, "fetch_latest_release_metadata",
+        lambda: {"tag_name": "v0.11.10", "assets": []},
+    )
+    monkeypatch.setattr(hooks_mod, "detect_release_asset_target", lambda: "macos-aarch64")
+    monkeypatch.setattr(hooks_mod, "pick_asset", lambda r, t: ("u1", "u2"))
+
+    order: list[str] = []
+
+    def _download(a, s, p):
+        order.append("download")
+
+    monkeypatch.setattr(hooks_mod, "download_and_verify", _download)
+    monkeypatch.setattr(hooks_mod, "locate_jcode_binary", lambda: "/bin/jcode")
+
+    class _FakeSup:
+        def __init__(self, *_a, **_kw):
+            pass
+
+        def stop(self):
+            order.append("stop")
+
+    monkeypatch.setattr(hooks_mod, "DaemonSupervisor", _FakeSup)
+
+    _run(hooks_mod.maybe_auto_update())
+
+    assert order == ["stop", "download"]

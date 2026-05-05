@@ -171,3 +171,57 @@ async def pre_update() -> None:
     sup = DaemonSupervisor(bin_path, jcode_runtime_dir())
     sup.stop()
     notify.info("jcode daemon stopped for plugin update")
+
+
+async def maybe_auto_update() -> None:
+    """Check for a newer jcode release and update if config allows.
+
+    Called periodically by an opt-in scheduler — never by ``install()`` or
+    ``pre_update()``. Cadence is decided by the caller.
+
+    Skip rules:
+      - ``binary.auto_update`` is False (default True)
+      - install metadata file does not exist (no prior install)
+      - latest release tag matches recorded version
+
+    On a real update we stop the daemon first so the binary can be swapped
+    without holding an open file handle.
+    """
+    cfg = _get_plugin_config()
+    if not (cfg.get("binary") or {}).get("auto_update", True):
+        return
+    meta_path = _install_meta_path()
+    if not meta_path.exists():
+        return
+    try:
+        meta = json.loads(meta_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return
+    try:
+        release = fetch_latest_release_metadata()
+    except Exception as e:
+        notify.warning(f"Auto-update check failed: {e}")
+        return
+
+    latest_tag = release.get("tag_name", "")
+    if latest_tag and latest_tag == meta.get("version", ""):
+        return  # already current (best-effort string comparison)
+
+    notify.info(f"Updating jcode to {latest_tag}…")
+    target = detect_release_asset_target()
+    asset_url, sha_url = pick_asset(release, target)
+
+    # Stop daemon before swapping binary so we don't hold an open fd.
+    bin_path = locate_jcode_binary()
+    if bin_path:
+        try:
+            DaemonSupervisor(bin_path, jcode_runtime_dir()).stop()
+        except Exception:
+            pass
+
+    download_and_verify(asset_url, sha_url, INSTALL_TARGET)
+    meta["version"] = latest_tag
+    meta["installed_at"] = int(time.time())
+    meta_path.write_text(json.dumps(meta))
+    meta_path.chmod(0o600)
+    notify.success(f"Updated jcode to {latest_tag}")
