@@ -1,0 +1,14 @@
+<div x-data="jcodeQuick()" class="jcode-quick-actions">
+  <button type="button"
+          class="jcode-quick-button"
+          @click="newSession()"
+          title="Start a new jcode coding session">
+    <span class="jcode-quick-icon">&#9881;</span> New jcode session
+  </button>
+  <button type="button"
+          class="jcode-quick-button"
+          @click="resumeSessionList()"
+          title="Pick a resumable session from any harness">
+    <span class="jcode-quick-icon">&#8634;</span> Resume&hellip;
+  </button>
+</div>
