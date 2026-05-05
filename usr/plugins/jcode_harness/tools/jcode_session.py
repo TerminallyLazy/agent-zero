@@ -75,10 +75,27 @@ class JcodeSession(Tool):
                             f"[tool error: {ev.error[:100]}]"
                         )
                 elif t == "memory_injected":
-                    # 7.2.B will wire memory injection to the side panel; for
-                    # now we just consume the event so it doesn't surface as
-                    # text.
-                    pass
+                    # Push a structured log event that the right-canvas
+                    # ``jcode_panel.js`` (Chunk 9) subscribes to. Until then
+                    # this is just a recorded event on the agent log.
+                    payload = {
+                        "count": getattr(ev, "count", 0),
+                        "prompt_chars": getattr(ev, "prompt_chars", 0),
+                        "computed_age_ms": getattr(ev, "computed_age_ms", 0),
+                    }
+                    try:
+                        self.agent.context.log.log(
+                            type="memory_injected",
+                            content=(
+                                f"+{payload['count']} memories "
+                                f"({payload['prompt_chars']} chars, "
+                                f"{payload['computed_age_ms']}ms old)"
+                            ),
+                            kvps=payload,
+                        )
+                    except Exception:
+                        # Log surface unavailable in test env; non-fatal.
+                        pass
                 elif t == "compaction":
                     notify.warning("jcode auto-compacted context")
                 elif t == "interrupted":

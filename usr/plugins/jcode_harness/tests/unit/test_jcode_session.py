@@ -154,6 +154,46 @@ async def test_session_warns_on_compaction(
     assert "compact" in args[0].lower()
 
 
+async def test_session_logs_memory_injected_event(
+    fake_agent, fake_daemon, patch_supervisor
+):
+    async def script(daemon, reader, writer):
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        msg_line = await read_line(reader)
+        msg_id = json.loads(msg_line)["id"]
+        writer.write(
+            b'{"type":"memory_injected","count":3,"prompt":"...",'
+            b'"prompt_chars":42,"computed_age_ms":1234}\n'
+        )
+        writer.write(
+            b'{"type":"done","id":' + str(msg_id).encode() + b"}\n"
+        )
+        await writer.drain()
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    tool = make_tool(JcodeSession, fake_agent)
+    await tool.execute(task="x", working_dir="/tmp")
+    assert fake_agent.context.log.log.called
+    # Find the memory_injected log call (other log entries may be present).
+    mem_calls = [
+        c
+        for c in fake_agent.context.log.log.call_args_list
+        if c.kwargs.get("type") == "memory_injected"
+    ]
+    assert mem_calls, "memory_injected log entry missing"
+    kvps = mem_calls[0].kwargs["kvps"]
+    assert kvps == {
+        "count": 3,
+        "prompt_chars": 42,
+        "computed_age_ms": 1234,
+    }
+
+
 async def test_session_uses_persistent_client_instance_id(
     fake_agent, fake_daemon, patch_supervisor, tmp_path, monkeypatch
 ):
