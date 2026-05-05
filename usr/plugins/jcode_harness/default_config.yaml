@@ -1,0 +1,20 @@
+binary:
+  path: ""
+  auto_update: true
+daemon:
+  mode: per_project
+  socket_path: ""
+features:
+  swarm: true
+  self_dev: false
+  cross_harness_resume: true
+  cross_harness_import: false
+providers:
+  auto_import_a0_keys: true
+  oauth_subscriptions: []
+ui:
+  side_panel: true
+  mermaid: true
+  notifications: true
+safety_mode: default
+min_jcode_version: "0.11.4"
