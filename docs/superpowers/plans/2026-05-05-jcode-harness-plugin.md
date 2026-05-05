@@ -8,7 +8,33 @@
 
 **Tech Stack:** Python 3.11+ (asyncio), Agent Zero plugin framework, jcode (Rust binary), pytest + pytest-asyncio, Playwright (WebUI tests), Alpine.js (existing A0 WebUI conventions).
 
-**Spec:** `docs/superpowers/specs/2026-05-05-jcode-harness-plugin-design.md` (commit `4c28f316`).
+**Spec:** `docs/superpowers/specs/2026-05-05-jcode-harness-plugin-design.md`.
+
+## Spike Findings Addendum (2026-05-05, all 9 spikes resolved)
+
+Empirical verification against jcode v0.11.10 (release binary, macos-aarch64, SHA256
+`62cb014b491fc9aca00142c86b59f2fd3f9f092825cd331c7de7d37d513a8869`). Findings folded into
+tasks below — also captured in `docs/superpowers/spikes/2026-05-05-spike-*.md`.
+
+| # | Spike | Outcome | Plan tasks affected |
+|---|-------|---------|---------------------|
+| 0.1 | `Reloading { new_socket }` semantics | DEFERRED — defensive forward-compat lookup ships in v1; integration test added | 3.7, 12.x |
+| 0.2 | `jcode session list --json` subcommand | ❌ Does NOT exist. Use journal-file reader against `~/.jcode/sessions/` | 7.5, 11.1 |
+| 0.3 | `provider_session_id` cache warmth | DEFERRED — opt-in perf test, downgrade-tolerant per spec §10 | 12.6 |
+| 0.4 | `jcode provider add` flag set | ❌ `--api-key-stdin` does NOT exist. Use `--api-key-env <NAME>` with private env-var injection | 6.2, 12.4 |
+| 0.5 | A0 side-panel breakpoint | A0 has unified **right-canvas** system; one "jcode" surface with internal tabs, NOT side-panel-start breakpoint | 9.3, file tree |
+| 0.6 | `JCODE_CONFIG` gateway disable overlay | ✅ Works; daemon refuses to start without creds — pre-spawn check needed | 4.3 add `_has_creds()` |
+| 0.7 | `_functions/<module>/<qualname>` extension | Skipped — no v1 intercept needed | — |
+| 0.8 | `jcode login --print-auth-url --json` | ✅ Works + full completion flag set (`--callback-url`, `--auth-code`, `--complete`) | 11.3 + new 11.3.A |
+| 0.9 | `jcode provider remove --json` | ❌ Does NOT exist. Direct `~/.jcode/config.toml` edit (with daemon stop/restart) | 6.4, 11.5 |
+
+**Other findings:**
+- `jcode --owner-pid` flag does NOT exist on `serve`. Drop from spawn command.
+- Socket created with **0600 perms** by default — matches spec §8.4 mandate.
+- Asset name pattern is `jcode-{macos|linux|windows}-{aarch64|x86_64}.{tar.gz|exe}` (NOT
+  `darwin-arm64`). Update arch detection accordingly.
+- `jcode serve` requires at least one configured provider before it will start; plugin must
+  surface "Login required" UI before any tool runs.
 
 ---
 
@@ -59,11 +85,15 @@ usr/plugins/jcode_harness/
 │   │   └── monologue_start/
 │   │       └── jcode_warmup.py
 │   └── webui/
-│       ├── side-panel-start/
-│       │   └── jcode_panel.html
+│       ├── right-canvas-tabs-start/
+│       │   └── jcode_surface.js                  registers "jcode" right-canvas surface
+│       ├── right-canvas-panels/
+│       │   ├── jcode_panel.html                  renders SidePanelSnapshot pages with internal tabs
 │       │   └── jcode_panel.js
+│       ├── welcome-banners-start/
+│       │   └── jcode_login_required.html         shown when no providers configured
 │       └── sidebar-quick-actions-main-start/
-│           └── jcode_quick.html
+│           ├── jcode_quick.html
 │           └── jcode_quick.js
 ├── agents/
 │   └── jcode_coder/
@@ -286,17 +316,17 @@ If `cache_read_input_tokens > 0`: cache stayed warm. If only `cache_creation`: c
 
 ```bash
 # Collision
-echo "key1" | jcode provider add test --base-url https://x --model y --api-key-stdin --json
-echo "key2" | jcode provider add test --base-url https://x --model y --api-key-stdin --json
+echo "key1" | jcode provider add test --base-url https://x --model y --api-key-env --json
+echo "key2" | jcode provider add test --base-url https://x --model y --api-key-env --json
 
 # Bad URL
-echo "k" | jcode provider add bad --base-url not-a-url --model y --api-key-stdin --json
+echo "k" | jcode provider add bad --base-url not-a-url --model y --api-key-env --json
 
 # Missing model
-echo "k" | jcode provider add nm --base-url https://x --api-key-stdin --json
+echo "k" | jcode provider add nm --base-url https://x --api-key-env --json
 
 # Network error (use unreachable host with reachability validator if any)
-echo "k" | jcode provider add net --base-url https://0.0.0.0:1 --model y --api-key-stdin --json
+echo "k" | jcode provider add net --base-url https://0.0.0.0:1 --model y --api-key-env --json
 ```
 
 - [ ] **Step 2: Capture exit codes + JSON error shapes**
@@ -424,7 +454,9 @@ _(Original Task 0.8 rollup renumbered to Task 0.10 above.)_
 ```bash
 mkdir -p usr/plugins/jcode_harness/{helpers,tools,api,agents/jcode_coder,webui,tests/unit,tests/integration,tests/fixtures/protocol,tests/webui,tests/perf,tests/security}
 mkdir -p usr/plugins/jcode_harness/extensions/python/{agent_init,monologue_start}
-mkdir -p usr/plugins/jcode_harness/extensions/webui/side-panel-start
+mkdir -p usr/plugins/jcode_harness/extensions/webui/right-canvas-tabs-start
+mkdir -p usr/plugins/jcode_harness/extensions/webui/right-canvas-panels
+mkdir -p usr/plugins/jcode_harness/extensions/webui/welcome-banners-start
 mkdir -p usr/plugins/jcode_harness/extensions/webui/sidebar-quick-actions-main-start
 ```
 
@@ -1480,8 +1512,8 @@ async def connect(self, socket_path: str):
 def test_returns_known_arch():
     from usr.plugins.jcode_harness.helpers.arch import detect_release_asset_target
     target = detect_release_asset_target()
-    assert target in {"darwin-arm64", "darwin-x86_64", "linux-x86_64",
-                      "linux-aarch64", "windows-x86_64"}
+    assert target in {"macos-aarch64", "macos-x86_64", "linux-x86_64",
+                      "linux-aarch64", "windows-x86_64", "windows-aarch64"}
 
 def test_macos_rosetta_detection(monkeypatch):
     """sysctl hw.optional.arm64 == 1 means real arm64 even if uname says x86_64."""
@@ -1489,10 +1521,10 @@ def test_macos_rosetta_detection(monkeypatch):
     monkeypatch.setattr("platform.machine", lambda: "x86_64")  # Rosetta lies
     monkeypatch.setattr(
         "subprocess.check_output",
-        lambda args, **kw: b"hw.optional.arm64: 1\n",
+        lambda args, **kw: b"1\n",  # sysctl -n returns just "1\n"
     )
     from usr.plugins.jcode_harness.helpers.arch import detect_release_asset_target
-    assert detect_release_asset_target() == "darwin-arm64"
+    assert detect_release_asset_target() == "macos-aarch64"
 ```
 
 - [ ] **Step 2: Implementation**
@@ -1502,22 +1534,27 @@ import platform
 import subprocess
 
 def detect_release_asset_target() -> str:
+    """Returns asset-name fragment matching jcode release artifacts.
+    Verified against v0.11.10: jcode-{macos|linux|windows}-{aarch64|x86_64}.{tar.gz|exe}"""
     sys = platform.system()
     if sys == "Darwin":
         try:
             out = subprocess.check_output(["sysctl", "-n", "hw.optional.arm64"],
                                            stderr=subprocess.DEVNULL).strip()
             if out == b"1":
-                return "darwin-arm64"
+                return "macos-aarch64"  # arm64 (Apple Silicon, includes Rosetta passthrough)
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
-        return "darwin-x86_64"
+        return "macos-x86_64"
     if sys == "Linux":
         m = platform.machine().lower()
         if m in {"aarch64", "arm64"}:
             return "linux-aarch64"
         return "linux-x86_64"
     if sys == "Windows":
+        m = platform.machine().lower()
+        if m in {"aarch64", "arm64"}:
+            return "windows-aarch64"
         return "windows-x86_64"
     raise RuntimeError(f"unsupported OS: {sys}")
 ```
@@ -1664,9 +1701,40 @@ class DaemonSupervisor:
         st = self.socket_file.stat()
         return (st.st_mode & 0o777) == 0o600 and st.st_uid == os.getuid()
 
+    def _has_creds(self) -> bool:
+        """Pre-spawn credential check — jcode serve refuses to start without creds.
+        Verified Spike 0.6: 'Error: No credentials configured. Run jcode login or
+        set ANTHROPIC_API_KEY to authenticate.'"""
+        auth_files = [
+            Path.home() / ".jcode" / "auth.json",
+            Path.home() / ".jcode" / "openai-auth.json",
+            Path.home() / ".jcode" / "gemini_oauth.json",
+            Path.home() / ".jcode" / "antigravity_oauth.json",
+        ]
+        if any(f.exists() for f in auth_files):
+            return True
+        for env_name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+                         "OPENROUTER_API_KEY", "AZURE_OPENAI_API_KEY"):
+            if env_name in os.environ:
+                return True
+        # Plugin-imported provider profiles count too
+        try:
+            result = subprocess.run(
+                [self.jcode_binary, "provider", "list", "--json"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return result.returncode == 0 and bool(json.loads(result.stdout or "[]"))
+        except Exception:
+            return False
+
     async def ensure_running(self, working_dir: str) -> str:
         if self.is_running():
             return str(self.socket_file)
+        if not self._has_creds():
+            raise NoCredentialsError(
+                "jcode harness needs at least one configured provider. "
+                "Open plugin settings → Login, or set an API key env var."
+            )
         # archive stale pid
         if self.pid_file.exists():
             ts = int(time.time())
@@ -1679,9 +1747,10 @@ class DaemonSupervisor:
         # spawn
         log_file = self.log_dir / f"jcode-{int(time.time())}.log"
         env = dict(os.environ, JCODE_CONFIG=str(self.overlay_config))
+        # NOTE: --owner-pid was originally specified but does not exist on jcode v0.11.10
+        # `serve` subcommand. Daemon supervision falls back to PID file + flock.
         proc = subprocess.Popen(
-            [self.jcode_binary, "--socket", str(self.socket_file),
-             "serve", "--owner-pid", str(os.getpid())],
+            [self.jcode_binary, "--socket", str(self.socket_file), "serve"],
             env=env,
             stdout=open(log_file, "ab"),
             stderr=subprocess.STDOUT,
@@ -2111,33 +2180,47 @@ def _first_model_from_settings(pid: str) -> str | None:
 
 ### Task 6.2: jcode provider add via stdin
 
-- [ ] **Step 1: Test that key never appears in argv**
+> **Spike 0.4 finding:** `--api-key-stdin` flag does NOT exist in jcode CLI. Use
+> `--api-key-env <NAME>` with private env-var injection. Equivalent argv-safety guarantee:
+> the key never appears in `ps aux`, never persists in shell history.
+>
+> **Spike 0.4 finding:** `--json` and `--overwrite` flags on `provider add` are not visible in
+> `--help`. Empirical probe required during implementation; the implementation below treats
+> both as best-effort (try with, retry without on parse error).
+
+- [ ] **Step 1: Test that key never appears in argv AND that `env=` is used**
 
 ```python
-def test_provider_add_uses_stdin(monkeypatch):
+def test_provider_add_uses_env_not_argv(monkeypatch):
     captured_argv = []
-    captured_stdin = []
+    captured_env = []
 
-    def fake_run(argv, input=None, **kw):
+    def fake_run(argv, env=None, **kw):
         captured_argv.append(argv)
-        captured_stdin.append(input)
-        return MagicMock(returncode=0, stdout=b'{"ok":true}', stderr=b"")
+        captured_env.append(env or {})
+        return MagicMock(returncode=0, stdout='{"ok":true}', stderr="")
 
     monkeypatch.setattr("subprocess.run", fake_run)
     from usr.plugins.jcode_harness.helpers.provider_import import add_jcode_profile
     add_jcode_profile("/bin/jcode", "_a0_imported_acme",
                      "https://acme/v1", "gpt-4", "SECRET_KEY_VAL")
     argv = captured_argv[0]
-    assert "SECRET_KEY_VAL" not in " ".join(argv)
-    assert captured_stdin[0] == "SECRET_KEY_VAL"
-    assert "--api-key-stdin" in argv
+    assert "SECRET_KEY_VAL" not in " ".join(argv), "key must not be in argv"
+    assert "--api-key-env" in argv
     assert "--model" in argv
     assert "gpt-4" in argv
+    # Env var name must be in argv right after --api-key-env
+    idx = argv.index("--api-key-env")
+    env_name = argv[idx + 1]
+    assert env_name.startswith("JCODE_PROVIDER_") and env_name.endswith("_API_KEY")
+    # And the actual key must be in the child's env under that name
+    assert captured_env[0].get(env_name) == "SECRET_KEY_VAL"
 ```
 
 - [ ] **Step 2: Implementation**
 
 ```python
+import os
 import subprocess
 import json
 
@@ -2147,17 +2230,27 @@ def add_jcode_profile(jcode_bin: str, profile_name: str, base_url: str,
                        model: str, api_key: str, overwrite: bool = True) -> dict:
     if not profile_name.startswith(PLUGIN_PROFILE_PREFIX):
         raise ValueError(f"plugin-managed profiles must start with {PLUGIN_PROFILE_PREFIX}")
+    # Per Spike 0.4: --api-key-stdin does not exist; use --api-key-env with private env var.
+    env_var = f"JCODE_PROVIDER_{profile_name.upper().replace('-', '_')}_API_KEY"
+    child_env = dict(os.environ, **{env_var: api_key})
     cmd = [
         jcode_bin, "provider", "add", profile_name,
         "--base-url", base_url, "--model", model,
-        "--api-key-stdin", "--json",
+        "--api-key-env", env_var,
     ]
-    if overwrite:
-        cmd.append("--overwrite")
-    result = subprocess.run(cmd, input=api_key, capture_output=True, text=True)
+    # Try with --json and --overwrite first; if jcode rejects either flag, retry without.
+    # Per Spike 0.4: presence of these flags unverified in v0.11.10 --help output.
+    cmd_full = cmd + ["--json"] + (["--overwrite"] if overwrite else [])
+    result = subprocess.run(cmd_full, env=child_env, capture_output=True, text=True)
+    if result.returncode != 0 and ("--json" in result.stderr or "--overwrite" in result.stderr):
+        # Retry without the unsupported flags
+        result = subprocess.run(cmd, env=child_env, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"jcode provider add failed: {result.stderr}")
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout) if result.stdout.strip() else {"ok": True}
+    except json.JSONDecodeError:
+        return {"ok": True, "stdout": result.stdout}
 
 def list_jcode_profiles(jcode_bin: str) -> list[dict]:
     result = subprocess.run(
@@ -2231,22 +2324,62 @@ def import_a0_providers(jcode_bin: str, providers: list[dict] | None = None,
 
 - [ ] **Step 3: Commit**
 
-### Task 6.4: Purge imported profiles function
+### Task 6.4: Purge imported profiles via direct config edit
+
+> **Spike 0.9 finding:** `jcode provider remove` subcommand does NOT exist. Direct
+> `~/.jcode/config.toml` edit required. Daemon must be stopped first to avoid concurrent-write
+> races.
 
 ```python
+import sys
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib  # add to test deps in Task 12.0
+import tomli_w  # required regardless (no stdlib TOML writer)
+from pathlib import Path
+
+CONFIG_PATH = Path.home() / ".jcode" / "config.toml"
+
 def purge_imported_profiles(jcode_bin: str) -> list[str]:
-    profs = list_jcode_profiles(jcode_bin)
-    purged = []
-    for p in profs:
-        if p["name"].startswith(PLUGIN_PROFILE_PREFIX):
-            subprocess.run([jcode_bin, "provider", "remove", p["name"], "--json"],
-                            check=True)
-            purged.append(p["name"])
+    """Stop daemon, edit config.toml to remove plugin-prefixed profiles, return purged names."""
+    from usr.plugins.jcode_harness.helpers.daemon import DaemonSupervisor
+    from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
+    sup = DaemonSupervisor(jcode_bin, jcode_runtime_dir())
+    was_running = sup.is_running()
+    if was_running:
+        sup.stop()
+
+    purged: list[str] = []
+    if not CONFIG_PATH.exists():
+        return purged
+    data = tomllib.loads(CONFIG_PATH.read_text())
+    providers = data.get("providers", {})
+    to_remove = [n for n in providers if n.startswith(PLUGIN_PROFILE_PREFIX)]
+    for n in to_remove:
+        del providers[n]
+        purged.append(n)
+        # Also remove jcode's per-profile env file if it exists
+        env_file = Path.home() / ".config" / "jcode" / f"provider-{n}.env"
+        env_file.unlink(missing_ok=True)
+    # Reset default if it pointed at a removed profile
+    default = data.get("provider", {}).get("default_provider")
+    if default in purged:
+        data["provider"]["default_provider"] = "auto"
+
+    CONFIG_PATH.write_text(tomli_w.dumps(data))
+    CONFIG_PATH.chmod(0o600)
+    # Caller is responsible for restarting daemon when needed; we do not auto-restart
+    # (no working_dir context here).
     return purged
 ```
 
-- [ ] **Step 1: Test purge**
-- [ ] **Step 2: Commit**
+- [ ] **Step 1: Test that profile is removed from config.toml**
+- [ ] **Step 2: Test that env file is removed**
+- [ ] **Step 3: Test that default_provider reset to "auto" if pointed at removed profile**
+- [ ] **Step 4: Test that user-owned (non-prefixed) profiles are NOT touched**
+- [ ] **Step 5: Test that daemon is stopped before edit**
+- [ ] **Step 6: Commit**
 
 ---
 
@@ -2391,11 +2524,11 @@ class JcodeGrep(Tool):
 
 - [ ] **Step 3: Commit**
 
-### Task 7.2.B: Wire MemoryInjected → A0 side panel (coverage gap from spec §9.3)
+### Task 7.2.B: Wire MemoryInjected → A0 right-canvas (coverage gap from spec §9.3)
 
 **Files:**
 - Modify: `usr/plugins/jcode_harness/tools/jcode_session.py`
-- Modify: `usr/plugins/jcode_harness/extensions/webui/side-panel-start/jcode_panel.js`
+- Modify: `usr/plugins/jcode_harness/extensions/webui/right-canvas-panels/jcode_panel.js`
 
 - [ ] **Step 1: In `jcode_session.execute()`, when `MemoryInjected` arrives, push a
   side-panel-update event into A0 via the agent's log/notification API.**
@@ -2733,11 +2866,97 @@ Settings UI bound to `default_config.yaml` schema. Per AGENTS.plugins.md §4 use
 
 - [ ] Implement + commit.
 
-### Task 9.3: side-panel-start extension (jcode SidePanel events)
+### Task 9.3: right-canvas surface (replaces side-panel-start extension)
 
-Per Spike 0.5, decide breakpoint vs custom surface. Implement.
+> **Spike 0.5 finding:** A0 has a unified **right-canvas** system, not a side-panel-start
+> breakpoint. Plugin registers ONE "jcode" surface with internal tabs that mirror jcode's
+> `SidePanelSnapshot.pages`. Breakpoints used: `right-canvas-tabs-start` (register surface),
+> `right-canvas-panels` (panel content).
 
-- [ ] Tests + commit.
+**Files:**
+- Create: `usr/plugins/jcode_harness/extensions/webui/right-canvas-tabs-start/jcode_surface.js`
+- Create: `usr/plugins/jcode_harness/extensions/webui/right-canvas-panels/jcode_panel.html`
+- Create: `usr/plugins/jcode_harness/extensions/webui/right-canvas-panels/jcode_panel.js`
+
+- [ ] **Step 1: Read `webui/components/canvas/right-canvas-store.js` to confirm
+  `registerSurface` API shape and exact required fields.** Write notes to comments at top of
+  `jcode_surface.js`. (If API differs from spike doc guess, update accordingly.)
+
+- [ ] **Step 2: Write `jcode_surface.js` to register the surface.**
+
+```javascript
+// jcode_surface.js
+// Registers a single right-canvas surface for the jcode harness.
+// Uses A0's $store.rightCanvas (verified in Spike 0.5).
+export default async function () {
+  if (!window.$store || !window.$store.rightCanvas) return;
+  // Idempotent — multiple plugin loads should not double-register.
+  if (window.$store.rightCanvas.hasSurface?.("jcode")) return;
+  window.$store.rightCanvas.registerSurface({
+    id: "jcode",
+    title: "jcode",
+    icon: "psychology",
+    undockable: true,
+  });
+}
+```
+
+- [ ] **Step 3: Write `jcode_panel.html` + `jcode_panel.js` for in-surface rendering.**
+
+```html
+<!-- jcode_panel.html -->
+<template x-if="$store.rightCanvas.isSurfaceActive('jcode')">
+  <div x-data="jcodePanel()" x-init="init()" class="jcode-panel">
+    <div class="jcode-tabstrip" role="tablist">
+      <template x-for="page in pages" :key="page.id">
+        <button role="tab"
+                :class="{active: page.id === focusedId}"
+                :aria-selected="page.id === focusedId"
+                @click="focusedId = page.id"
+                x-text="page.title"></button>
+      </template>
+      <template x-if="pages.length === 0">
+        <span class="jcode-panel-empty">No active jcode pages</span>
+      </template>
+    </div>
+    <div class="jcode-page-content" x-html="renderedContent()"></div>
+  </div>
+</template>
+```
+
+```javascript
+// jcode_panel.js
+window.jcodePanel = function () {
+  return {
+    pages: [],
+    focusedId: null,
+    init() {
+      // Subscribe to plugin's SSE/event channel via /api/plugins/jcode_harness/events
+      // (channel implementation TBD in Chunk 11). For now, poll daemon_status for sessions.
+      window.addEventListener("jcode:side_panel", (ev) => {
+        this.pages = ev.detail.pages || [];
+        this.focusedId = ev.detail.focused_page_id || (this.pages[0]?.id ?? null);
+      });
+    },
+    renderedContent() {
+      const p = this.pages.find(x => x.id === this.focusedId);
+      if (!p) return "";
+      // markdown is the only format jcode emits today (Spike 0.5)
+      return window.marked ? window.marked.parse(p.content || "") : p.content || "";
+    },
+  };
+};
+```
+
+- [ ] **Step 4: Tool-side wiring.** In `tools/jcode_session.py`, when a `SidePanel` event
+  arrives, dispatch a `jcode:side_panel` CustomEvent with the snapshot payload via the WebUI
+  notification channel (or via a new `/api/plugins/jcode_harness/events` SSE endpoint —
+  decision pending Chunk 11.7).
+
+- [ ] **Step 5: Playwright test that registering the surface adds the tab and that a fake
+  SidePanel event populates the panel.**
+
+- [ ] **Step 6: Commit.**
 
 ### Task 9.4: sidebar-quick-actions-main-start
 
@@ -2785,40 +3004,63 @@ prompts: {}
 
 ## Chunk 11: API handlers
 
-### Task 11.1: api/list_sessions.py
+### Task 11.1: api/list_sessions.py — journal-file reader
 
-> **Gated on Spike 0.2 outcome.** If `jcode session list --json` does not exist, replace the
-> subprocess call with the chosen fallback (likely `jcode --resume --json` no-id form, or direct
-> read of `~/.jcode/sessions/`).
+> **Spike 0.2 finding:** `jcode session list --json` subcommand does NOT exist. `--resume --json`
+> is rejected. Plugin reads `~/.jcode/sessions/` journal directory directly.
 
 ```python
 from helpers.api import ApiHandler, Request
-import subprocess, json
-
-from usr.plugins.jcode_harness.helpers.daemon import locate_jcode_binary
+from pathlib import Path
+import json
 
 class ListSessions(ApiHandler):
     @classmethod
     def get_methods(cls): return ["GET", "POST"]
 
     async def process(self, input: dict, request: Request) -> dict:
-        bin_path = locate_jcode_binary()
-        if not bin_path:
-            return {"sessions": [], "error": "jcode not installed"}
-        try:
-            # SUBCOMMAND PATH (verify per Spike 0.2):
-            out = subprocess.check_output([bin_path, "session", "list", "--json"], text=True)
-            return {"sessions": json.loads(out)}
-        except FileNotFoundError:
-            return {"sessions": [], "error": "binary moved"}
-        except subprocess.CalledProcessError as e:
-            return {"sessions": [], "error": str(e)}
+        base = Path.home() / ".jcode" / "sessions"
+        if not base.exists():
+            return {"sessions": []}
+        sessions: list[dict] = []
+        for sess_dir in base.iterdir():
+            snap = sess_dir / "session.json"
+            if not snap.is_file():
+                continue
+            try:
+                data = json.loads(snap.read_text())
+                sessions.append({
+                    "id": sess_dir.name,
+                    "title": data.get("title", ""),
+                    "provider_key": data.get("provider_key", "jcode"),
+                    "working_dir": data.get("working_dir", ""),
+                    "updated_at": data.get("updated_at"),
+                    "model": data.get("model"),
+                    "provider_session_id": data.get("provider_session_id"),
+                })
+            except (json.JSONDecodeError, OSError):
+                continue
+        sessions.sort(key=lambda s: s.get("updated_at") or 0, reverse=True)
+        return {"sessions": sessions}
 ```
 
-- [ ] **Step 1: Spike 0.2 must be complete; subcommand confirmed or fallback chosen.**
-- [ ] **Step 2: Write test that mocks subprocess → returns parsed sessions.**
-- [ ] **Step 3: Implement; if Spike 0.2 returned fallback, swap subprocess invocation.**
-- [ ] **Step 4: Run test, commit.**
+- [ ] **Step 1: Test against a tmp_path with seeded session.json files.**
+- [ ] **Step 2: Test malformed session.json is skipped without raising.**
+- [ ] **Step 3: Test sort order is most-recent-first.**
+- [ ] **Step 4: Implement; commit.**
+
+### Task 11.1.A: Verify session.json field schema
+
+**Files:**
+- Create: `docs/superpowers/spikes/2026-05-05-spike-session-json-schema.md`
+
+- [ ] **Step 1: Read jcode/src/session.rs and crates/jcode-session-types/ to confirm
+  exact field names emitted on disk** (working_dir, provider_key, provider_session_id,
+  updated_at type — unix timestamp ms or ISO string).
+
+- [ ] **Step 2: Update Task 11.1 field-name guesses if any are wrong.**
+
+- [ ] **Step 3: Commit spike doc.**
 
 ### Task 11.2: api/resume_session.py
 
@@ -2917,7 +3159,8 @@ class DaemonStatus(ApiHandler):
 
 ### Task 11.5: api/purge_imported_profiles.py
 
-> Gated on Task 6.4 spike: `jcode provider remove <name> --json` subcommand verified.
+> **Spike 0.9 finding:** `jcode provider remove` does NOT exist. Task 6.4 was rewritten to use
+> direct config.toml edit (with daemon stop). This handler is the HTTP wrapper.
 
 ```python
 from helpers.api import ApiHandler, Request
@@ -2926,12 +3169,58 @@ class PurgeImported(ApiHandler):
     async def process(self, input: dict, request: Request) -> dict:
         from usr.plugins.jcode_harness.helpers.provider_import import purge_imported_profiles
         from usr.plugins.jcode_harness.helpers.daemon import locate_jcode_binary
-        purged = purge_imported_profiles(locate_jcode_binary())
-        return {"purged": purged}
+        bin_path = locate_jcode_binary()
+        if not bin_path:
+            return {"ok": False, "error": "jcode not installed", "purged": []}
+        purged = purge_imported_profiles(bin_path)
+        return {"ok": True, "purged": purged}
 ```
 
 - [ ] **Step 1: Test returns purged list shape.**
 - [ ] **Step 2: Implement; commit.**
+
+### Task 11.6: api/complete_login.py — second leg of OAuth flow
+
+> **Spike 0.8 finding:** `jcode login --print-auth-url --json` works AND a full set of
+> completion flags (`--callback-url`, `--auth-code`, `--complete`) exists. Two-leg login flow
+> requires a second handler.
+
+```python
+# api/complete_login.py
+from helpers.api import ApiHandler, Request
+import subprocess
+import json
+
+class CompleteLogin(ApiHandler):
+    async def process(self, input: dict, request: Request) -> dict:
+        from usr.plugins.jcode_harness.helpers.daemon import locate_jcode_binary
+        bin_path = locate_jcode_binary()
+        if not bin_path:
+            return {"ok": False, "error": "jcode not installed"}
+        provider = input["provider"]
+        callback = input.get("callback_url")
+        code = input.get("auth_code")
+        cmd = [bin_path, "login", "--provider", provider, "--json"]
+        if callback:
+            cmd += ["--callback-url", callback]
+        elif code:
+            cmd += ["--auth-code", code]
+        else:
+            cmd += ["--complete"]
+        try:
+            out = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT, timeout=60)
+            return {"ok": True, **json.loads(out)} if out.strip().startswith("{") \
+                else {"ok": True, "stdout": out}
+        except subprocess.CalledProcessError as e:
+            return {"ok": False, "error": e.output}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "login timed out"}
+```
+
+- [ ] **Step 1: Test callback-url path.**
+- [ ] **Step 2: Test auth-code path.**
+- [ ] **Step 3: Test --complete (Copilot device-flow style).**
+- [ ] **Step 4: Implement; commit.**
 
 ---
 

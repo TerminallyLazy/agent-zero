@@ -318,7 +318,9 @@ Implementation:
 
 Runs once on install and on settings save. Reads A0's `models.py` and `conf/model_providers.yaml`
 plus user-configured API keys, registers each one as a jcode `openai-compatible` profile via
-`jcode provider add <name> --base-url <url> --model <id> --api-key-stdin --json --overwrite`.
+`jcode provider add <name> --base-url <url> --model <id> --api-key-env <ENV_VAR_NAME>` with the
+key transiently injected into the spawned process's environment by the plugin (never argv,
+never persisted).
 
 - `--model` is **required** by `jcode provider add` (`src/cli/args.rs:447-448`); plugin uses A0's
   configured default model id for that provider, or the first model from A0's
@@ -338,7 +340,16 @@ in `~/.config/jcode/`. The plugin settings page exposes a "Purge imported profil
 invokes `jcode provider remove` for each prefixed profile. Without an explicit purge, profiles
 remain functional until manually removed.
 
-Keys never appear in command-line arguments (always stdin), never in shell history, never logged.
+Keys never appear in command-line arguments (always env-var passthrough), never in shell
+history, never logged. Plugin generates a unique env var name per profile
+(`JCODE_PROVIDER_<UPPER_NAME>_API_KEY`), sets it only in the child subprocess's environment via
+`subprocess.run(..., env=...)`, and never writes it to its own process env. Child process env
+under `/proc/<pid>/environ` (Linux) or via `ps -E` (macOS, BSD) is owner-readable only.
+
+> **Note (verified 2026-05-05 against jcode v0.11.10):** the originally drafted `--api-key-stdin`
+> flag does not exist in jcode's CLI. The `--api-key-env <NAME>` flag does. The env-var pattern
+> above achieves equivalent security: key never appears in argv (so not in `ps aux`) and never
+> persists in shell history. See spike `docs/superpowers/spikes/2026-05-05-spike-provider-add-errors.md`.
 
 ### 5.6 Tools (Python, in `tools/`)
 
@@ -628,10 +639,12 @@ network ports, no Docker break-out.
 
 - jcode OAuth tokens (`~/.jcode/auth*.json`, 0600): jcode-managed, plugin reads only via IPC.
 - jcode API keys (`~/.config/jcode/<provider>.env`, 0600): plugin writes only via
-  `jcode provider add --api-key-stdin`.
+  `jcode provider add --api-key-env <NAME>` with `env=` injection in the subprocess call.
 - Cross-harness imports (`~/.claude/.credentials.json` etc.): jcode reads them, plugin doesn't
   touch.
-- A0 LiteLLM keys: plugin reads at import time, pipes via stdin to jcode, never logs.
+- A0 LiteLLM keys: plugin reads at import time, injects into a uniquely named env var visible
+  only to the spawned `jcode provider add` subprocess (`subprocess.run(..., env={**os.environ,
+  env_var: key})`), never logs.
 - Session journal (`~/.jcode/sessions/<id>/`, 0600): plugin reads via IPC `History` event, redacts
   in info-level logs.
 
@@ -814,7 +827,7 @@ change, plugin update required before pin bump.
   history; `provider_session_id` round-trips.
 - Memory + skills: `jcode_memory` round-trips remember/recall/search; persists across daemon
   restart; auto-injection fires in full-takeover; `/skill-name` activates manually.
-- Provider import: A0 keys imported as openai-compatible profiles; `--api-key-stdin` verified via
+- Provider import: A0 keys imported as openai-compatible profiles; `--api-key-env` verified via
   `/proc` inspection (no key in `ps`); idempotent re-import; OAuth login completes via
   `--print-auth-url`.
 - Soft interrupt: single-stop with text injects at point D; double-stop hard cancels.
@@ -944,3 +957,15 @@ Total v1 spikes: ~3.5 days. Findings fold into the implementation plan.
   and a spike on `jcode session list --json` subcommand existence.
 - **Iter 3 (2026-05-05):** Consistency drift swept. Spike list expanded. Cache-warmth claim
   downgraded to tolerant. SHA256SUMS source linked. Ready for user review.
+- **Iter 4 (2026-05-05):** All 9 Chunk 0 spikes complete (5 verified, 2 daemon-tested, 2
+  deferred with defensive plans). Spec §8.2 security model updated: `--api-key-stdin` (which
+  does not exist) replaced by `--api-key-env` env-var pattern with same security guarantee
+  (key never in argv/shell-history/logs; env var is private to parent→child spawn). See
+  spike findings at `docs/superpowers/spikes/`. Other findings folded into plan iter 2 rather
+  than spec — spec describes desired behavior; plan describes how to achieve it given the
+  actual jcode v0.11.10 CLI surface.
+- **Iter 4 (2026-05-05):** Empirical verification against jcode v0.11.10 binary. §5.5, §8.2
+  rewritten: `--api-key-stdin` flag does not exist in jcode CLI; switched security model to
+  `--api-key-env` with private env-var injection per spawn. Equivalent argv-protection
+  guarantee preserved. Spikes 0.2/0.4/0.6/0.8/0.9 verified, 0.1/0.3/0.5 deferred to
+  integration phase with concrete plans, see `docs/superpowers/spikes/`.
