@@ -7,6 +7,9 @@ import { createStore } from "/js/AlpineStore.js";
 const model = {
   daemon: { running: false, pid: null, uptime_s: 0 },
   sessions: [],
+  // Per-provider connection state, refreshed on init and after each
+  // successful login. Shape: {claude: {connected: true, source: "auth_file"}}
+  providerStatus: {},
   // Two-leg OAuth state. After clicking a provider login button, jcode
   // emits an auth_url (and optionally a user_code). The user finishes the
   // browser flow and pastes the response back here:
@@ -36,6 +39,26 @@ const model = {
       );
     }
     await this.refreshSessions();
+    await this.refreshProviderStatus();
+  },
+
+  async refreshProviderStatus() {
+    try {
+      const r = await fetch("/api/plugins/jcode_harness/provider_status");
+      if (!r.ok) return;
+      const d = await r.json();
+      this.providerStatus = d.providers || {};
+    } catch (e) {
+      // silent — buttons fall back to "not connected" state
+    }
+  },
+
+  isConnected(provider) {
+    return !!this.providerStatus?.[provider]?.connected;
+  },
+
+  connectionSource(provider) {
+    return this.providerStatus?.[provider]?.source || "";
   },
 
   async refreshSessions() {
@@ -161,6 +184,9 @@ const model = {
         );
         this.loginPending = null;
         this.loginPasteValue = "";
+        // Refresh provider status first so the button flips to Connected
+        // immediately, then fan out to the rest of the page.
+        await this.refreshProviderStatus();
         await this.refresh();
       } else {
         window.$store?.notificationStore?.frontendError?.(

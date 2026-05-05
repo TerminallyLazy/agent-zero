@@ -87,30 +87,27 @@
     </div>
 
     <div class="jcode-provider-grid">
-      <button type="button" class="button"
-              :disabled="!!$store.jcodeMain.loginPending"
-              @click="$store.jcodeMain.oauthLogin('claude')">
-        <span class="icon material-symbols-outlined">key</span>
-        Login with Claude
-      </button>
-      <button type="button" class="button"
-              :disabled="!!$store.jcodeMain.loginPending"
-              @click="$store.jcodeMain.oauthLogin('openai')">
-        <span class="icon material-symbols-outlined">key</span>
-        Login with OpenAI
-      </button>
-      <button type="button" class="button"
-              :disabled="!!$store.jcodeMain.loginPending"
-              @click="$store.jcodeMain.oauthLogin('gemini')">
-        <span class="icon material-symbols-outlined">key</span>
-        Login with Gemini
-      </button>
-      <button type="button" class="button"
-              :disabled="!!$store.jcodeMain.loginPending"
-              @click="$store.jcodeMain.oauthLogin('copilot')">
-        <span class="icon material-symbols-outlined">key</span>
-        Login with Copilot
-      </button>
+      <template x-for="prov in [
+        { id: 'claude',  label: 'Claude'  },
+        { id: 'openai',  label: 'OpenAI'  },
+        { id: 'gemini',  label: 'Gemini'  },
+        { id: 'copilot', label: 'Copilot' },
+      ]" :key="prov.id">
+        <button type="button"
+                class="button jcode-provider-button"
+                :class="{ 'is-connected': $store.jcodeMain.isConnected(prov.id) }"
+                :disabled="!!$store.jcodeMain.loginPending"
+                :title="$store.jcodeMain.isConnected(prov.id)
+                  ? `Connected (${$store.jcodeMain.connectionSource(prov.id) || 'unknown source'}). Click to re-login.`
+                  : `Start OAuth flow for ${prov.label}`"
+                @click="$store.jcodeMain.oauthLogin(prov.id)">
+          <span class="icon material-symbols-outlined"
+                x-text="$store.jcodeMain.isConnected(prov.id) ? 'check_circle' : 'key'"></span>
+          <span class="jcode-provider-label" x-text="prov.label"></span>
+          <span class="jcode-provider-state"
+                x-text="$store.jcodeMain.isConnected(prov.id) ? 'connected' : 'not connected'"></span>
+        </button>
+      </template>
     </div>
 
     <template x-if="$store.jcodeMain.loginPending">
@@ -327,14 +324,47 @@
 
     .jcode-provider-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
       gap: 0.5rem;
       margin-top: 0.25rem;
       margin-bottom: 0.5rem;
     }
 
-    .jcode-provider-grid .button {
-      justify-content: flex-start;
+    .jcode-provider-button {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 0.5rem;
+      justify-content: flex-start !important;
+    }
+
+    .jcode-provider-label {
+      font-weight: 600;
+    }
+
+    .jcode-provider-state {
+      margin-left: auto;
+      font-size: var(--font-size-small);
+      font-weight: 500;
+      padding: 0.1rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid var(--color-border);
+      color: var(--color-text-secondary);
+      background: color-mix(in srgb, var(--color-text) 6%, transparent);
+      white-space: nowrap;
+    }
+
+    .jcode-provider-button.is-connected .jcode-provider-state {
+      color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+      background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-primary));
+    }
+
+    .jcode-provider-button.is-connected {
+      border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+    }
+
+    .jcode-provider-button.is-connected .material-symbols-outlined {
+      color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
     }
 
     .jcode-danger-zone {

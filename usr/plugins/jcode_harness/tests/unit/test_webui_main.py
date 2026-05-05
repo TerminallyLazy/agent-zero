@@ -160,6 +160,41 @@ def test_main_html_renders_pending_login_panel():
     assert "loginHint" in text
 
 
+def test_main_js_tracks_per_provider_connection_state():
+    """Connection-state UX: provider buttons must reflect whether each
+    provider has credentials, and the state must refresh after a
+    successful login. Backend probe at api/provider_status.py.
+
+    Regression: 2026-05-05 — buttons rendered as plain "Login with X"
+    even after successful OAuth, with no visual feedback.
+    """
+    p = WEBUI / "main.js"
+    text = p.read_text(encoding="utf-8")
+    # State + helpers exist
+    assert "providerStatus" in text
+    assert "refreshProviderStatus" in text
+    assert "isConnected" in text
+    # Endpoint wired
+    assert "/api/plugins/jcode_harness/provider_status" in text
+    # Refresh fires after successful login (so the button flips immediately)
+    assert "refreshProviderStatus" in text
+
+
+def test_main_html_buttons_show_connection_state():
+    p = WEBUI / "main.html"
+    text = p.read_text(encoding="utf-8")
+    # Class binding flips on connected providers
+    assert "is-connected" in text
+    # Both icon variants present
+    assert "check_circle" in text  # connected state
+    assert "key" in text  # not-connected state
+    # Helper used to populate per-button state
+    assert "isConnected" in text
+    # Status pill (visible label, not just an icon swap) so users see
+    # the state without needing to read tooltips.
+    assert "jcode-provider-state" in text
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not on PATH")
 def test_main_js_parses_with_node():
     p = WEBUI / "main.js"

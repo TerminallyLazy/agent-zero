@@ -50,6 +50,14 @@ def http_server(alpine_js_bytes):
             "error": "binary not installed",
         },
         "/api/plugins/jcode_harness/list_sessions": {"sessions": []},
+        "/api/plugins/jcode_harness/provider_status": {
+            "providers": {
+                "claude":  {"connected": False, "source": ""},
+                "openai":  {"connected": True,  "source": "auth_file"},
+                "gemini":  {"connected": False, "source": ""},
+                "copilot": {"connected": False, "source": ""},
+            },
+        },
         "/api/plugins/jcode_harness/resume_session": {
             "ok": True,
             "session_id": "fake",
