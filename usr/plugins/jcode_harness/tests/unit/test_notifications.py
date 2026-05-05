@@ -60,6 +60,15 @@ def _load_framework_notification():
                 helpers_spec.loader.exec_module(helpers_pkg)
             except Exception:
                 pass
+    # Idempotent: if conftest (or another test) already loaded the framework
+    # ``helpers.notification`` from this same file, reuse that module instance
+    # so any other modules that captured a reference to its classes
+    # (e.g. the plugin's ``helpers.notifications``) keep agreeing on identity.
+    cached = sys.modules.get("helpers.notification")
+    if cached is not None and getattr(cached, "__file__", "") == str(
+        framework_file
+    ):
+        return cached
     spec = importlib.util.spec_from_file_location(
         "helpers.notification", framework_file
     )
