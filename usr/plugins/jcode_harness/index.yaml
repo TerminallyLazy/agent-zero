@@ -1,0 +1,11 @@
+# This is the Plugin Index manifest, NOT the runtime plugin.yaml.
+# When publishing: copy this file to agent0ai/a0-plugins repo as
+# `plugins/jcode_harness/index.yaml` and open a one-plugin PR.
+title: jcode Coding Harness
+description: Embeds the jcode coding-agent harness (memory graph, skills, swarm coordination, agentgrep, cross-harness session resume, and 28 native coding tools) into Agent Zero.
+github: https://github.com/<your-org>/jcode_harness
+tags:
+  - tools
+  - coding
+  - agent
+  - memory
