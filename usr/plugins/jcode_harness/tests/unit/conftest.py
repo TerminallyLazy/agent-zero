@@ -273,6 +273,8 @@ def patch_supervisor(monkeypatch):
             "usr.plugins.jcode_harness.tools.jcode_grep",
             "usr.plugins.jcode_harness.tools.jcode_memory",
             "usr.plugins.jcode_harness.tools.jcode_skill",
+            "usr.plugins.jcode_harness.tools.jcode_resume",
+            "usr.plugins.jcode_harness.tools.jcode_swarm_msg",
         ):
             mod = sys.modules.get(tool_modname)
             if mod is not None and hasattr(mod, "locate_jcode_binary"):
