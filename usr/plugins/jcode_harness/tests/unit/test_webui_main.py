@@ -15,7 +15,12 @@ def test_main_html_exists_and_has_alpine_data():
     p = WEBUI / "main.html"
     assert p.exists(), f"missing {p}"
     text = p.read_text(encoding="utf-8")
-    assert 'x-data="jcodeMain()"' in text
+    # Alpine store pattern: bare x-data + module import + $store.jcodeMain refs.
+    assert "<div x-data>" in text
+    assert 'import "/plugins/jcode_harness/webui/main.js"' in text
+    assert "$store.jcodeMain" in text
+    # Old broken global pattern must be gone.
+    assert 'x-data="jcodeMain()"' not in text
 
 
 def test_main_html_uses_notification_store_not_inline_errors():
@@ -26,11 +31,15 @@ def test_main_html_uses_notification_store_not_inline_errors():
     assert '<div class="error' not in text
 
 
-def test_main_js_exports_jcodeMain_global():
+def test_main_js_exports_jcodeMain_store():
     p = WEBUI / "main.js"
     assert p.exists(), f"missing {p}"
     text = p.read_text(encoding="utf-8")
-    assert "window.jcodeMain = function" in text
+    assert 'createStore("jcodeMain"' in text
+    assert "export const store" in text
+    assert 'import { createStore } from "/js/AlpineStore.js"' in text
+    # Old broken global pattern must be gone.
+    assert "window.jcodeMain" not in text
 
 
 def test_main_js_calls_correct_api_endpoints():

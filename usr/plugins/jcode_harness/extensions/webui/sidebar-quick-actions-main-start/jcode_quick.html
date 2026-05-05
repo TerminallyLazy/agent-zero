@@ -1,14 +1,17 @@
-<div x-data="jcodeQuick()" class="jcode-quick-actions" style="display: contents;">
+<div x-data class="jcode-quick-actions" style="display: contents;">
+  <script type="module">
+    import "/plugins/jcode_harness/extensions/webui/sidebar-quick-actions-main-start/jcode_quick.js";
+  </script>
   <button type="button"
           class="config-button"
-          @click="newSession()"
+          @click="$store.jcodeQuick.newSession()"
           aria-label="New jcode session"
           title="Start a new jcode coding session">
     <span class="material-symbols-outlined">code</span>
   </button>
   <button type="button"
           class="config-button"
-          @click="resumeSessionList()"
+          @click="$store.jcodeQuick.resumeSessionList()"
           aria-label="Resume jcode session"
           title="Pick a resumable session from any harness">
     <span class="material-symbols-outlined">history</span>

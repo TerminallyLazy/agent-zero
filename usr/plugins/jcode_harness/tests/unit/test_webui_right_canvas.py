@@ -34,7 +34,25 @@ def test_panel_html_template_uses_isSurfaceActive_jcode_gate():
 
 def test_panel_html_renders_pages_with_xfor():
     text = PANEL_HTML.read_text(encoding="utf-8")
-    assert 'x-for="page in pages"' in text
+    assert 'x-for="page in $store.jcodePanel.pages"' in text
+
+
+def test_panel_html_uses_alpine_store_pattern():
+    text = PANEL_HTML.read_text(encoding="utf-8")
+    assert "<div x-data" in text
+    assert (
+        'import "/plugins/jcode_harness/extensions/webui/'
+        'right-canvas-panels/jcode_panel.js"'
+    ) in text
+    assert 'x-data="jcodePanel()"' not in text
+
+
+def test_panel_js_exports_jcodePanel_store():
+    text = PANEL_JS.read_text(encoding="utf-8")
+    assert 'createStore("jcodePanel"' in text
+    assert "export const store" in text
+    assert 'import { createStore } from "/js/AlpineStore.js"' in text
+    assert "window.jcodePanel" not in text
 
 
 def test_panel_js_listens_for_jcode_side_panel_event():

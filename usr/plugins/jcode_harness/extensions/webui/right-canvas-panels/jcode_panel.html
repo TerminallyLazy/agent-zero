@@ -1,25 +1,28 @@
 <template x-if="$store.rightCanvas && $store.rightCanvas.isSurfaceActive && $store.rightCanvas.isSurfaceActive('jcode')">
-  <div x-data="jcodePanel()" x-init="init()" class="jcode-panel">
+  <div x-data class="jcode-panel">
+    <script type="module">
+      import "/plugins/jcode_harness/extensions/webui/right-canvas-panels/jcode_panel.js";
+    </script>
     <div class="jcode-tabstrip" role="tablist">
-      <template x-for="page in pages" :key="page.id">
+      <template x-for="page in $store.jcodePanel.pages" :key="page.id">
         <button type="button"
                 role="tab"
-                :class="{ active: page.id === focusedId }"
-                :aria-selected="page.id === focusedId"
-                @click="focusedId = page.id"
+                :class="{ active: page.id === $store.jcodePanel.focusedId }"
+                :aria-selected="page.id === $store.jcodePanel.focusedId"
+                @click="$store.jcodePanel.focusedId = page.id"
                 x-text="page.title"></button>
       </template>
-      <template x-if="pages.length === 0">
+      <template x-if="$store.jcodePanel.pages.length === 0">
         <span class="jcode-panel-empty">
           No active jcode pages. Run a jcode_session to populate.
         </span>
       </template>
     </div>
     <div class="jcode-page-content"
-         x-html="renderedContent()"></div>
-    <div class="jcode-memory-strip" x-show="memoryEvents.length > 0">
+         x-html="$store.jcodePanel.renderedContent()"></div>
+    <div class="jcode-memory-strip" x-show="$store.jcodePanel.memoryEvents.length > 0">
       <strong>Memory:</strong>
-      <template x-for="ev in memoryEvents.slice(-3)" :key="ev.ts">
+      <template x-for="ev in $store.jcodePanel.memoryEvents.slice(-3)" :key="ev.ts">
         <span class="jcode-memory-chip" x-text="ev.summary"></span>
       </template>
     </div>

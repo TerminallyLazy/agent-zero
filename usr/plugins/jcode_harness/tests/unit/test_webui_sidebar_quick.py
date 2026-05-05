@@ -19,8 +19,20 @@ def test_quick_html_has_two_buttons():
     text = HTML.read_text(encoding="utf-8")
     buttons = re.findall(r"<button\b", text)
     assert len(buttons) == 2, f"expected 2 buttons, found {len(buttons)}"
-    assert "newSession()" in text
-    assert "resumeSessionList()" in text
+    # Store-style invocation, not bare globals.
+    assert "$store.jcodeQuick.newSession()" in text
+    assert "$store.jcodeQuick.resumeSessionList()" in text
+
+
+def test_quick_html_uses_alpine_store_pattern():
+    text = HTML.read_text(encoding="utf-8")
+    # Bare x-data + module import — globals are not loaded by importHtmlExtensions.
+    assert "<div x-data" in text
+    assert (
+        'import "/plugins/jcode_harness/extensions/webui/'
+        'sidebar-quick-actions-main-start/jcode_quick.js"'
+    ) in text
+    assert 'x-data="jcodeQuick()"' not in text
 
 
 def test_quick_html_uses_material_symbols_icons_only():
@@ -51,10 +63,13 @@ def test_quick_html_uses_theme_aware_button_class():
     assert "background:#fff" not in text.lower().replace(" ", "")
 
 
-def test_quick_js_exports_jcodeQuick():
+def test_quick_js_exports_jcodeQuick_store():
     assert JS.exists(), f"missing {JS}"
     text = JS.read_text(encoding="utf-8")
-    assert "window.jcodeQuick = function" in text
+    assert 'createStore("jcodeQuick"' in text
+    assert "export const store" in text
+    assert 'import { createStore } from "/js/AlpineStore.js"' in text
+    assert "window.jcodeQuick" not in text
 
 
 def test_quick_js_uses_notification_store_for_all_messages():

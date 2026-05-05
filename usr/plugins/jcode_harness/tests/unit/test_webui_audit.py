@@ -37,14 +37,23 @@ def _scan_dir(root: Path):
 def test_banner_html_exists_and_gates_on_needsLogin():
     assert BANNER_HTML.exists(), f"missing {BANNER_HTML}"
     text = BANNER_HTML.read_text(encoding="utf-8")
-    assert 'x-data="jcodeLoginBanner()"' in text
-    assert 'x-show="needsLogin"' in text
+    # Alpine store pattern: bare x-data + module import + $store-gated visibility.
+    assert "<div x-data" in text
+    assert (
+        'import "/plugins/jcode_harness/extensions/webui/'
+        'welcome-banners-start/jcode_login_required.js"'
+    ) in text
+    assert 'x-show="$store.jcodeLoginBanner.needsLogin"' in text
+    assert 'x-data="jcodeLoginBanner()"' not in text
 
 
-def test_banner_js_exists_and_exports_jcodeLoginBanner():
+def test_banner_js_exists_and_exports_jcodeLoginBanner_store():
     assert BANNER_JS.exists(), f"missing {BANNER_JS}"
     text = BANNER_JS.read_text(encoding="utf-8")
-    assert "window.jcodeLoginBanner = function" in text
+    assert 'createStore("jcodeLoginBanner"' in text
+    assert "export const store" in text
+    assert 'import { createStore } from "/js/AlpineStore.js"' in text
+    assert "window.jcodeLoginBanner" not in text
 
 
 def test_banner_js_uses_notification_store_for_open_settings():
