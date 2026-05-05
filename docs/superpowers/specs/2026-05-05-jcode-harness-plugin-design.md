@@ -31,15 +31,19 @@ Rationale:
 - The IPC wire format is line-delimited JSON (`jcode/src/protocol.rs:1412-1421`) — trivially
   consumable from Python with `asyncio.open_unix_connection`. No SDK or Rust FFI required.
 
-Two interaction modes coexist:
+Two interaction modes are designed; only one ships in v1:
 
-1. **Embedded session (default).** A0's agent loop runs normally. A `jcode_session` tool opens a
-   bounded jcode session per coding task, streams events back into A0 chat, returns the final
-   assistant message as the tool result. A0 supervises start/stop.
-2. **Full-takeover (opt-in via agent profile `jcode_coder`).** The plugin's `monologue_start`
-   extension short-circuits A0's loop: a sticky jcode session owns the conversation, A0 acts as
-   chat shell. Memory, skills, swarm coordination, and ambient (when enabled) all run native
-   inside jcode.
+1. **Embedded session (v1, default).** A0's agent loop runs normally. A `jcode_session` tool
+   opens a bounded jcode session per coding task, streams events back into A0 chat, returns the
+   final assistant message as the tool result. A0 supervises start/stop. The agent profile
+   `jcode_coder` ships as a **prompt-routing profile**: its system prompt strongly favors using
+   `jcode_session` for any non-trivial coding work, so the user perceives "jcode-driven" sessions
+   without the framework needing a true loop short-circuit.
+2. **True full-takeover (deferred to v2).** Originally designed as a `monologue_start` extension
+   that bypasses A0's LLM call. **Blocked** because A0's `LoopData` (`agent.py:326-341`) has no
+   short-circuit field and no early-exit hook in `before_main_llm_call`. Deferred until either
+   (a) an upstream A0 PR adds `LoopData.short_circuit`, or (b) a custom A0 fork is acceptable.
+   v2 work item.
 
 ## 3. Scope
 
@@ -62,14 +66,20 @@ Two interaction modes coexist:
 
 ### 3.2 Out of scope (v1)
 
+- **True full-takeover mode** — requires upstream A0 change (`LoopData.short_circuit`); v1 ships
+  embedded-only. `jcode_coder` profile in v1 is prompt-routing, not loop-replacing.
 - Browser tool (Firefox Agent Bridge — separate native binary install, deferred)
 - Ambient mode background cycles (long-lived process lifecycle, deferred to v2)
 - iOS / mobile clients (per user direction)
-- WebSocket gateway exposure (security: keeps plugin daemon socket-only)
-- Native `LoopData.short_circuit` field — v1 uses a sentinel-on-`loop_data.result` workaround
-- Embedding model offline pre-bundling — first run downloads ~85MB
+- WebSocket gateway exposure (kept disabled via daemon config; see §8.4)
+- Embedding model offline pre-bundling — first run downloads embedding model (size unverified;
+  empirically ~80–100MB for all-MiniLM-L6-v2)
 - Multi-user / shared daemon mode
 - Audit log implementation — design hook reserved, deferred
+- Cross-harness credential import (`Request::ImportExternalCreds`) — does not exist in current
+  jcode protocol; if shipped in v1, must be implemented as a subprocess invocation of `jcode`
+  CLI wrapping `src/import.rs`. **Decision: defer credential import to v2; v1 reads only what
+  the user explicitly logs in via `jcode login`.**
 
 ## 4. Architecture
 
@@ -115,15 +125,59 @@ Two interaction modes coexist:
 
 ### 4.1 Daemon lifecycle
 
-One `jcode serve` process per A0 instance, lazy-spawned on first tool invocation, kept alive
-across A0 sessions. Socket under `~/.amplihack/jcode/jcode.sock` (or `.a0proj/jcode/jcode.sock`
-when project-scoped). DaemonSupervisor enforces single-instance via flock'd PID file.
+One `jcode serve` process per **A0 instance**, lazy-spawned on first tool invocation, kept alive
+across A0 sessions. DaemonSupervisor enforces single-instance via flock'd PID file.
 
-Multi-A0-instance isolation: each A0 install gets its own daemon, sockets, and logs. No cross-talk.
+**A0 instance defined:** the absolute realpath of A0's process root directory (the parent
+of `agent.py`), hashed (SHA-256, first 12 hex chars). This disambiguates dev vs prod installs on
+the same user account, two Docker containers mounting the same `~/.amplihack/`, and concurrent
+`python agent.py` runs from different checkouts. Per-instance directory:
+`~/.amplihack/jcode/<instance-id>/` containing `socket`, `pid`, `logs/`, `client_instance.json`
+(persistent client UUID for reload recovery — see §7.1).
 
-User's external `jcode` CLI is not affected — it uses `~/.jcode/` directly while plugin uses its
-own private socket. Memory graph, skills, and provider credentials are shared (same `~/.jcode/`
-data root), so a session started in plugin can be resumed from external `jcode` and vice versa.
+User's external `jcode` CLI uses `~/.jcode/` directly while plugin uses its own private socket
+under `~/.amplihack/jcode/<instance-id>/socket`. Memory graph, skills, and provider credentials
+live in `~/.jcode/` and are shared across daemons (jcode reads/writes a single user data root).
+Sessions started in plugin can be resumed from external `jcode` and vice versa via shared journal
+files at `~/.jcode/sessions/`.
+
+**Spawn command** (verified against `jcode/src/cli/args.rs`):
+
+```
+jcode --socket <abs-path> serve --owner-pid <a0-pid>
+```
+
+Notes:
+- `--socket` is a top-level `Args` flag (args.rs:78), not a `Serve` subcommand flag.
+- Gateway is **not** disabled by a CLI flag (no `--no-gateway` exists). Plugin disables it via
+  config: write `[gateway] enabled = false` to a per-instance overlay config file at
+  `~/.amplihack/jcode/<instance-id>/jcode-config.toml` and pass `JCODE_CONFIG=<path>` env to
+  the spawn (jcode honors env-overlay per `src/config/config_file.rs`). If env-overlay is not
+  supported by the installed jcode version, the daemon comes up with the gateway enabled but
+  bound to localhost only; **plugin must additionally configure `[gateway] bind = "127.0.0.1:0"`
+  to make port choice ephemeral and explicitly-zero documented in settings**.
+- TUI is not started by `serve` (TUI is a `connect` invocation), so no `--no-tui` is needed.
+
+**Multi-instance contention:** If a daemon already exists for the same instance-id (active PID,
+0600 socket reachable), DaemonSupervisor reuses it. If the PID file references a dead PID or
+foreign user, the file is moved to `.dead.<ts>` and a fresh daemon spawned. Two A0 instances on
+**different** instance-ids run independent daemons; their sessions are isolated, and swarm
+coordination only spans sessions inside a single daemon.
+
+### 4.1.1 Docker awareness
+
+A0 framework runtime is `/opt/venv-a0` (Docker convention from AGENTS.plugins.md §2). Plugin's
+`hooks.py` runs there. The jcode daemon spawned by `hooks.py` inherits Docker's environment:
+
+- `~/` resolves to the container user's home; if `~/.jcode/` and `~/.amplihack/` are not on
+  mounted volumes, all state is ephemeral. Plugin install **logs a warning toast** when the
+  resolved home directory is inside the container's writable layer (heuristic: `df -T` reports
+  `overlay`).
+- The downloaded jcode binary must match the container's libc/architecture, not the host. Plugin
+  uses `uname -m` plus `getconf GNU_LIBC_VERSION` (Linux) or `sysctl hw.optional.arm64` (macOS,
+  detects Rosetta correctly) to select the release asset.
+- Network access from inside the container is the user's responsibility; plugin install fails
+  loudly if `api.github.com` is unreachable.
 
 ### 4.2 Working-directory scoping
 
@@ -158,34 +212,62 @@ always_enabled: false
 
 ### 5.2 Install/upgrade — `hooks.py`
 
-Three exported functions called by A0 framework runtime (`/opt/venv-a0`):
+Functions called by A0 framework runtime (`/opt/venv-a0`) per AGENTS.plugins.md §2:
 
-- `install()` — runs after plugin copy. Detect existing `jcode` on PATH; else fetch latest release
-  asset matching host architecture from `api.github.com/repos/1jehuang/jcode/releases/latest`,
-  extract to `~/.jcode/builds/stable/jcode`, verify SHA-256 against the release's `SHA256SUMS`
-  file, smoke-test with `jcode --version`. Probe `cargo --version` to set `self_dev_available`.
+- `install()` — runs after plugin copy. Detect existing `jcode` on PATH; else fetch latest
+  release asset matching host architecture (see §4.1.1) from
+  `api.github.com/repos/1jehuang/jcode/releases/latest`, extract to `~/.jcode/builds/stable/jcode`,
+  verify SHA-256 against the release's `SHA256SUMS` file (existence verified — jcode CI publishes
+  it), smoke-test with `jcode --version`. Probe `cargo --version` to set `self_dev_available`.
   Run provider importer once. All progress reported via A0 notification API
   (`AgentNotification.success/error/info`).
-- `pre_update()` — graceful daemon shutdown before plugin code is replaced.
-- `uninstall()` — kill daemon, delete `~/.amplihack/jcode/`. Leaves `~/.jcode/` user data alone
-  unless user opts in via uninstall confirmation modal.
+- `pre_update()` — graceful daemon stop before plugin code is replaced (see §5.3 stop method).
 
-Permission scope: read/write `~/.jcode/builds/`, write `~/.amplihack/jcode/`, network out to
-`api.github.com` plus release CDN. No system modification beyond owned paths.
+**Plugin removal:** AGENTS.plugins.md §2 lists only `install()` and `pre_update()` as guaranteed
+hooks. Cleanup runs from a manual `execute.py`-driven path: when user clicks "Uninstall and clean
+data" in plugin UI, `execute.py` stops the daemon, deletes
+`~/.amplihack/jcode/<instance-id>/`, and optionally (with explicit checkbox) deletes
+`~/.jcode/`. Bare plugin removal via A0's plugin manager only deletes `usr/plugins/jcode_harness/`;
+the daemon process exits when its socket FD closes (orphaned, but still graceful).
+
+Permission scope: read/write `~/.jcode/builds/`, write `~/.amplihack/jcode/<instance-id>/`,
+network out to `api.github.com` plus release CDN. No system modification beyond owned paths.
+
+### 5.2.1 Python import discipline
+
+Per AGENTS.plugins.md §2 ("Python import rule for user plugins"), all plugin-internal imports
+**must** use the fully qualified `usr.plugins.jcode_harness...` package path:
+
+```python
+# Good (DO):
+from usr.plugins.jcode_harness.helpers.daemon import DaemonSupervisor
+from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
+import usr.plugins.jcode_harness.helpers.protocol as proto
+
+# Forbidden (DON'T):
+import sys; sys.path.insert(0, ...)   # no path hacks
+from helpers.daemon import DaemonSupervisor   # no relative-style top-level
+from plugins.jcode_harness.helpers.daemon import …   # no symlink-based imports
+```
+
+Tools, extensions, and helpers all follow this rule. Code review enforces.
 
 ### 5.3 DaemonSupervisor — `helpers/daemon.py`
 
 Lazy-started, single-process-per-A0-instance.
 
-- `ensure_running(working_dir) -> str` — spawns
-  `jcode serve --socket <path> --no-tui --no-gateway` if not alive (PID file at
-  `~/.amplihack/jcode/jcode.pid`); returns socket path.
-- `is_running() -> bool` — flock check on PID file plus socket reachability.
-- `shutdown()` — graceful `Request::Shutdown` over IPC, fall back to SIGTERM after 5s.
+- `ensure_running(working_dir) -> str` — spawns `jcode --socket <path> serve --owner-pid <a0_pid>`
+  with `JCODE_CONFIG=<overlay>` env (overlay disables gateway; see §4.1) if not alive (PID file
+  at `~/.amplihack/jcode/<instance-id>/pid`); returns socket path.
+- `is_running() -> bool` — flock check on PID file plus socket reachability plus 0600 perm check.
+- `stop()` — close all client sockets, then SIGTERM the daemon process (no `Request::Shutdown`
+  exists in protocol; verified absent from `crates/jcode-protocol/src/lib.rs`). Wait up to 5s for
+  exit, then SIGKILL.
 - `health() -> dict` — uptime, session count, last error.
-- `restart()` — for upgrade flow.
+- `restart()` — for upgrade flow; calls `stop()` then `ensure_running()`.
 
-State under `~/.amplihack/jcode/`: socket, pid, log, last-error. Logs streamed to A0 logging via
+State under `~/.amplihack/jcode/<instance-id>/`: `socket`, `pid`, `logs/`, `last-error`,
+`client_instance.json` (persisted client UUID — see §7.1). Logs streamed to A0 logging via
 `python/helpers/log.py`.
 
 ### 5.4 JcodeClient — `helpers/jcode_client.py`
@@ -193,21 +275,32 @@ State under `~/.amplihack/jcode/`: socket, pid, log, last-error. Logs streamed t
 Pure-Python async client speaking jcode's NDJSON wire format (definitions:
 `jcode/crates/jcode-protocol/src/lib.rs`).
 
+Field name `allow_session_takeover` (verified, `lib.rs:155, 184`) — not the shorter
+`allow_takeover` originally drafted.
+
 ```python
 class JcodeClient:
     async def connect(self, socket_path: str) -> None
     async def subscribe(self, working_dir: str, target_session_id: str | None,
-                        client_instance_id: str, allow_takeover: bool) -> SessionId
+                        client_instance_id: str, allow_session_takeover: bool) -> SessionId
     async def send_message(self, content: str, images: list[bytes] = ()) -> int
     async def soft_interrupt(self, content: str, urgent: bool = False) -> None
+    async def cancel_soft_interrupts(self) -> None
     async def cancel(self) -> None
     async def background_tool(self, tool_id: str) -> None
     async def stdin_response(self, request_id: str, input: str) -> None
     async def resume_session(self, session_id: str) -> None
-    async def list_sessions(self) -> list[SessionSummary]
+    async def get_history(self) -> History
+    async def ping(self) -> Pong
     async def events(self) -> AsyncIterator[ServerEvent]
     async def close(self) -> None
 ```
+
+Note: `Request::ListSessions` does **not** exist in the jcode protocol. Cross-harness session
+listing (§6.3) is implemented by subscribing to a no-op session and invoking the
+`session_search` agent tool inside that session via a synthesized `Message`. Alternative: invoke
+`jcode session list --json` as a subprocess. The §6.3 redesign uses the subprocess path because
+it doesn't require a daemon connection at all — see §6.3.
 
 Implementation:
 
@@ -223,13 +316,25 @@ Implementation:
 
 Runs once on install and on settings save. Reads A0's `models.py` and `conf/model_providers.yaml`
 plus user-configured API keys, registers each one as a jcode `openai-compatible` profile via
-`jcode provider add <name> --base-url ... --api-key-stdin --json --overwrite`.
+`jcode provider add <name> --base-url <url> --model <id> --api-key-stdin --json --overwrite`.
 
-- Maps each A0 provider with a key to one named jcode profile (`a0_<provider_id>`).
+- `--model` is **required** by `jcode provider add` (`src/cli/args.rs:447-448`); plugin uses A0's
+  configured default model id for that provider, or the first model from A0's
+  `model_providers.yaml` model list.
+- Maps each A0 provider with a key to one named jcode profile. Naming convention:
+  `_a0_imported_<provider_id>` (leading underscore + `_a0_imported_` prefix). Plugin checks for
+  collisions before write via `jcode provider list --json`; a colliding name owned by the user
+  (no prefix) blocks the import with a toast and a "Choose alternate name" UI affordance.
+  `--overwrite` is only used against the plugin's own prefix-matched profiles.
 - Does not touch jcode OAuth credentials at `~/.jcode/auth*.json` — user creates those via plugin
   UI.
-- Idempotent (`--overwrite`).
+- Idempotent for plugin-owned profiles.
 - Drift detection: when A0 keys change, plugin offers re-sync via toast + WebUI button.
+
+**Disabling `auto_import_a0_keys` after install:** existing `_a0_imported_*` profiles persist
+in `~/.config/jcode/`. The plugin settings page exposes a "Purge imported profiles" button that
+invokes `jcode provider remove` for each prefixed profile. Without an explicit purge, profiles
+remain functional until manually removed.
 
 Keys never appear in command-line arguments (always stdin), never in shell history, never logged.
 
@@ -251,12 +356,21 @@ into A0's progress UI.
 
 ### 5.7 Extensions
 
-- `extensions/python/monologue_start/jcode_takeover.py` — when profile is `jcode_coder`, attach to
-  a sticky jcode session keyed on `agent.context.id`, stream user input + jcode response, set
-  `loop_data.result` and a sentinel that `before_main_llm_call` checks to suppress A0's loop.
-- `extensions/python/agent_init/jcode_register.py` — register tools, ensure daemon running.
-- `extensions/python/_functions/agent/Agent/process_tools/start/jcode_intercept.py` — optional
-  tool-call rewrite when in profile mode.
+- `extensions/python/agent_init/jcode_register.py` — register tools, ensure daemon running on
+  agent init.
+- `extensions/python/monologue_start/jcode_warmup.py` — when profile is `jcode_coder`, calls
+  `DaemonSupervisor.ensure_running()` with the agent's working directory so the daemon is hot
+  before the user's first turn. Does **not** short-circuit the loop (true full-takeover is v2).
+
+**Removed for v1:** the originally planned `jcode_takeover.py` extension that set
+`loop_data.result` is dropped because A0's `LoopData` has no short-circuit field
+(`agent.py:326-341`) and `before_main_llm_call` (`agent.py:404`) has no early-exit hook. v2
+work item.
+
+The implicit `_functions/<module>/<qualname>/<start|end>/` extension layout (AGENTS.plugins.md
+§2) is **not used** in v1 because v1 doesn't intercept any A0 internal call sites. If a future
+version needs to wrap (for example) `Agent.process_tools`, the qualname must be verified against
+the live `Agent` class in `agent.py` before adding such an extension.
 
 ### 5.8 WebUI
 
@@ -273,15 +387,23 @@ into A0's progress UI.
 
 ### 5.9 Agent profile — `agents/jcode_coder/agent.yaml`
 
+v1 ships a **prompt-routing** profile, not a loop-replacing profile. The system prompt strongly
+favors `jcode_session` for any non-trivial coding work, so the user perceives jcode-driven
+behavior even though A0's loop still runs:
+
 ```yaml
 title: jcode Coder
-description: Full-takeover mode — jcode runs the agent loop, A0 is chat shell.
+description: Routes coding work through the jcode harness via the jcode_session tool.
 context: |
-  This profile delegates the entire conversation to a jcode session. All tool calls,
-  memory retrieval, and skill activation happen inside jcode. Use for sustained
-  coding work where jcode's memory graph and skill auto-injection give the most lift.
+  For any non-trivial coding task — refactoring, multi-file edits, debugging, code search,
+  test writing — call jcode_session with the task description. The jcode harness has memory
+  graph, skill auto-injection, agentgrep, and 28 native tools that outperform direct edits
+  for sustained coding work. Use direct tools only for one-line changes or chat replies.
 prompts: {}
 ```
+
+True loop-replacing full-takeover is deferred to v2 pending an upstream A0 change to
+`LoopData`.
 
 ### 5.10 Config schema — `default_config.yaml`
 
@@ -319,31 +441,64 @@ indicators, `MemoryInjected` to side-panel chip, `Compaction` with `cache_cold:t
 toast, `MessageEnd` and `Done` close the loop. The final assistant text is returned as the tool
 result and added to A0 history.
 
-### 6.2 Full-takeover
+### 6.2 Full-takeover (deferred to v2)
 
-Profile `jcode_coder` triggers the `monologue_start` extension. It attaches to a sticky jcode
-session keyed on `agent.context.id` (one jcode session per A0 conversation, persists across
-turns). User input is forwarded as `Message`. Streaming events update A0 chat in real time. The
-extension sets `loop_data.result` and a sentinel; `before_main_llm_call` (`agent.py:404`) sees the
-sentinel and skips A0's LLM call. A0 returns the assistant message normally.
+Originally specified as a `monologue_start` extension that sets `loop_data.result` and a
+sentinel checked by `before_main_llm_call` to skip A0's LLM call. **Not implementable in v1:**
+A0's `LoopData` (`agent.py:326-341`) has no `result` field and `before_main_llm_call`
+(`agent.py:404`) has no early-exit hook. Implementing this requires modifying A0 itself.
 
-Soft-interrupt path: A0 cancel button emits `cancel`, extension translates to
-`Request::SoftInterrupt`, jcode injects message at safe point D (default) or C (urgent), no
-cancellation.
+v1 substitutes a **prompt-routing profile** (§5.9): A0's loop still runs, but the profile's
+system prompt directs the model to call `jcode_session` for coding work. This achieves ~80% of
+the perceived UX (jcode handles the actual coding work, with native memory/skills/swarm) without
+the framework change.
 
-Memory and skill auto-injection are fully native — jcode's memory_agent computes per-turn
-embeddings and BFS retrieval, emits `MemoryInjected` events; skill registry auto-loads on
-similarity match.
+**v2 plan:**
+1. Open upstream PR to A0 adding `LoopData.short_circuit: bool` and an early-exit check in
+   `before_main_llm_call`.
+2. Once merged + version-pinned in plugin's `default_config.yaml` minimum-A0-version, ship the
+   `monologue_start` short-circuit extension.
+3. Sticky session id stored in `~/.amplihack/jcode/<instance-id>/sessions/<a0_ctx_id>.json` so
+   multi-turn conversations resume the same jcode session.
+
+Soft-interrupt mapping (works in v1 for embedded sessions and v2 for full-takeover):
+
+- A0 cancel button (single press) → `Request::SoftInterrupt { content, urgent: false }`, jcode
+  injects message at safe point D.
+- A0 cancel button (double press / hard stop) → `Request::Cancel`, jcode interrupts cleanly.
+
+Memory and skill auto-injection are native to embedded sessions: jcode's memory_agent computes
+per-turn embeddings and cascade retrieval, emits `MemoryInjected` events; skill registry
+auto-loads on similarity match. Both visible to plugin via `ServerEvent::MemoryInjected` and
+the side-panel UI.
 
 ### 6.3 Cross-harness resume
 
-WebUI calls `/api/plugins/jcode_harness/list_sessions`. The handler issues
-`Request::ListSessions { include_external: true }`, receives a `SessionList` event with sessions
-grouped by `provider_key` (`claude-code`, `codex`, `opencode`, `pi`, `jcode`). User selects one.
-WebUI POSTs `/api/plugins/jcode_harness/resume_session { session_id }`. The handler opens a fresh
-A0 conversation, subscribes with `target_session_id` and `allow_takeover=true`, receives a
-`History` event with full message log and `provider_session_id`, backfills A0 chat. Subsequent
-turns use full-takeover mode against that session — the upstream provider's cache stays warm.
+`Request::ListSessions` does **not** exist in the jcode protocol. v1 implementation uses a
+subprocess invocation of `jcode session list --json` (CLI subcommand backed by
+`src/import.rs`). Round-trip pseudocode:
+
+```
+WebUI → GET /api/plugins/jcode_harness/list_sessions
+    api/list_sessions.py:
+        → subprocess.run(["jcode", "session", "list", "--json"], capture)
+        → parse JSON: list of {id, title, provider_key, working_dir, updated_at}
+        → return JSON to WebUI
+WebUI renders list grouped by provider_key (claude-code, codex, opencode, pi, jcode)
+User clicks a session
+WebUI → POST /api/plugins/jcode_harness/resume_session {session_id}
+    api/resume_session.py:
+        → DaemonSupervisor.ensure_running()
+        → JcodeClient.subscribe(working_dir, target_session_id, allow_session_takeover=True)
+        → receive ServerEvent::History with full message log + provider_session_id
+        → backfill A0 chat
+    Subsequent turns use the embedded jcode_session tool against the resumed session_id;
+    upstream provider cache stays warm via the round-tripped provider_session_id.
+```
+
+**Verified:** `provider_session_id` exists at `src/session.rs:77` and round-trips through
+`src/import.rs:864`. Cache-warmth claim is upstream-provider-dependent and remains an
+unverified-but-plausible assumption (see §11 spike).
 
 ### 6.4 Event ↔ notification mapping
 
@@ -366,12 +521,27 @@ turns use full-takeover mode against that session — the upstream provider's ca
   `client_instance_id`; replay last user message; toast `frontendWarning`.
 - Hung (>120s no Pong keepalive): send `Cancel`; if no response in 5s, SIGTERM and restart.
 - Stale PID file: move to `.dead.<ts>`, never kill foreign PIDs.
-- Two A0 instances same project: second attaches existing socket; multi-client supported by jcode
-  protocol.
-- `Reloading { new_socket }`: client follows new socket, resubscribes with same
-  `client_instance_id`.
-- Plugin disabled mid-turn: `Cancel` plus graceful shutdown; persist session id so re-enable
-  resumes.
+- Two A0 instances on the **same instance-id** (rare; same checkout, same process root):
+  multi-client to one daemon, supported by jcode protocol. Two A0 instances on **different
+  instance-ids** (different checkouts, dev vs prod, two Docker containers): each runs its own
+  daemon; their swarm sessions are isolated. This contradicts an earlier draft of this section
+  and supersedes it.
+- `Reloading { new_socket }`: variant exists at `lib.rs:945`; reconnect contract specifics are a
+  v1 spike (§11). Defensive implementation: client closes current connection, waits 100ms, opens
+  new socket, resubscribes with same `client_instance_id`.
+- Plugin disabled mid-turn: `Cancel` plus stop-via-SIGTERM; persist `(session_id,
+  client_instance_id)` to `~/.amplihack/jcode/<instance-id>/sessions/<a0_ctx_id>.json` so
+  re-enable resumes.
+
+**Plugin reload (Python module reloaded without process restart):** A0's plugin cache may
+invalidate the plugin module (AGENTS.plugins.md §2). When this happens, in-memory
+`client_instance_id` UUIDs are lost. Defensive design: persist the UUID per A0 conversation in
+`~/.amplihack/jcode/<instance-id>/sessions/<a0_ctx_id>.json`. On reload, JcodeClient reads the
+file and resubscribes with the persisted UUID, allowing jcode to reattach the existing session.
+
+**Plugin reload during active stream:** the in-flight reader task is cancelled when the module
+unloads. Recovery uses `client_instance_id` resubscribe; the current turn may emit a duplicate
+`Done` event on resubscribe — client deduplicates by event id.
 
 ### 7.2 Wire-protocol failures
 
@@ -478,18 +648,47 @@ Revocation: settings page button deletes consent record plus `Request::ForgetExt
 
 ### 8.4 Socket and file permissions
 
+**POSIX (Linux/macOS):**
+
 ```
-~/.amplihack/jcode/jcode.sock           srw-------
-~/.amplihack/jcode/jcode.pid            -rw-------
-~/.amplihack/jcode/import_consent.json  -rw-------
-~/.amplihack/jcode/logs/                drwx------
+~/.amplihack/jcode/<instance-id>/socket           srw-------  (0600)
+~/.amplihack/jcode/<instance-id>/pid              -rw-------  (0600)
+~/.amplihack/jcode/<instance-id>/client_instance.json  -rw-------  (0600)
+~/.amplihack/jcode/<instance-id>/logs/            drwx------  (0700)
 ```
 
 DaemonSupervisor refuses sockets looser than 0600 (re-spawns daemon), refuses stale PID files
 owned by other users. Logs rotated daily, retain 7 days, redact request bodies (only event names
 and sizes at info level; full content only at debug with explicit `JCODE_LOG_PAYLOADS=1`).
 
-WebSocket gateway disabled at daemon spawn (`--no-gateway`). Plugin never opens a network port.
+**Windows (per `jcode/docs/WINDOWS.md`):**
+
+NTFS has no POSIX 0600. jcode uses **named pipes** instead of Unix sockets on Windows. Plugin
+configures the named pipe with an ACL restricting access to the current user's SID:
+
+```
+\\.\pipe\jcode-<instance-id>      ACL: current-user SID only
+%LOCALAPPDATA%\amplihack\jcode\<instance-id>\pid                 (Owner: current-user)
+%LOCALAPPDATA%\amplihack\jcode\<instance-id>\client_instance.json
+%LOCALAPPDATA%\amplihack\jcode\<instance-id>\logs\
+```
+
+DaemonSupervisor verifies pipe ACL at attach time using `pywin32`'s
+`win32security.GetSecurityInfo`; if the pipe is accessible by anyone other than the current user,
+the daemon is killed and respawned.
+
+**Gateway disabled via daemon config**, not CLI flag (no `--no-gateway` exists). Per-instance
+overlay config at `~/.amplihack/jcode/<instance-id>/jcode-config.toml` sets:
+
+```toml
+[gateway]
+enabled = false
+```
+
+passed to spawn via `JCODE_CONFIG=<path>` env. Plugin never opens a network port. If the
+installed jcode version doesn't honor `[gateway] enabled = false`, the daemon comes up with the
+gateway listening on `127.0.0.1:0` (ephemeral); plugin documents this and surfaces a warning
+toast on detect.
 
 ### 8.5 Tool sandboxing
 
@@ -615,7 +814,9 @@ If plugin adds >10% overhead vs raw jcode: regression, optimize before ship.
 **Functional:**
 
 - All seven tools work end-to-end with real jcode daemon.
-- Both interaction modes demonstrated.
+- Embedded session mode demonstrated. (True full-takeover is v2.)
+- Prompt-routing profile `jcode_coder` demonstrated to consistently route coding work through
+  `jcode_session`.
 - Cross-harness resume works for at least Claude Code, Codex, OpenCode, pi.
 - Memory graph + skills function (auto + manual).
 - Swarm messaging works between two A0 instances in same repo.
@@ -655,13 +856,21 @@ If plugin adds >10% overhead vs raw jcode: regression, optimize before ship.
 
 | Risk | Spike |
 |---|---|
-| `loop_data.result` short-circuit may not skip A0 LLM call cleanly | 1-day spike: prove the seam on a current A0 build |
-| jcode `Reloading` event semantics differ from doc | 0.5-day: trigger self-update during connection, observe |
-| Cross-harness creds may have changed file format in latest Claude Code / Codex | 0.5-day: test against real installs |
-| `jcode provider add --json` may not surface all error modes plugin needs | 0.5-day: enumerate exit codes |
-| WebUI side-panel breakpoint may not match jcode's rendering payload shape | 0.5-day: grep `x-extension`, confirm match |
+| jcode `Reloading { new_socket }` event field name and reconnect semantics | 0.5-day: trigger self-update mid-stream, observe variant + verify field is `new_socket` |
+| `jcode session list --json` output schema for cross-harness resume | 0.5-day: invoke against repo with seeded Claude Code / Codex / OpenCode / pi sessions |
+| `provider_session_id` round-trip actually keeps Claude/OpenAI cache warm | 1-day: instrument before/after, measure cache_read_input_tokens |
+| `jcode provider add --json` exit-code/error-shape coverage | 0.5-day: enumerate failure modes (collision, bad URL, missing model, network error) |
+| WebUI `x-extension` breakpoint fit for jcode `SidePanel*` events | 0.5-day: grep `x-extension`, prototype panel render |
+| jcode honors `[gateway] enabled = false` in overlay config — fallback if not | 0.5-day: spawn daemon with overlay, verify via `lsof -i` |
+| A0 `_functions/<module>/<qualname>` extension paths for any future intercept | 0.5-day if needed (not v1) |
 
-Total: ~3 days. Findings fold into the implementation plan.
+Total v1 spikes: ~3.5 days. Findings fold into the implementation plan.
+
+**v2 spike (gating full-takeover):**
+
+| Risk | Spike |
+|---|---|
+| Upstream A0 PR adding `LoopData.short_circuit` lands and ships | Open PR, await merge, pin minimum A0 version in plugin |
 
 ## 12. References
 
@@ -685,7 +894,17 @@ Total: ~3 days. Findings fold into the implementation plan.
 | ID | Decision | Rationale |
 |---|---|---|
 | Q1 | Hybrid bridge (option C) | Keeps Rust speed, preserves jcode features, clean Python plugin shell |
-| Q2 | Embedded mode + profile-switchable full-takeover (IV + III) | Ships incrementally; avoids losing memory/skills/swarm coupling that mode II would break |
-| Q3 | Scope: a + b + c + e + g + h + i; defer d, f, j | Browser, ambient, mobile out for v1 |
-| Q4 | Hybrid provider import (III) | Single import on install + native OAuth via UI; preserves cross-harness resume |
+| Q2 | Embedded mode v1, full-takeover deferred to v2 | A0's `LoopData` has no short-circuit field; full-takeover requires upstream A0 change. v1 ships embedded + prompt-routing profile (§5.9) for ~80% of perceived UX. |
+| Q3 | Scope: a + b + c + e + g + h + i; defer d, f, j; defer credential import | Browser, ambient, mobile out for v1; cross-harness credential import requires protocol additions, deferred. |
+| Q4 | Hybrid provider import (III) — keys-only, OAuth via plugin UI | Single import on install + native OAuth via UI; preserves cross-harness resume |
 | Q5 | Binary: PATH-aware install with download fallback (c); daemon: per-A0-instance (e); self-dev: cargo-detect, graceful degrade (j) | Matches non-tech UX while supporting power users |
+
+## 14. Review iteration history
+
+- **Iter 1 (2026-05-05):** Initial draft committed. External reviewer flagged: full-takeover not
+  implementable as written, several CLI flags fictional (`--no-tui`, `--no-gateway`,
+  `--socket` placement on subcommand), `Request::Shutdown`/`ListSessions`/`ImportExternalCreds`
+  fictional, `allow_takeover` field name wrong, `provider add` missing required `--model`,
+  Python import discipline missing, "A0 instance" undefined, Windows ACL semantics not
+  addressed, plugin reload UUID loss not addressed, swarm scope contradiction. **All
+  critical and major issues addressed in this revision.**
