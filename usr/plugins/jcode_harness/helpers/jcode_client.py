@@ -13,7 +13,10 @@ and the plugin tools.
 from __future__ import annotations
 
 import asyncio
+import json
 import platform
+import sys
+from typing import AsyncIterator
 
 from usr.plugins.jcode_harness.helpers.protocol import (
     BackgroundTool,
@@ -174,6 +177,29 @@ class JcodeClient:
     async def get_history(self) -> None:
         """Request the full session history snapshot."""
         await self._send(GetHistory(id=self._next_id()))
+
+    async def events(self) -> AsyncIterator[ServerEvent]:
+        """Yield decoded ServerEvent dataclasses until the daemon closes.
+
+        Per the spec's forward-compat clause (§7.2), unknown event types fall
+        through to :class:`UnknownEvent` (handled inside :func:`decode_event`).
+        Lines that fail JSON parsing are logged to stderr and skipped so a
+        single corrupt frame can't kill the event loop.
+        """
+        assert self._reader is not None, "connect() must be called before events()"
+        while True:
+            line = await self._reader.readline()
+            if not line:
+                return
+            try:
+                yield decode_event(line)
+            except json.JSONDecodeError:
+                print(
+                    f"[jcode_harness.client] malformed JSON line skipped: "
+                    f"{line[:80]!r}",
+                    file=sys.stderr,
+                )
+                continue
 
     async def close(self) -> None:
         """Idempotent close — safe to call multiple times."""

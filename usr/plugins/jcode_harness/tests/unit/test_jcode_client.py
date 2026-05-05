@@ -17,7 +17,12 @@ from pathlib import Path
 import pytest
 
 from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
-from usr.plugins.jcode_harness.helpers.protocol import SessionId
+from usr.plugins.jcode_harness.helpers.protocol import (
+    Done,
+    SessionId,
+    TextDelta,
+    UnknownEvent,
+)
 
 
 pytestmark = pytest.mark.asyncio
@@ -406,3 +411,116 @@ async def test_id_counter_increments_across_method_types():
 
     ids = [json.loads(line)["id"] for line in daemon.received_lines]
     assert ids == [1, 2, 3, 4]
+
+
+# ---------------------------------------------------------------------------
+# events() async generator tests (Task 3.6)
+# ---------------------------------------------------------------------------
+
+
+async def _make_emitting_daemon(payloads: list[bytes]) -> _FakeDaemon:
+    """Build a fake daemon that immediately emits ``payloads`` then closes."""
+
+    async def script(d, reader, writer):
+        for p in payloads:
+            writer.write(p)
+            await writer.drain()
+        # Close write-side so client sees EOF.
+        writer.close()
+
+    daemon = _FakeDaemon(script)
+    await daemon.start()
+    return daemon
+
+
+async def test_events_iterates_until_daemon_closes():
+    daemon = await _make_emitting_daemon(
+        [
+            b'{"type":"text_delta","text":"a"}\n',
+            b'{"type":"text_delta","text":"b"}\n',
+            b'{"type":"text_delta","text":"c"}\n',
+        ]
+    )
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        seen = []
+        async for ev in client.events():
+            seen.append(ev)
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert len(seen) == 3
+    assert [e.text for e in seen] == ["a", "b", "c"]
+
+
+async def test_events_yields_typed_dataclasses():
+    daemon = await _make_emitting_daemon(
+        [
+            b'{"type":"text_delta","text":"hi"}\n',
+            b'{"type":"done","id":7}\n',
+        ]
+    )
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        seen = [ev async for ev in client.events()]
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert isinstance(seen[0], TextDelta)
+    assert isinstance(seen[1], Done)
+
+
+async def test_events_yields_unknown_event_for_new_variant():
+    daemon = await _make_emitting_daemon(
+        [b'{"type":"future_variant","x":42}\n']
+    )
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        seen = [ev async for ev in client.events()]
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert len(seen) == 1
+    assert isinstance(seen[0], UnknownEvent)
+    assert seen[0].raw == {"type": "future_variant", "x": 42}
+
+
+async def test_events_skips_malformed_json_line():
+    daemon = await _make_emitting_daemon(
+        [
+            b"not-valid-json\n",
+            b'{"type":"text_delta","text":"good"}\n',
+        ]
+    )
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        seen = [ev async for ev in client.events()]
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert len(seen) == 1
+    assert isinstance(seen[0], TextDelta)
+    assert seen[0].text == "good"
+
+
+async def test_events_handles_done_event():
+    daemon = await _make_emitting_daemon([b'{"type":"done","id":99}\n'])
+    try:
+        client = JcodeClient()
+        await client.connect(daemon.socket_path)
+        seen = [ev async for ev in client.events()]
+        await client.close()
+    finally:
+        await daemon.stop()
+
+    assert len(seen) == 1
+    assert isinstance(seen[0], Done)
+    assert seen[0].id == 99
