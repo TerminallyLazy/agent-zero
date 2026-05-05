@@ -1,0 +1,99 @@
+<div x-data x-init="" class="jcode-config">
+  <p>
+    Plugin settings are scoped per-project and per-agent automatically.
+    See plugin README for full reference.
+  </p>
+
+  <fieldset>
+    <legend>Binary</legend>
+    <label>
+      Binary path (leave blank for auto-download):
+      <input type="text"
+             x-model="config.binary.path"
+             placeholder="/usr/local/bin/jcode" />
+    </label>
+    <label>
+      <input type="checkbox" x-model="config.binary.auto_update" />
+      Auto-update jcode binary
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Daemon</legend>
+    <label>
+      Daemon mode:
+      <select x-model="config.daemon.mode">
+        <option value="per_project">per_project</option>
+        <option value="shared">shared</option>
+      </select>
+    </label>
+    <label>
+      Socket path (leave blank for default):
+      <input type="text" x-model="config.daemon.socket_path" />
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Features</legend>
+    <label>
+      <input type="checkbox" x-model="config.features.swarm" />
+      Enable swarm coordination
+    </label>
+    <label>
+      <input type="checkbox" x-model="config.features.self_dev" />
+      Enable self-dev tool (requires Rust toolchain)
+    </label>
+    <label>
+      <input type="checkbox" x-model="config.features.cross_harness_resume" />
+      Cross-harness session resume (Claude Code, Codex, OpenCode, pi)
+    </label>
+    <label>
+      <input type="checkbox" x-model="config.features.cross_harness_import" />
+      Cross-harness credential import (deferred to v2)
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Providers</legend>
+    <label>
+      <input type="checkbox" x-model="config.providers.auto_import_a0_keys" />
+      Auto-import A0 provider API keys on install
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>UI</legend>
+    <label>
+      <input type="checkbox" x-model="config.ui.side_panel" />
+      Show jcode side panel in right canvas
+    </label>
+    <label>
+      <input type="checkbox" x-model="config.ui.mermaid" />
+      Render Mermaid diagrams in panel pages
+    </label>
+    <label>
+      <input type="checkbox" x-model="config.ui.notifications" />
+      Surface jcode events as A0 notifications
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Safety</legend>
+    <label>
+      Safety mode:
+      <select x-model="config.safety_mode">
+        <option value="default">default</option>
+        <option value="paranoid">paranoid</option>
+        <option value="yolo">yolo (advanced &mdash; sticky banner)</option>
+      </select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Compatibility</legend>
+    <label>
+      Minimum jcode version:
+      <input type="text" x-model="config.min_jcode_version" placeholder="0.11.4" />
+    </label>
+  </fieldset>
+</div>
