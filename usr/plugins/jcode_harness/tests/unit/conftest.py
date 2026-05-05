@@ -144,6 +144,64 @@ def _ensure_helpers_tool_loaded() -> None:
 _ensure_helpers_tool_loaded()
 
 
+def _ensure_helpers_api_loaded() -> None:
+    """Provide a shape-compatible ``helpers.api`` for handler tests.
+
+    The real ``helpers/api.py`` cascade-imports ``agent.AgentContext``,
+    ``helpers.errors.format_error``, ``helpers.files``, ``helpers.cache`` and
+    Flask middleware. Loading that whole stack just to test plugin API
+    handlers is wasteful and brittle. We install a stub exposing the surface
+    plugin handlers actually consume: ``ApiHandler`` (init(app, thread_lock),
+    ``get_methods``, abstract async ``process``) plus a ``Request`` sentinel.
+
+    If the real ``helpers.api`` is already in ``sys.modules`` (e.g. in a full
+    A0 process) this is a no-op.
+    """
+    if "helpers.api" in sys.modules:
+        return
+    api_mod = types.ModuleType("helpers.api")
+
+    class _ApiHandler:
+        def __init__(self, app=None, thread_lock=None):
+            self.app = app
+            self.thread_lock = thread_lock
+
+        @classmethod
+        def get_methods(cls):
+            return ["POST"]
+
+        @classmethod
+        def requires_auth(cls):
+            return True
+
+        @classmethod
+        def requires_csrf(cls):
+            return True
+
+        @classmethod
+        def requires_loopback(cls):
+            return False
+
+        @classmethod
+        def requires_api_key(cls):
+            return False
+
+        async def process(self, input, request):  # pragma: no cover
+            raise NotImplementedError
+
+    class _Request:
+        """Placeholder for flask.Request — tests pass MagicMock."""
+
+    api_mod.ApiHandler = _ApiHandler
+    api_mod.Request = _Request
+    api_mod.Input = dict
+    api_mod.Output = object
+    sys.modules["helpers.api"] = api_mod
+
+
+_ensure_helpers_api_loaded()
+
+
 # ---------------------------------------------------------------------------
 # Tool-test fixtures
 # ---------------------------------------------------------------------------
