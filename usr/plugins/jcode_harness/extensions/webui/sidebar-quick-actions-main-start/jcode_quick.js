@@ -1,51 +1,38 @@
 // jcode_harness sidebar quick actions.
-// Two buttons: kick off a new session (info toast pointing at chat) and
-// browse + resume an existing cross-harness session via prompt picker.
+// Both buttons open the plugin's main modal so the user can manage the
+// daemon, log in to providers, and pick a resumable session in a UI that
+// can actually render the data — no more `prompt()` picker.
+//
+// Modal opener mirrors plugins/_time_travel and plugins/_browser:
+// `ensureModalOpen('/plugins/<name>/webui/main.html')` is A0's canonical
+// surface for plugin modals (with `openModal` as a fallback).
 import { createStore } from "/js/AlpineStore.js";
+
+const MODAL_PATH = "/plugins/jcode_harness/webui/main.html";
+
+function _openMain() {
+  if (typeof window.ensureModalOpen === "function") {
+    window.ensureModalOpen(MODAL_PATH);
+    return true;
+  }
+  if (typeof window.openModal === "function") {
+    window.openModal(MODAL_PATH);
+    return true;
+  }
+  window.$store?.notificationStore?.frontendError?.(
+    "Plugin modal API not available; open Plugins → jcode harness manually.",
+    "jcode",
+  );
+  return false;
+}
 
 const model = {
   newSession() {
-    window.$store?.notificationStore?.frontendInfo?.(
-      "Type your coding task in chat — the agent will use jcode_session.",
-      "jcode"
-    );
+    _openMain();
   },
-  async resumeSessionList() {
-    try {
-      const r = await fetch("/api/plugins/jcode_harness/list_sessions");
-      const d = await r.json();
-      const ss = d.sessions || [];
-      if (ss.length === 0) {
-        window.$store?.notificationStore?.frontendInfo?.(
-          "No resumable sessions found.", "jcode"
-        );
-        return;
-      }
-      const lines = ss.slice(0, 10).map(s =>
-        `${s.id} [${s.provider_key}] ${s.title || "(untitled)"}`
-      ).join("\n");
-      const id = prompt(`Recent sessions:\n\n${lines}\n\nEnter session id to resume:`);
-      if (!id) return;
-      const rr = await fetch("/api/plugins/jcode_harness/resume_session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session_id: id.trim() }),
-      });
-      const dd = await rr.json();
-      if (dd.ok) {
-        window.$store?.notificationStore?.frontendSuccess?.(
-          `Resumed ${id}`, "jcode"
-        );
-      } else {
-        window.$store?.notificationStore?.frontendError?.(
-          dd.error || "Resume failed", "jcode"
-        );
-      }
-    } catch (e) {
-      window.$store?.notificationStore?.frontendError?.(
-        String(e), "jcode"
-      );
-    }
+
+  resumeSessionList() {
+    _openMain();
   },
 };
 

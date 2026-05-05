@@ -78,15 +78,38 @@ def test_quick_js_exports_jcodeQuick_store():
     assert "window.jcodeQuick" not in text
 
 
-def test_quick_js_uses_notification_store_for_all_messages():
+def test_quick_js_no_inline_dom_or_alerts():
     text = JS.read_text(encoding="utf-8")
-    # No bare alerts or DOM error injections.
+    # Forbidden: bare browser primitives that bypass A0's surfaces.
     assert re.search(r"\balert\(", text) is None, "alert() forbidden"
+    # Strip JS comments before checking for `prompt(`. The historical
+    # comment "no more `prompt()` picker" must not fail this test.
+    code_only = re.sub(r"//.*?$", "", text, flags=re.MULTILINE)
+    code_only = re.sub(r"/\*.*?\*/", "", code_only, flags=re.DOTALL)
+    assert re.search(r"\bprompt\(", code_only) is None, (
+        "prompt() forbidden — open the plugin modal instead"
+    )
     assert "document.body" not in text
-    # All user feedback paths route through notificationStore.
-    assert "$store?.notificationStore?.frontendSuccess" in text
+    # Error paths still route through notificationStore (the only fallback
+    # path now is when both ensureModalOpen and openModal are missing).
     assert "$store?.notificationStore?.frontendError" in text
-    assert "$store?.notificationStore?.frontendInfo" in text
+
+
+def test_quick_js_opens_main_modal_on_click():
+    """Both sidebar buttons must open the plugin's main modal, mirroring
+    plugins/_time_travel + plugins/_browser conventions. Regression:
+    2026-05-05 — `newSession()` previously fired only an info toast and
+    `resumeSessionList()` used a `prompt()` dialog, both surfaces felt
+    broken to users who expected a UI.
+    """
+    text = JS.read_text(encoding="utf-8")
+    assert "ensureModalOpen" in text, (
+        "use window.ensureModalOpen for modal open (A0 canonical)"
+    )
+    assert "openModal" in text, "fall back to window.openModal"
+    assert "/plugins/jcode_harness/webui/main.html" in text, (
+        "must point at the plugin's main.html surface"
+    )
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not on PATH")

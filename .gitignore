@@ -66,3 +66,12 @@ agent_history.gif
 
 # jcode_harness plugin local config (may contain secrets)
 usr/plugins/jcode_harness/config.json
+
+# Upstream jcode repo (cloned for spike work, NOT a submodule)
+/jcode/
+
+# A0 plugin runtime state — written by api/plugins.py after Execute,
+# and by the toggle UI. Per-plugin and per-machine; never commit.
+usr/plugins/*/execute_record.json
+usr/plugins/*/.toggle-0
+usr/plugins/*/.toggle-1
