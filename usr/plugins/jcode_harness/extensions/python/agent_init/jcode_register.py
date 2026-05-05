@@ -21,7 +21,14 @@ from helpers.extension import Extension
 
 
 class JcodeRegister(Extension):
-    async def execute(self, **kwargs) -> None:
+    # NOTE: execute() must be SYNC. A0 calls this hook via
+    # `helpers.extension.call_extensions_sync("agent_init", ...)` from
+    # `agent.py:370`, which raises ValueError("Extension ... returned
+    # awaitable in sync mode") if execute returns an awaitable. The actual
+    # daemon-warmup work is dispatched as a fire-and-forget task below
+    # (see `loop.create_task(_warm())`), so the sync function returns
+    # immediately while the warmup runs in the background event loop.
+    def execute(self, **kwargs) -> None:
         agent = self.agent
         if agent is None:
             return

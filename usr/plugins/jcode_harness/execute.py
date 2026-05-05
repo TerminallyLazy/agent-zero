@@ -5,12 +5,17 @@ Per AGENTS.plugins.md §2, hooks.py only guarantees ``install()`` and
 ``pre_update()``. Cleanup lives here so it can be re-run after plugin
 removal too.
 
+A0 invokes this as ``subprocess.run([sys.executable, execute_script],
+cwd=plugin_dir)`` (api/plugins.py:292), so the repo root is NOT on
+``sys.path`` and ``usr.plugins.jcode_harness...`` imports would fail.
+Prepend the repo root explicitly before any plugin import.
+
 Usage::
 
-    python -m usr.plugins.jcode_harness.execute
+    python usr/plugins/jcode_harness/execute.py
         # remove ~/.amplihack/jcode/<instance-id>/
 
-    python -m usr.plugins.jcode_harness.execute --delete-user-data
+    python usr/plugins/jcode_harness/execute.py --delete-user-data
         # also remove ~/.jcode/
 
 Spec ref: §5.2.
@@ -18,9 +23,18 @@ Spec ref: §5.2.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
+
+# Repo root = three levels up from this file (usr/plugins/jcode_harness/execute.py).
+# Without this, A0's `subprocess.run([sys.executable, execute_script])` invocation
+# starts the script with sys.path[0] == this file's dir; usr.plugins.* imports raise
+# ModuleNotFoundError. Mirrors the convention used by usr/plugins/dj_booth/execute.py.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 
 def main(also_delete_user_data: bool = False) -> int:

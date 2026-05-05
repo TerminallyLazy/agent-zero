@@ -8,11 +8,44 @@ optionally, the user-data directory at ~/.jcode/.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import types
 from pathlib import Path
 
 import pytest
+
+
+_EXECUTE_PY = (
+    Path(__file__).resolve().parents[2] / "execute.py"
+)
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+
+
+def test_execute_runs_as_subprocess_from_foreign_cwd(tmp_path):
+    """A0 invokes execute.py via `subprocess.run([sys.executable, path], cwd=plugin_dir)`
+    (api/plugins.py:292). Without an explicit sys.path bootstrap, `usr.plugins.*`
+    imports raise ModuleNotFoundError. This test locks in the bootstrap.
+
+    Regression: 'ModuleNotFoundError: No module named usr' from user's plugin run.
+    """
+    # Use HOME=tmp_path so the script touches a sandbox, not real ~/.amplihack/.jcode
+    env = dict(os.environ, HOME=str(tmp_path))
+    # Run from /tmp (NOT the repo root) — this is what reproduced the failure.
+    result = subprocess.run(
+        [sys.executable, str(_EXECUTE_PY)],
+        cwd="/tmp",
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, (
+        f"execute.py failed; stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "No module named" not in result.stderr
+    assert "No module named" not in result.stdout
 
 
 def _ensure_framework_notification_stubbed() -> None:
