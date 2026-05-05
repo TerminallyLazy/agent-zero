@@ -52,3 +52,33 @@ def test_config_html_no_inline_error_divs():
     assert 'class="error"' not in text
     assert 'class="error-box"' not in text
     assert '<div class="error' not in text
+
+
+def test_config_html_uses_a0_settings_convention():
+    """Use A0's `section-title` + `field` + `toggle` pattern, not <fieldset>.
+
+    Regression: <fieldset><legend> rendered with hard white borders that
+    clashed with A0's dark theme (caught visually 2026-05-05). The canonical
+    A0 convention is verified in plugins/_error_retry/webui/config.html and
+    plugins/_skills/webui/config.html.
+    """
+    text = CONFIG_HTML.read_text(encoding="utf-8")
+    # Forbidden: native fieldset-with-legend grouping.
+    assert "<fieldset" not in text, (
+        "config.html must not use <fieldset>; A0's settings modal expects "
+        ".section-title + .field rows for theme-aware layout"
+    )
+    assert "<legend" not in text
+    # Required: A0 settings primitives.
+    assert "section-title" in text, "missing .section-title heading class"
+    assert "field-label" in text, "missing .field-label structure"
+    assert "field-control" in text, "missing .field-control structure"
+    assert 'class="toggle"' in text, "checkboxes should use the .toggle switch"
+    assert "toggler" in text, "toggle switch needs the .toggler track span"
+
+
+def test_config_html_template_guards_on_config():
+    """Wrap with `<template x-if="config">` so reads on null config don't error.
+    Matches the convention in plugins/_error_retry/webui/config.html."""
+    text = CONFIG_HTML.read_text(encoding="utf-8")
+    assert '<template x-if="config">' in text

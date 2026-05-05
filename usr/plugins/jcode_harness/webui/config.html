@@ -1,99 +1,265 @@
-<div x-data x-init="" class="jcode-config">
-  <p>
-    Plugin settings are scoped per-project and per-agent automatically.
-    See plugin README for full reference.
-  </p>
+<html>
+<head>
+  <title>jcode harness</title>
+</head>
+<body>
+  <div x-data>
+    <template x-if="config">
+      <div>
+        <div class="section-title">jcode harness</div>
+        <div class="section-description">
+          Settings are scoped per-project and per-agent automatically.
+          See the plugin README for the full reference.
+        </div>
 
-  <fieldset>
-    <legend>Binary</legend>
-    <label>
-      Binary path (leave blank for auto-download):
-      <input type="text"
-             x-model="config.binary.path"
-             placeholder="/usr/local/bin/jcode" />
-    </label>
-    <label>
-      <input type="checkbox" x-model="config.binary.auto_update" />
-      Auto-update jcode binary
-    </label>
-  </fieldset>
+        <div class="section-title">Binary</div>
 
-  <fieldset>
-    <legend>Daemon</legend>
-    <label>
-      Daemon mode:
-      <select x-model="config.daemon.mode">
-        <option value="per_project">per_project</option>
-        <option value="shared">shared</option>
-      </select>
-    </label>
-    <label>
-      Socket path (leave blank for default):
-      <input type="text" x-model="config.daemon.socket_path" />
-    </label>
-  </fieldset>
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Binary path</div>
+            <div class="field-description">
+              Leave blank to auto-detect (PATH → <code>~/.jcode/builds/stable/jcode</code> → download).
+              Set this to use a self-built or off-network binary.
+            </div>
+          </div>
+          <div class="field-control">
+            <input type="text"
+                   x-model="config.binary.path"
+                   placeholder="/usr/local/bin/jcode" />
+          </div>
+        </div>
 
-  <fieldset>
-    <legend>Features</legend>
-    <label>
-      <input type="checkbox" x-model="config.features.swarm" />
-      Enable swarm coordination
-    </label>
-    <label>
-      <input type="checkbox" x-model="config.features.self_dev" />
-      Enable self-dev tool (requires Rust toolchain)
-    </label>
-    <label>
-      <input type="checkbox" x-model="config.features.cross_harness_resume" />
-      Cross-harness session resume (Claude Code, Codex, OpenCode, pi)
-    </label>
-    <label>
-      <input type="checkbox" x-model="config.features.cross_harness_import" />
-      Cross-harness credential import (deferred to v2)
-    </label>
-  </fieldset>
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Auto-update binary</div>
+            <div class="field-description">
+              Check for newer jcode releases and update on plugin enable.
+              Verifies SHA-256 against the published <code>SHA256SUMS</code>.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox"
+                     x-model="config.binary.auto_update"
+                     x-init="if (config.binary.auto_update === undefined || config.binary.auto_update === null) config.binary.auto_update = true" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
 
-  <fieldset>
-    <legend>Providers</legend>
-    <label>
-      <input type="checkbox" x-model="config.providers.auto_import_a0_keys" />
-      Auto-import A0 provider API keys on install
-    </label>
-  </fieldset>
+        <div class="section-title">Daemon</div>
 
-  <fieldset>
-    <legend>UI</legend>
-    <label>
-      <input type="checkbox" x-model="config.ui.side_panel" />
-      Show jcode side panel in right canvas
-    </label>
-    <label>
-      <input type="checkbox" x-model="config.ui.mermaid" />
-      Render Mermaid diagrams in panel pages
-    </label>
-    <label>
-      <input type="checkbox" x-model="config.ui.notifications" />
-      Surface jcode events as A0 notifications
-    </label>
-  </fieldset>
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Daemon mode</div>
+            <div class="field-description">
+              <code>per_project</code> spawns one daemon per A0 project root.
+              <code>per_a0_instance</code> shares one daemon per A0 install.
+              <code>external</code> attaches to a user-managed <code>jcode serve</code>.
+            </div>
+          </div>
+          <div class="field-control">
+            <select x-model="config.daemon.mode">
+              <option value="per_project">per_project</option>
+              <option value="per_a0_instance">per_a0_instance</option>
+              <option value="external">external</option>
+            </select>
+          </div>
+        </div>
 
-  <fieldset>
-    <legend>Safety</legend>
-    <label>
-      Safety mode:
-      <select x-model="config.safety_mode">
-        <option value="default">default</option>
-        <option value="paranoid">paranoid</option>
-        <option value="yolo">yolo (advanced &mdash; sticky banner)</option>
-      </select>
-    </label>
-  </fieldset>
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Socket path</div>
+            <div class="field-description">
+              Leave blank for the default
+              <code>~/.amplihack/jcode/&lt;instance-id&gt;/socket</code>.
+            </div>
+          </div>
+          <div class="field-control">
+            <input type="text" x-model="config.daemon.socket_path" />
+          </div>
+        </div>
 
-  <fieldset>
-    <legend>Compatibility</legend>
-    <label>
-      Minimum jcode version:
-      <input type="text" x-model="config.min_jcode_version" placeholder="0.11.4" />
-    </label>
-  </fieldset>
-</div>
+        <div class="section-title">Features</div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Swarm coordination</div>
+            <div class="field-description">
+              Enable inter-agent messaging (DM, broadcast, share, read) within a swarm.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox" x-model="config.features.swarm" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Self-dev tool</div>
+            <div class="field-description">
+              Enable the gated <code>jcode_self_dev</code> tool. Requires the Rust toolchain
+              (<code>cargo</code>) on PATH; tool errors clearly when missing.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox" x-model="config.features.self_dev" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Cross-harness session resume</div>
+            <div class="field-description">
+              Resume sessions from Claude Code, Codex, OpenCode, and pi via the
+              <code>jcode_resume</code> tool.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox"
+                     x-model="config.features.cross_harness_resume"
+                     x-init="if (config.features.cross_harness_resume === undefined || config.features.cross_harness_resume === null) config.features.cross_harness_resume = true" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Cross-harness credential import</div>
+            <div class="field-description">
+              Deferred to v2. When enabled (v2+), the plugin imports credentials from other
+              CLI tools after explicit per-source consent.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox" x-model="config.features.cross_harness_import" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-title">Providers</div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Auto-import A0 provider API keys</div>
+            <div class="field-description">
+              On plugin install, register A0's configured providers as
+              <code>_a0_imported_*</code> jcode profiles. Keys transit via
+              <code>--api-key-env</code> private env-var injection — never argv.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox"
+                     x-model="config.providers.auto_import_a0_keys"
+                     x-init="if (config.providers.auto_import_a0_keys === undefined || config.providers.auto_import_a0_keys === null) config.providers.auto_import_a0_keys = true" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-title">UI</div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Show jcode side panel</div>
+            <div class="field-description">
+              Register the "jcode" surface in A0's right-canvas to render
+              <code>SidePanelSnapshot</code> pages.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox"
+                     x-model="config.ui.side_panel"
+                     x-init="if (config.ui.side_panel === undefined || config.ui.side_panel === null) config.ui.side_panel = true" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Render Mermaid diagrams</div>
+            <div class="field-description">
+              Render Mermaid syntax in panel pages when present.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox"
+                     x-model="config.ui.mermaid"
+                     x-init="if (config.ui.mermaid === undefined || config.ui.mermaid === null) config.ui.mermaid = true" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Surface jcode events as notifications</div>
+            <div class="field-description">
+              Route compaction warnings, cache-cold events, and daemon-reload
+              notices through A0's notification store.
+            </div>
+          </div>
+          <div class="field-control">
+            <label class="toggle">
+              <input type="checkbox"
+                     x-model="config.ui.notifications"
+                     x-init="if (config.ui.notifications === undefined || config.ui.notifications === null) config.ui.notifications = true" />
+              <span class="toggler"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-title">Safety</div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Safety mode</div>
+            <div class="field-description">
+              Controls jcode's tool sandbox aggressiveness.
+              <code>default</code> asks before destructive ops.
+              <code>paranoid</code> blocks writes outside <code>working_dir</code>.
+              <code>yolo</code> disables prompts (advanced; sticky banner).
+            </div>
+          </div>
+          <div class="field-control">
+            <select x-model="config.safety_mode">
+              <option value="default">default</option>
+              <option value="paranoid">paranoid</option>
+              <option value="yolo">yolo (advanced)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-title">Compatibility</div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Minimum jcode version</div>
+            <div class="field-description">
+              Plugin refuses to start a daemon older than this. Bump only if you
+              know what you're doing.
+            </div>
+          </div>
+          <div class="field-control">
+            <input type="text" x-model="config.min_jcode_version" placeholder="0.11.4" />
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</body>
+</html>

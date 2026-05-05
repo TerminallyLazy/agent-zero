@@ -101,8 +101,27 @@ const url = surface.startsWith('ext:')
   ? `/plugins/jcode_harness/extensions/webui/${surface.slice(4)}`
   : `/plugins/jcode_harness/webui/${surface}.html`;
 const r = await fetch(url);
-const html = await r.text();
+let html = await r.text();
 const root = document.getElementById('root');
+
+// `webui/config.html` is a binding shell that A0 wraps in a parent x-data
+// providing `config`. Mirror that here so the `<template x-if="config">`
+// guard renders during smoke tests. Production A0 supplies the same shape.
+if (surface === 'config') {
+  const DEFAULT_CFG = JSON.stringify({
+    binary: { path: '', auto_update: true },
+    daemon: { mode: 'per_project', socket_path: '' },
+    features: {
+      swarm: true, self_dev: false,
+      cross_harness_resume: true, cross_harness_import: false,
+    },
+    providers: { auto_import_a0_keys: true, oauth_subscriptions: [] },
+    ui: { side_panel: true, mermaid: true, notifications: true },
+    safety_mode: 'default',
+    min_jcode_version: '0.11.4',
+  });
+  html = `<div x-data='{ config: ${DEFAULT_CFG} }'>${html}</div>`;
+}
 root.innerHTML = html;
 
 // innerHTML does not execute <script>; re-create + append so module imports run.
