@@ -1,8 +1,3 @@
 title: jcode Coder
-description: Routes coding work through the jcode harness via the jcode_session tool.
-context: |
-  For any non-trivial coding task — refactoring, multi-file edits, debugging, code search,
-  test writing — call jcode_session with the task description. The jcode harness has memory
-  graph, skill auto-injection, agentgrep, and 28 native tools that outperform direct edits
-  for sustained coding work. Use direct tools only for one-line changes or chat replies.
-prompts: {}
+description: Agent that routes coding work through the jcode harness for memory graph, skills, swarm, and 28 native coding tools.
+context: Use this agent for sustained coding work — refactors, multi-file edits, debugging, test writing, code search. Calls into the jcode harness via the jcode_session tool.
