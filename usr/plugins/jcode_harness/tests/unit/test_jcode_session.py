@@ -70,6 +70,100 @@ async def test_session_no_creds_returns_friendly_message(
     assert resp.break_loop is False
 
 
+async def test_session_returns_daemon_error_instead_of_hanging(
+    fake_agent, fake_daemon, patch_supervisor
+):
+    async def script(daemon, reader, writer):
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        msg_line = await read_line(reader)
+        msg_id = json.loads(msg_line)["id"]
+        writer.write(
+            b'{"type":"error","id":'
+            + str(msg_id).encode()
+            + b',"message":"Already processing a message"}\n'
+        )
+        await writer.drain()
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    tool = make_tool(JcodeSession, fake_agent)
+    resp = await asyncio.wait_for(
+        tool.execute(task="hi", working_dir="/tmp"),
+        timeout=1.0,
+    )
+
+    assert "Already processing a message" in resp.message
+    assert resp.break_loop is False
+
+
+async def test_session_returns_idle_diagnostic_when_daemon_goes_silent(
+    fake_agent, fake_daemon, patch_supervisor, monkeypatch
+):
+    monkeypatch.setattr(
+        "usr.plugins.jcode_harness.tools.jcode_session._EVENT_IDLE_TIMEOUT",
+        0.05,
+    )
+
+    async def script(daemon, reader, writer):
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        await read_line(reader)
+        await asyncio.sleep(1.0)
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    tool = make_tool(JcodeSession, fake_agent)
+    resp = await asyncio.wait_for(
+        tool.execute(task="hi", working_dir="/tmp"),
+        timeout=1.0,
+    )
+
+    assert "produced no daemon events" in resp.message
+    assert resp.break_loop is False
+
+
+async def test_session_surfaces_daemon_status_progress(
+    fake_agent, fake_daemon, patch_supervisor
+):
+    async def script(daemon, reader, writer):
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        msg_line = await read_line(reader)
+        msg_id = json.loads(msg_line)["id"]
+        writer.write(b'{"type":"connection_phase","phase":"waiting"}\n')
+        writer.write(b'{"type":"status_detail","detail":"Waiting for OpenAI"}\n')
+        writer.write(
+            b'{"type":"done","id":' + str(msg_id).encode() + b"}\n"
+        )
+        await writer.drain()
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    progress_log: list[str] = []
+    tool = make_tool(JcodeSession, fake_agent)
+
+    async def _record(content):
+        progress_log.append(content or "")
+        tool.progress = content or ""
+
+    tool.set_progress = _record  # type: ignore[assignment]
+
+    await tool.execute(task="hi", working_dir="/tmp")
+
+    assert "[jcode: waiting]" in progress_log
+    assert "Waiting for OpenAI" in progress_log
+
+
 async def test_session_breaks_on_interrupted_event(
     fake_agent, fake_daemon, patch_supervisor
 ):
@@ -125,6 +219,38 @@ async def test_session_calls_set_progress_for_tool_start(
 
     await tool.execute(task="x", working_dir="/tmp")
     assert any("[running tool: agentgrep]" in p for p in progress_log)
+
+
+async def test_session_shows_jcode_harness_active_indicator(
+    fake_agent, fake_daemon, patch_supervisor
+):
+    async def script(daemon, reader, writer):
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        msg_line = await read_line(reader)
+        msg_id = json.loads(msg_line)["id"]
+        writer.write(
+            b'{"type":"done","id":' + str(msg_id).encode() + b"}\n"
+        )
+        await writer.drain()
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    progress_log: list[str] = []
+    tool = make_tool(JcodeSession, fake_agent)
+
+    async def _record(content):
+        progress_log.append(content or "")
+        tool.progress = content or ""
+
+    tool.set_progress = _record  # type: ignore[assignment]
+
+    await tool.execute(task="x", working_dir="/tmp")
+
+    assert any("jcode coding harness active" in p for p in progress_log)
 
 
 async def test_session_warns_on_compaction(
@@ -298,3 +424,89 @@ async def test_session_uses_persistent_client_instance_id(
 
     assert len(seen_cids) == 2
     assert seen_cids[0] == seen_cids[1]
+
+
+async def test_session_returns_diagnostic_on_connection_error(
+    fake_agent, fake_daemon, patch_supervisor, monkeypatch
+):
+    """If the daemon crashes mid-session and reconnect is exhausted, the tool
+    must return a diagnostic Response — not hang or raise."""
+    import usr.plugins.jcode_harness.helpers.jcode_client as jc_mod
+
+    # Shrink reconnect limits so the test is fast.
+    monkeypatch.setattr(jc_mod, "_RECONNECT_MAX_ATTEMPTS", 1)
+    monkeypatch.setattr(jc_mod, "_RECV_UNTIL_TIMEOUT", 0.5)
+
+    # Also reduce the backoff delay on the class so new instances pick it up.
+    orig_init = jc_mod.JcodeClient.__init__
+
+    def _fast_init(self):
+        orig_init(self)
+        self._reconnect_max_delay = 0.01
+        self._reconnect_max_attempts = 1
+
+    monkeypatch.setattr(jc_mod.JcodeClient, "__init__", _fast_init)
+
+    async def script(daemon, reader, writer):
+        # subscribe handshake
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        # message request
+        await read_line(reader)
+        # Send one delta, then close everything to simulate a full crash.
+        writer.write(b'{"type":"text_delta","text":"partial"}\n')
+        await writer.drain()
+        # Stop the server so reconnect attempts fail with FileNotFoundError.
+        if daemon._server is not None:
+            daemon._server.close()
+        import os
+        try:
+            os.unlink(daemon.socket_path)
+        except OSError:
+            pass
+        writer.close()
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    tool = make_tool(JcodeSession, fake_agent)
+    resp = await asyncio.wait_for(
+        tool.execute(task="hi", working_dir="/tmp"),
+        timeout=10.0,
+    )
+
+    # The tool should surface a diagnostic, not crash or hang.
+    assert resp.break_loop is False
+    # The response should contain partial text OR a connection-lost diagnostic.
+    assert resp.message  # non-empty
+
+
+async def test_session_subscribe_timeout_returns_diagnostic(
+    fake_agent, fake_daemon, patch_supervisor, monkeypatch
+):
+    """If the daemon never replies to subscribe, the tool must time out and
+    return a friendly message."""
+    monkeypatch.setattr(
+        "usr.plugins.jcode_harness.tools.jcode_session._HANDSHAKE_TIMEOUT",
+        0.05,
+    )
+
+    async def script(daemon, reader, writer):
+        # Read subscribe request but never send a session reply.
+        await read_line(reader)
+        await asyncio.sleep(5.0)
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    tool = make_tool(JcodeSession, fake_agent)
+    resp = await asyncio.wait_for(
+        tool.execute(task="hi", working_dir="/tmp"),
+        timeout=2.0,
+    )
+
+    assert "did not respond to subscribe" in resp.message
+    assert resp.break_loop is False

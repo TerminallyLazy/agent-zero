@@ -36,6 +36,22 @@ from usr.plugins.jcode_harness.helpers.protocol import (
 )
 
 
+# Maximum number of reconnect attempts before giving up. With exponential
+# backoff (1+2+4+8+16 = 31s), five attempts fail-fast in ~31s worst case.
+# Module-level so tests can monkeypatch without reaching into instances.
+_RECONNECT_MAX_ATTEMPTS = 5
+
+# Default timeout (seconds) for _recv_until() — bounds how long the client
+# waits for a specific event (e.g. the session event after subscribe).
+_RECV_UNTIL_TIMEOUT = 30.0
+
+
+class DaemonProtocolError(Exception):
+    """Raised when the daemon returns an 'error' event while we are waiting
+    for a specific response (like a session event)."""
+    pass
+
+
 class JcodeClient:
     """Single-connection async NDJSON client for the jcode daemon."""
 
@@ -49,6 +65,7 @@ class JcodeClient:
         # the same args after EOF or after a Reloading event.
         self._last_subscribe: tuple[str, str | None, str, bool] | None = None
         self._reconnect_max_delay: float = 30.0
+        self._reconnect_max_attempts: int = _RECONNECT_MAX_ATTEMPTS
 
     async def connect(self, socket_path: str) -> None:
         """Open a connection to ``socket_path``.
@@ -75,13 +92,27 @@ class JcodeClient:
         self._writer.write(encode_request(req))
         await self._writer.drain()
 
-    async def _recv_until(self, predicate) -> ServerEvent:
+    async def _recv_until(
+        self, predicate, *, timeout: float | None = None
+    ) -> ServerEvent:
+        """Read lines until ``predicate(event)`` is true, with optional timeout.
+
+        If *timeout* is given, each individual ``readline()`` call is bounded
+        by it.  When the timeout fires before the predicate matches, an
+        ``asyncio.TimeoutError`` propagates to the caller.
+        """
         assert self._reader is not None, "connect() must be called before _recv_until"
+        if timeout is None:
+            timeout = _RECV_UNTIL_TIMEOUT
         while True:
-            line = await self._reader.readline()
+            line = await asyncio.wait_for(
+                self._reader.readline(), timeout=timeout
+            )
             if not line:
                 raise ConnectionError("daemon closed connection")
             ev = decode_event(line)
+            if ev.type == "error":
+                raise DaemonProtocolError(getattr(ev, "message", "unknown error"))
             if predicate(ev):
                 return ev
 
@@ -95,8 +126,14 @@ class JcodeClient:
         target_session_id: str | None,
         client_instance_id: str,
         allow_session_takeover: bool = False,
+        *,
+        timeout: float | None = None,
     ) -> SessionId:
-        """Send a subscribe request and return the SessionId event from daemon."""
+        """Send a subscribe request and return the SessionId event from daemon.
+
+        *timeout* bounds how long we wait for the daemon's ``session`` reply.
+        Defaults to :data:`_RECV_UNTIL_TIMEOUT`.
+        """
         req_id = self._next_id()
         req = Subscribe(
             id=req_id,
@@ -107,7 +144,21 @@ class JcodeClient:
             allow_session_takeover=allow_session_takeover,
         )
         await self._send(req)
-        ev = await self._recv_until(lambda e: e.type == "session")
+        ev = await self._recv_until(
+            lambda e: e.type in ("session", "swarm_status", "done")
+            and (e.type != "done" or getattr(e, "id", None) == req_id),
+            timeout=timeout,
+        )
+        if ev.type == "swarm_status":
+            if not getattr(ev, "members", None):
+                raise DaemonProtocolError("swarm_status has no members")
+            sess_id = ev.members[0].get("session_id")
+            if not sess_id:
+                raise DaemonProtocolError("swarm_status member missing session_id")
+            ev = SessionId(session_id=sess_id)
+        elif ev.type == "done":
+            raise DaemonProtocolError("subscribe returned done without session ID")
+
         self._subscribed = True
         # Record args so _reconnect() can replay subscription verbatim after
         # EOF or after following a Reloading event to a new socket path.
@@ -204,20 +255,27 @@ class JcodeClient:
         event.
 
         Backoff schedule: 1s → 2s → 4s … capped at ``self._reconnect_max_delay``
-        (default 30s; tests may override). Loop continues until the connect +
-        subscribe pair both succeed; callers cannot opt out — once a client has
-        subscribed, the harness owns recovery.
+        (default 30s; tests may override). Gives up after
+        ``self._reconnect_max_attempts`` failures (default 5) and raises
+        :class:`ConnectionError` so the calling tool can surface a diagnostic
+        rather than hanging.
         """
         if self._socket_path is None or self._last_subscribe is None:
             raise ConnectionError("cannot reconnect: never subscribed")
         delay = 1.0
-        while True:
+        max_attempts = self._reconnect_max_attempts
+        for attempt in range(1, max_attempts + 1):
             try:
                 await self.connect(self._socket_path)
                 wd, target_sid, cid, allow = self._last_subscribe
                 await self.subscribe(wd, target_sid, cid, allow)
                 return
             except (ConnectionRefusedError, FileNotFoundError, ConnectionError, OSError):
+                if attempt >= max_attempts:
+                    raise ConnectionError(
+                        f"jcode daemon unreachable after {max_attempts} "
+                        f"reconnect attempts (socket: {self._socket_path})"
+                    )
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, self._reconnect_max_delay)
 

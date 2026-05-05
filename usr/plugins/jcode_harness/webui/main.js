@@ -122,6 +122,29 @@ const model = {
     }
   },
 
+  async logoutProvider(provider) {
+    if (!confirm(`Disconnect ${provider}?`)) return;
+    try {
+      const r = await fetch("/api/plugins/jcode_harness/logout_provider", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        window.$store?.notificationStore?.frontendError?.(d.error, "jcode");
+      } else {
+        window.$store?.notificationStore?.frontendSuccess?.(
+          `Disconnected ${provider}`, "jcode"
+        );
+        await this.refreshProviderStatus();
+        await this.refresh();
+      }
+    } catch (e) {
+      window.$store?.notificationStore?.frontendError?.(String(e), "jcode");
+    }
+  },
+
   loginHint() {
     if (!this.loginPending) return "";
     const p = this.loginPending.provider;

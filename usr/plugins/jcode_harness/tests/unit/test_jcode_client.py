@@ -854,28 +854,63 @@ async def test_extract_reloading_socket_prefers_new_socket_over_socket():
 
 async def test_reconnect_caps_at_max_delay(monkeypatch):
     """With socket missing, reconnect must back off, doubling each time, and
-    cap at ``_reconnect_max_delay``. We patch ``asyncio.sleep`` to record the
-    sequence without actually waiting."""
+    cap at ``_reconnect_max_delay``. After ``_reconnect_max_attempts`` failures
+    it raises ``ConnectionError``."""
     import usr.plugins.jcode_harness.helpers.jcode_client as jc_mod
 
     sleeps: list[float] = []
+    _real_sleep = asyncio.sleep
 
     async def fake_sleep(delay):
         sleeps.append(delay)
-        # Bail out after a few iterations so the test terminates.
-        if len(sleeps) >= 6:
-            raise RuntimeError("stop-loop")
 
     client = JcodeClient()
     client._socket_path = "/nonexistent/path-for-test.sock"
     client._last_subscribe = ("/w", None, "iid", False)
     client._reconnect_max_delay = 4.0  # small cap so we hit it quickly
+    client._reconnect_max_attempts = 6
 
     monkeypatch.setattr(jc_mod.asyncio, "sleep", fake_sleep)
 
-    with pytest.raises(RuntimeError, match="stop-loop"):
+    with pytest.raises(ConnectionError, match="unreachable after 6"):
         await client._reconnect()
 
-    # Expected schedule: 1, 2, 4, 4, 4, 4 — capped at 4.0.
+    # Expected schedule: 1, 2, 4, 4, 4 — 5 sleeps for 6 attempts
+    # (sleep happens between attempts, so N-1 sleeps for N attempts)
     assert sleeps[:3] == [1.0, 2.0, 4.0]
     assert all(s == 4.0 for s in sleeps[2:])
+
+
+async def test_reconnect_raises_after_default_max_attempts():
+    """_reconnect() gives up after _reconnect_max_attempts failures."""
+    client = JcodeClient()
+    client._socket_path = "/nonexistent/test.sock"
+    client._last_subscribe = ("/w", None, "iid", False)
+    # Use tiny delays so the test is fast.
+    client._reconnect_max_delay = 0.01
+    client._reconnect_max_attempts = 2
+
+    with pytest.raises(ConnectionError, match="unreachable after 2"):
+        await client._reconnect()
+
+
+async def test_recv_until_timeout():
+    """_recv_until must raise TimeoutError when the daemon goes silent."""
+
+    async def script(d, reader, writer):
+        # Accept the connection but send nothing, so _recv_until times out.
+        await asyncio.sleep(5.0)
+
+    daemon = _FakeDaemon(script)
+    sock = await daemon.start()
+    try:
+        client = JcodeClient()
+        await client.connect(sock)
+        with pytest.raises(asyncio.TimeoutError):
+            await client._recv_until(
+                lambda e: e.type == "session", timeout=0.05
+            )
+        await client.close()
+    finally:
+        await daemon.stop()
+

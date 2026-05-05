@@ -46,11 +46,22 @@ def _a0_yaml_path() -> Path:
 
 
 def _first_model_from_settings(pid: str) -> str | None:
-    """Fall back to the user's selected model for ``pid`` from A0 settings.
-
-    Stubbed for now — the importer simply skips providers without a usable
-    default. Wiring this into ``python/helpers/settings.py`` is a follow-up.
-    """
+    """Fall back to the user's selected model for ``pid`` from A0 settings."""
+    try:
+        from plugins._model_config.helpers.model_config import (
+            get_chat_model_config,
+            get_utility_model_config,
+        )
+        
+        chat_cfg = get_chat_model_config()
+        if chat_cfg.get("provider") == pid and chat_cfg.get("name"):
+            return chat_cfg.get("name")
+            
+        util_cfg = get_utility_model_config()
+        if util_cfg.get("provider") == pid and util_cfg.get("name"):
+            return util_cfg.get("name")
+    except ImportError:
+        pass
     return None
 
 
@@ -256,6 +267,25 @@ def import_a0_providers(
             imported.append(pid)
         except (ValueError, RuntimeError) as e:
             skipped[pid] = str(e)
+
+    if imported:
+        try:
+            import sys
+            if sys.version_info >= (3, 11):
+                import tomllib
+            else:
+                import tomli as tomllib
+            import tomli_w
+
+            cpath = _config_path()
+            if cpath.exists():
+                data = tomllib.loads(cpath.read_text())
+                if "provider" not in data:
+                    data["provider"] = {}
+                data["provider"]["default_provider"] = f"{PLUGIN_PROFILE_PREFIX}{imported[0]}"
+                cpath.write_text(tomli_w.dumps(data))
+        except Exception:
+            pass
 
     return {"imported": imported, "skipped": skipped}
 

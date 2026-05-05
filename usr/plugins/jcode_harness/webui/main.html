@@ -93,20 +93,28 @@
         { id: 'gemini',  label: 'Gemini'  },
         { id: 'copilot', label: 'Copilot' },
       ]" :key="prov.id">
-        <button type="button"
-                class="button jcode-provider-button"
-                :class="{ 'is-connected': $store.jcodeMain.isConnected(prov.id) }"
-                :disabled="!!$store.jcodeMain.loginPending"
-                :title="$store.jcodeMain.isConnected(prov.id)
-                  ? `Connected (${$store.jcodeMain.connectionSource(prov.id) || 'unknown source'}). Click to re-login.`
-                  : `Start OAuth flow for ${prov.label}`"
-                @click="$store.jcodeMain.oauthLogin(prov.id)">
-          <span class="icon material-symbols-outlined"
-                x-text="$store.jcodeMain.isConnected(prov.id) ? 'check_circle' : 'key'"></span>
-          <span class="jcode-provider-label" x-text="prov.label"></span>
-          <span class="jcode-provider-state"
-                x-text="$store.jcodeMain.isConnected(prov.id) ? 'connected' : 'not connected'"></span>
-        </button>
+        <div class="jcode-provider-card" :class="{ 'is-connected': $store.jcodeMain.isConnected(prov.id) }">
+          <button type="button"
+                  class="button jcode-provider-button"
+                  :disabled="!!$store.jcodeMain.loginPending"
+                  :title="$store.jcodeMain.isConnected(prov.id)
+                    ? `Connected (${$store.jcodeMain.connectionSource(prov.id) || 'unknown source'}). Click to re-login.`
+                    : `Start OAuth flow for ${prov.label}`"
+                  @click="$store.jcodeMain.oauthLogin(prov.id)">
+            <span class="icon material-symbols-outlined"
+                  x-text="$store.jcodeMain.isConnected(prov.id) ? 'check_circle' : 'key'"></span>
+            <span class="jcode-provider-label" x-text="prov.label"></span>
+            <span class="jcode-provider-state"
+                  x-text="$store.jcodeMain.isConnected(prov.id) ? 'connected' : 'not connected'"></span>
+          </button>
+          <button type="button"
+                  class="button icon-button jcode-provider-disconnect"
+                  x-show="$store.jcodeMain.isConnected(prov.id)"
+                  @click="$store.jcodeMain.logoutProvider(prov.id)"
+                  title="Disconnect provider">
+            <span class="material-symbols-outlined">logout</span>
+          </button>
+        </div>
       </template>
     </div>
 
@@ -330,11 +338,19 @@
       margin-bottom: 0.5rem;
     }
 
+    .jcode-provider-card {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
     .jcode-provider-button {
       display: inline-flex !important;
       align-items: center !important;
       gap: 0.5rem;
       justify-content: flex-start !important;
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     .jcode-provider-label {
@@ -353,18 +369,31 @@
       white-space: nowrap;
     }
 
-    .jcode-provider-button.is-connected .jcode-provider-state {
+    .jcode-provider-card.is-connected .jcode-provider-state {
       color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
       border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
       background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-primary));
     }
 
-    .jcode-provider-button.is-connected {
+    .jcode-provider-card.is-connected .jcode-provider-button {
       border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
     }
 
-    .jcode-provider-button.is-connected .material-symbols-outlined {
+    .jcode-provider-card.is-connected .jcode-provider-button .material-symbols-outlined {
       color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
+    }
+
+    .jcode-provider-disconnect {
+      flex: 0 0 auto;
+      width: 2.2rem;
+      padding: 0;
+      color: var(--color-text-secondary);
+    }
+    
+    .jcode-provider-disconnect:hover {
+      color: var(--color-error, #f44336);
+      border-color: var(--color-error, #f44336);
+      background: color-mix(in srgb, var(--color-error, #f44336) 10%, transparent);
     }
 
     .jcode-danger-zone {

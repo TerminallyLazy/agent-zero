@@ -9,17 +9,22 @@ Supported actions: load | list | reload | reload_all | read.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 
 from helpers.tool import Tool, Response
 
 from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSpawnError,
     DaemonSupervisor,
     NoCredentialsError,
     locate_jcode_binary,
 )
-from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
+from usr.plugins.jcode_harness.helpers.jcode_client import (
+    JcodeClient,
+    DaemonProtocolError,
+)
 from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
 
 
@@ -58,23 +63,61 @@ class JcodeSkill(Tool):
             sock = await sup.ensure_running(wd)
         except NoCredentialsError as e:
             return Response(message=str(e), break_loop=False)
+        except DaemonSpawnError as e:
+            return Response(
+                message=(
+                    "jcode daemon failed to start.\n\n"
+                    f"{e}\n\n"
+                    "Repair: Plugins → jcode harness → Execute."
+                ),
+                break_loop=False,
+            )
 
         client = JcodeClient()
         await client.connect(sock)
         try:
-            await client.subscribe(
-                wd,
-                None,
-                str(uuid.uuid4()),
-                allow_session_takeover=False,
-            )
+            try:
+                await asyncio.wait_for(
+                    client.subscribe(
+                        wd,
+                        None,
+                        str(uuid.uuid4()),
+                        allow_session_takeover=False,
+                    ),
+                    timeout=30.0,
+                )
+            except (asyncio.TimeoutError, ConnectionError) as exc:
+                return Response(
+                    message=f"jcode daemon did not respond to subscribe: {exc}",
+                    break_loop=False,
+                )
+            except DaemonProtocolError as exc:
+                return Response(
+                    message=f"jcode daemon rejected connection: {exc}",
+                    break_loop=False,
+                )
             prompt = (
                 f"Use the skill_manage tool with action={action}, "
                 f"name={name!r}. Return the raw output."
             )
             msg_id = await client.send_message(prompt)
             outputs: list[str] = []
-            async for ev in client.events():
+            events = client.events().__aiter__()
+            while True:
+                try:
+                    ev = await asyncio.wait_for(anext(events), timeout=60.0)
+                except asyncio.TimeoutError:
+                    return Response(
+                        message="jcode skill timed out (no events for 60s).",
+                        break_loop=False,
+                    )
+                except StopAsyncIteration:
+                    break
+                except ConnectionError as exc:
+                    return Response(
+                        message=f"jcode daemon connection lost: {exc}",
+                        break_loop=False,
+                    )
                 t = ev.type
                 if t == "tool_done" and getattr(ev, "name", "") == "skill_manage":
                     if getattr(ev, "output", ""):

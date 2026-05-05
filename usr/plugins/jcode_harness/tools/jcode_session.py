@@ -17,11 +17,15 @@ from helpers.tool import Tool, Response
 
 from usr.plugins.jcode_harness.helpers import notifications as notify
 from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSpawnError,
     DaemonSupervisor,
     NoCredentialsError,
     locate_jcode_binary,
 )
-from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
+from usr.plugins.jcode_harness.helpers.jcode_client import (
+    JcodeClient,
+    DaemonProtocolError,
+)
 from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
 from usr.plugins.jcode_harness.helpers.persistence import (
     get_or_create_client_instance_id,
@@ -31,6 +35,17 @@ from usr.plugins.jcode_harness.helpers.persistence import (
 # Polling interval (seconds) for the cancel-signal watcher. Module-level so
 # tests can monkeypatch a faster value without exercising real-time delays.
 _CANCEL_POLL_INTERVAL = 0.5
+
+# Maximum time to wait for the daemon to emit any event after a message is sent.
+# jcode normally emits ack/status/tool/text/done events. Silence beyond this
+# point usually means the daemon is blocked waiting on provider, stdin, or an
+# internal error path that did not surface as a protocol event.
+_EVENT_IDLE_TIMEOUT = 300.0
+
+# How long to wait for the daemon to respond to subscribe / send_message.
+# These should be fast round-trips; a 30s ceiling catches broken daemons
+# that accept the connection but never reply.
+_HANDSHAKE_TIMEOUT = 30.0
 
 
 class JcodeSession(Tool):
@@ -44,6 +59,7 @@ class JcodeSession(Tool):
         **_kwargs,
     ) -> Response:
         wd = os.path.abspath(working_dir or os.getcwd())
+        await self.set_progress("jcode coding harness active…")
 
         bin_path = locate_jcode_binary()
         if not bin_path:
@@ -57,6 +73,20 @@ class JcodeSession(Tool):
             sock = await sup.ensure_running(wd)
         except NoCredentialsError as e:
             return Response(message=str(e), break_loop=False)
+        except DaemonSpawnError as e:
+            # Surface jcode's own log tail so the operator (and the model
+            # in the next turn) can see what went wrong without having to
+            # SSH into the container. Repair path is documented in the
+            # plugin troubleshooting guide.
+            return Response(
+                message=(
+                    "jcode daemon failed to start.\n\n"
+                    f"{e}\n\n"
+                    "Repair: Plugins → jcode harness → Execute, or fix the "
+                    "config issue shown in the log above and try again."
+                ),
+                break_loop=False,
+            )
 
         cid = get_or_create_client_instance_id(self.agent.context.id)
 
@@ -86,15 +116,102 @@ class JcodeSession(Tool):
 
         watcher = asyncio.create_task(_watch_for_cancel())
         try:
-            await client.subscribe(
-                wd, resume_session_id, cid, allow_session_takeover=True
+            await asyncio.wait_for(
+                client.subscribe(
+                    wd, resume_session_id, cid, allow_session_takeover=True
+                ),
+                timeout=_HANDSHAKE_TIMEOUT,
             )
-            msg_id = await client.send_message(task)
-            async for ev in client.events():
+        except (asyncio.TimeoutError, ConnectionError) as exc:
+            watcher.cancel()
+            await client.close()
+            return Response(
+                message=(
+                    f"jcode daemon did not respond to subscribe within "
+                    f"{int(_HANDSHAKE_TIMEOUT)}s: {exc}. "
+                    "The daemon may be stuck. Retry the task or restart the "
+                    "daemon via Plugins → jcode harness → Execute."
+                ),
+                break_loop=False,
+            )
+        except DaemonProtocolError as exc:
+            watcher.cancel()
+            await client.close()
+            return Response(
+                message=f"jcode daemon rejected connection: {exc}",
+                break_loop=False,
+            )
+
+        try:
+            msg_id = await asyncio.wait_for(
+                client.send_message(task), timeout=_HANDSHAKE_TIMEOUT
+            )
+        except (asyncio.TimeoutError, ConnectionError) as exc:
+            watcher.cancel()
+            await client.close()
+            return Response(
+                message=(
+                    f"jcode daemon did not accept message within "
+                    f"{int(_HANDSHAKE_TIMEOUT)}s: {exc}. "
+                    "Retry the task or restart the daemon."
+                ),
+                break_loop=False,
+            )
+
+        try:
+            events = client.events().__aiter__()
+            while True:
+                try:
+                    ev = await asyncio.wait_for(
+                        anext(events), timeout=_EVENT_IDLE_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    return Response(
+                        message=(
+                            "jcode session produced no daemon events for "
+                            f"{int(_EVENT_IDLE_TIMEOUT)}s after the task was sent. "
+                            "The daemon may be blocked on provider I/O, stdin, or an "
+                            "internal wait path. Retry the task, check the jcode harness "
+                            "daemon status, or run Plugins → jcode harness → Execute "
+                            "to restart the daemon."
+                        ),
+                        break_loop=False,
+                    )
+                except StopAsyncIteration:
+                    break
+                except ConnectionError as exc:
+                    return Response(
+                        message=(
+                            f"jcode daemon connection lost during session: {exc}. "
+                            "The daemon may have crashed. Retry the task or "
+                            "restart via Plugins → jcode harness → Execute."
+                        ),
+                        break_loop=False,
+                    )
+
                 t = ev.type
-                if t == "text_delta":
+                if t == "ack":
+                    continue
+                elif t == "error":
+                    msg = getattr(ev, "message", "jcode daemon returned an error")
+                    retry = getattr(ev, "retry_after_secs", None)
+                    suffix = f" Retry after {retry}s." if retry else ""
+                    return Response(
+                        message=f"jcode daemon error: {msg}.{suffix}",
+                        break_loop=False,
+                    )
+                elif t == "text_delta":
                     final_text.append(ev.text)
                     await self.set_progress("".join(final_text))
+                elif t == "text_replace":
+                    final_text[:] = [ev.text]
+                    await self.set_progress("".join(final_text))
+                elif t == "connection_phase":
+                    await self.set_progress(f"[jcode: {ev.phase}]")
+                elif t == "status_detail":
+                    await self.set_progress(ev.detail)
+                elif t == "connection_type":
+                    await self.set_progress(f"[jcode connection: {ev.connection}]")
                 elif t == "tool_start":
                     await self.set_progress(f"[running tool: {ev.name}]")
                 elif t == "tool_done":
@@ -126,6 +243,20 @@ class JcodeSession(Tool):
                         pass
                 elif t == "compaction":
                     notify.warning("jcode auto-compacted context")
+                elif t == "stdin_request":
+                    if getattr(ev, "is_password", False):
+                        return Response(
+                            message=(
+                                "jcode requested password input from a tool. "
+                                "Agent Zero cannot safely provide hidden input; "
+                                "run the command manually or retry with a non-interactive command."
+                            ),
+                            break_loop=False,
+                        )
+                    await self.set_progress(
+                        "[jcode requested stdin; sent an empty line]"
+                    )
+                    await client.stdin_response(ev.request_id, "")
                 elif t == "interrupted":
                     break
                 elif t == "done" and getattr(ev, "id", None) == msg_id:

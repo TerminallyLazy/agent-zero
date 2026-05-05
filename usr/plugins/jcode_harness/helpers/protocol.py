@@ -187,9 +187,21 @@ def encode_request(req: Any) -> bytes:
 
 
 @dataclass
+class Ack:
+    id: int
+    type: Literal["ack"] = "ack"
+
+
+@dataclass
 class TextDelta:
     text: str
     type: Literal["text_delta"] = "text_delta"
+
+
+@dataclass
+class TextReplace:
+    text: str
+    type: Literal["text_replace"] = "text_replace"
 
 
 @dataclass
@@ -219,6 +231,24 @@ class ToolDone:
     output: str = ""
     error: str | None = None
     type: Literal["tool_done"] = "tool_done"
+
+
+@dataclass
+class ConnectionType:
+    connection: str
+    type: Literal["connection_type"] = "connection_type"
+
+
+@dataclass
+class ConnectionPhase:
+    phase: str
+    type: Literal["connection_phase"] = "connection_phase"
+
+
+@dataclass
+class StatusDetail:
+    detail: str
+    type: Literal["status_detail"] = "status_detail"
 
 
 @dataclass
@@ -367,6 +397,14 @@ class SidePanelUpdate:
 
 
 @dataclass
+class ErrorEvent:
+    id: int
+    message: str
+    retry_after_secs: int | None = None
+    type: Literal["error"] = "error"
+
+
+@dataclass
 class Pong:
     id: int
     type: Literal["pong"] = "pong"
@@ -384,11 +422,16 @@ class UnknownEvent:
 # (e.g. ack, error, batch_progress, mcp_status, comm_*_response, …) fall
 # through to UnknownEvent until a tool/handler explicitly needs them.
 ServerEvent = Union[
+    Ack,
     TextDelta,
+    TextReplace,
     ToolStart,
     ToolInput,
     ToolExec,
     ToolDone,
+    ConnectionType,
+    ConnectionPhase,
+    StatusDetail,
     MessageEnd,
     Done,
     SessionId,
@@ -404,17 +447,23 @@ ServerEvent = Union[
     CommReceived,
     GeneratedImage,
     SidePanelUpdate,
+    ErrorEvent,
     Pong,
     UnknownEvent,
 ]
 
 
 _EVENT_REGISTRY: dict[str, type] = {
+    "ack": Ack,
     "text_delta": TextDelta,
+    "text_replace": TextReplace,
     "tool_start": ToolStart,
     "tool_input": ToolInput,
     "tool_exec": ToolExec,
     "tool_done": ToolDone,
+    "connection_type": ConnectionType,
+    "connection_phase": ConnectionPhase,
+    "status_detail": StatusDetail,
     "message_end": MessageEnd,
     "done": Done,
     "session": SessionId,
@@ -430,6 +479,7 @@ _EVENT_REGISTRY: dict[str, type] = {
     "comm_message": CommReceived,
     "generated_image": GeneratedImage,
     "side_panel_state": SidePanelUpdate,
+    "error": ErrorEvent,
     "pong": Pong,
 }
 

@@ -62,7 +62,7 @@ def test_jcode_runtime_dir_chmods_existing(fake_home: Path) -> None:
 
 def test_socket_path_under_runtime_dir(fake_home: Path) -> None:
     s = socket_path("iid1")
-    assert s == jcode_runtime_dir("iid1") / "socket"
+    assert s == jcode_runtime_dir("iid1") / "jcode.sock"
     # parent must exist (runtime dir was created)
     assert s.parent.is_dir()
 

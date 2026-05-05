@@ -14,6 +14,7 @@ import uuid
 from helpers.tool import Tool, Response
 
 from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSpawnError,
     DaemonSupervisor,
     NoCredentialsError,
     locate_jcode_binary,
@@ -84,6 +85,15 @@ class JcodeSwarmMsg(Tool):
             sock = await sup.ensure_running(wd)
         except NoCredentialsError as e:
             return Response(message=str(e), break_loop=False)
+        except DaemonSpawnError as e:
+            return Response(
+                message=(
+                    "jcode daemon failed to start.\n\n"
+                    f"{e}\n\n"
+                    "Repair: Plugins → jcode harness → Execute."
+                ),
+                break_loop=False,
+            )
 
         client = JcodeClient()
         await client.connect(sock)

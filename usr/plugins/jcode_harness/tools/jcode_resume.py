@@ -15,6 +15,7 @@ Spec ref: §3 "Cross-harness session resume", §6.2.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -22,11 +23,15 @@ from pathlib import Path
 from helpers.tool import Tool, Response
 
 from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSpawnError,
     DaemonSupervisor,
     NoCredentialsError,
     locate_jcode_binary,
 )
-from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
+from usr.plugins.jcode_harness.helpers.jcode_client import (
+    JcodeClient,
+    DaemonProtocolError,
+)
 from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
 from usr.plugins.jcode_harness.helpers.persistence import (
     get_or_create_client_instance_id,
@@ -106,18 +111,48 @@ class JcodeResume(Tool):
             sock = await sup.ensure_running(wd)
         except NoCredentialsError as e:
             return Response(message=str(e), break_loop=False)
+        except DaemonSpawnError as e:
+            return Response(
+                message=(
+                    "jcode daemon failed to start.\n\n"
+                    f"{e}\n\n"
+                    "Repair: Plugins → jcode harness → Execute."
+                ),
+                break_loop=False,
+            )
 
         cid = get_or_create_client_instance_id(self.agent.context.id)
         client = JcodeClient()
         await client.connect(sock)
         try:
-            await client.subscribe(
-                wd, session_id, cid, allow_session_takeover=True
-            )
-            await client.get_history()
-            history_ev = await client._recv_until(
-                lambda e: e.type == "history"
-            )
+            try:
+                await asyncio.wait_for(
+                    client.subscribe(
+                        wd, session_id, cid, allow_session_takeover=True
+                    ),
+                    timeout=30.0,
+                )
+            except (asyncio.TimeoutError, ConnectionError) as exc:
+                return Response(
+                    message=f"jcode daemon did not respond to subscribe: {exc}",
+                    break_loop=False,
+                )
+            except DaemonProtocolError as exc:
+                return Response(
+                    message=f"jcode daemon rejected connection: {exc}",
+                    break_loop=False,
+                )
+            try:
+                await client.get_history()
+                history_ev = await asyncio.wait_for(
+                    client._recv_until(lambda e: e.type == "history"),
+                    timeout=30.0,
+                )
+            except (asyncio.TimeoutError, ConnectionError) as exc:
+                return Response(
+                    message=f"jcode daemon did not return history: {exc}",
+                    break_loop=False,
+                )
             messages_count = len(getattr(history_ev, "messages", []) or [])
             return Response(
                 message=(

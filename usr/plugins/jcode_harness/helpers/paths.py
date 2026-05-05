@@ -52,8 +52,14 @@ def jcode_runtime_dir(instance_id: str | None = None) -> Path:
 
 
 def socket_path(instance_id: str | None = None) -> Path:
-    """Return the Unix socket path for the daemon."""
-    return jcode_runtime_dir(instance_id) / "socket"
+    """Return the Unix socket path for the daemon.
+
+    jcode derives its debug socket by replacing a ``.sock`` suffix with
+    ``-debug.sock``. The filename must keep that suffix or the debug socket
+    resolves to the same path as the main socket and daemon startup fails with
+    ``Address already in use``.
+    """
+    return jcode_runtime_dir(instance_id) / "jcode.sock"
 
 
 def pid_path(instance_id: str | None = None) -> Path:

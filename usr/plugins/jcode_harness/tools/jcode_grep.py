@@ -11,17 +11,22 @@ from :mod:`jcode_session` in that one-shot tools allocate a fresh
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 
 from helpers.tool import Tool, Response
 
 from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSpawnError,
     DaemonSupervisor,
     NoCredentialsError,
     locate_jcode_binary,
 )
-from usr.plugins.jcode_harness.helpers.jcode_client import JcodeClient
+from usr.plugins.jcode_harness.helpers.jcode_client import (
+    JcodeClient,
+    DaemonProtocolError,
+)
 from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
 
 
@@ -50,23 +55,61 @@ class JcodeGrep(Tool):
             sock = await sup.ensure_running(wd)
         except NoCredentialsError as e:
             return Response(message=str(e), break_loop=False)
+        except DaemonSpawnError as e:
+            return Response(
+                message=(
+                    "jcode daemon failed to start.\n\n"
+                    f"{e}\n\n"
+                    "Repair: Plugins → jcode harness → Execute."
+                ),
+                break_loop=False,
+            )
 
         client = JcodeClient()
         await client.connect(sock)
         try:
-            await client.subscribe(
-                wd,
-                None,
-                str(uuid.uuid4()),
-                allow_session_takeover=False,
-            )
+            try:
+                await asyncio.wait_for(
+                    client.subscribe(
+                        wd,
+                        None,
+                        str(uuid.uuid4()),
+                        allow_session_takeover=False,
+                    ),
+                    timeout=30.0,
+                )
+            except (asyncio.TimeoutError, ConnectionError) as exc:
+                return Response(
+                    message=f"jcode daemon did not respond to subscribe: {exc}",
+                    break_loop=False,
+                )
+            except DaemonProtocolError as exc:
+                return Response(
+                    message=f"jcode daemon rejected connection: {exc}",
+                    break_loop=False,
+                )
             prompt = (
                 f"Use the agentgrep tool to search for: {pattern}\n"
                 "Return ONLY the raw agentgrep output. Do not summarize."
             )
             msg_id = await client.send_message(prompt)
             outputs: list[str] = []
-            async for ev in client.events():
+            events = client.events().__aiter__()
+            while True:
+                try:
+                    ev = await asyncio.wait_for(anext(events), timeout=60.0)
+                except asyncio.TimeoutError:
+                    return Response(
+                        message="jcode grep timed out (no events for 60s).",
+                        break_loop=False,
+                    )
+                except StopAsyncIteration:
+                    break
+                except ConnectionError as exc:
+                    return Response(
+                        message=f"jcode daemon connection lost: {exc}",
+                        break_loop=False,
+                    )
                 t = ev.type
                 if t == "tool_done" and getattr(ev, "name", "") == "agentgrep":
                     if getattr(ev, "output", ""):

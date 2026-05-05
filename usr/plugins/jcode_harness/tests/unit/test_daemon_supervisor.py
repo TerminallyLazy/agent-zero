@@ -9,6 +9,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import pytest
 
 from usr.plugins.jcode_harness.helpers import daemon as daemon_mod
 from usr.plugins.jcode_harness.helpers.daemon import (
+    DaemonSpawnError,
     DaemonSupervisor,
     NoCredentialsError,
     locate_jcode_binary,
@@ -219,17 +221,25 @@ def test_ensure_running_spawns_and_writes_pidfile(
         sup.stop()
 
 
-def test_overlay_config_written_with_gateway_disabled(
+def test_spawn_env_disables_gateway_and_uses_instance_runtime(
     monkeypatch, tmp_path, short_inst, fake_jcode_binary
 ):
+    captured_env: dict[str, str] = {}
+    real_popen = daemon_mod.subprocess.Popen
+
+    def capture_popen(*args, **kwargs):
+        captured_env.update(kwargs.get("env") or {})
+        return real_popen(*args, **kwargs)
+
     sup = DaemonSupervisor(fake_jcode_binary, short_inst)
     monkeypatch.setattr(sup, "_has_creds", lambda: True)
+    monkeypatch.setattr(daemon_mod.subprocess, "Popen", capture_popen)
     try:
         asyncio.run(sup.ensure_running(str(tmp_path)))
-        body = sup.overlay_config.read_text()
-        assert "[gateway]" in body
-        assert "enabled = false" in body
-        assert (sup.overlay_config.stat().st_mode & 0o777) == 0o600
+        assert captured_env["JCODE_RUNTIME_DIR"] == str(short_inst)
+        assert captured_env["JCODE_GATEWAY_ENABLED"] == "0"
+        assert captured_env["JCODE_DEBUG_SOCKET"] == "0"
+        assert "JCODE_CONFIG" not in captured_env
     finally:
         sup.stop()
 
@@ -264,6 +274,51 @@ def test_ensure_running_idempotent(
         assert pid1 == pid2
     finally:
         sup.stop()
+
+
+def test_concurrent_ensure_running_spawns_once(monkeypatch, tmp_path, short_inst):
+    """Concurrent warmup/tool callers must not race-spawn the daemon.
+
+    Regression for user-facing ``Address already in use (os error 98)``: two
+    callers entered ``ensure_running`` before the socket appeared, both spawned
+    ``jcode serve``, and the loser died trying to bind the same socket.
+    """
+    sup = DaemonSupervisor("/fake/jcode", short_inst)
+    monkeypatch.setattr(sup, "_has_creds", lambda: True)
+
+    popen_calls: list[list[str]] = []
+
+    class FakeProc:
+        pid = os.getpid()
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def fake_popen(args, **_kwargs):
+        popen_calls.append(list(args))
+        socket_path = Path(args[args.index("--socket") + 1])
+
+        def bind_later():
+            time.sleep(0.15)
+            socket_path.write_text("")
+            socket_path.chmod(0o600)
+
+        threading.Thread(target=bind_later, daemon=True).start()
+        return FakeProc()
+
+    monkeypatch.setattr(daemon_mod.subprocess, "Popen", fake_popen)
+
+    async def run_two():
+        return await asyncio.gather(
+            sup.ensure_running(str(tmp_path)),
+            sup.ensure_running(str(tmp_path)),
+        )
+
+    sockets = asyncio.run(run_two())
+
+    assert sockets == [str(sup.socket_file), str(sup.socket_file)]
+    assert len(popen_calls) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -345,3 +400,75 @@ def test_health_when_running(
         assert h["last_log"].endswith(".log")
     finally:
         sup.stop()
+
+
+# ---------------------------------------------------------------------------
+# DaemonSpawnError surfaces log tail (regression — the user previously got
+# only "see /root/.amplihack/.../jcode-NNN.log" with no log content, so they
+# had to SSH in and cat the file by hand to debug a daemon-spawn failure).
+# ---------------------------------------------------------------------------
+
+
+def _make_failing_jcode(tmp_path, stdout: str, exit_code: int = 1) -> str:
+    """Write a fake jcode that prints ``stdout`` then exits with ``exit_code``.
+    The fake never binds the socket so DaemonSupervisor enters its
+    "exited early" branch."""
+    script = tmp_path / "fake_failing_jcode.py"
+    body = (
+        "import sys\n"
+        f"sys.stdout.write({stdout!r})\n"
+        "sys.stdout.flush()\n"
+        f"sys.exit({exit_code})\n"
+    )
+    script.write_text(body)
+    wrapper = tmp_path / "jcode"
+    wrapper.write_text(f"#!/bin/sh\nexec '{sys.executable}' '{script}' \"$@\"\n")
+    wrapper.chmod(0o755)
+    return str(wrapper)
+
+
+def test_spawn_error_includes_log_tail(monkeypatch, tmp_path, short_inst):
+    """When jcode exits early the raised DaemonSpawnError MUST include the
+    daemon's stdout/stderr tail so the operator (and the model in the next
+    turn) can see WHY it failed without having to manually cat a log."""
+    bin_path = _make_failing_jcode(
+        tmp_path,
+        stdout=(
+            "Error: invalid config key 'gateway.enabled' in JCODE_CONFIG\n"
+            "  --> /tmp/overlay.toml:2:1\n"
+        ),
+        exit_code=1,
+    )
+    sup = DaemonSupervisor(bin_path, short_inst)
+    monkeypatch.setattr(sup, "_has_creds", lambda: True)
+
+    with pytest.raises(DaemonSpawnError) as excinfo:
+        asyncio.run(sup.ensure_running(str(tmp_path)))
+
+    err = excinfo.value
+    assert err.returncode == 1
+    assert err.log_file and err.log_file.endswith(".log")
+    assert "invalid config key" in err.log_tail, (
+        "log tail must contain the daemon's actual error output"
+    )
+    # The exception's __str__ embeds the tail too — that's what reaches
+    # the model when a tool surfaces this as a Response message.
+    assert "invalid config key" in str(err)
+
+
+def test_spawn_error_handles_empty_log(monkeypatch, tmp_path, short_inst):
+    """Edge: jcode exits BEFORE writing any output (e.g., killed by OS).
+    DaemonSpawnError must still raise cleanly with a useful placeholder."""
+    bin_path = _make_failing_jcode(tmp_path, stdout="", exit_code=137)
+    sup = DaemonSupervisor(bin_path, short_inst)
+    monkeypatch.setattr(sup, "_has_creds", lambda: True)
+
+    with pytest.raises(DaemonSpawnError) as excinfo:
+        asyncio.run(sup.ensure_running(str(tmp_path)))
+
+    err = excinfo.value
+    assert err.returncode == 137
+    assert err.log_tail == ""
+    # Placeholder so the operator sees that the log was empty rather
+    # than thinking the tool truncated it.
+    assert "(log empty)" in str(err)
