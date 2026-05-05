@@ -171,3 +171,75 @@ def list_jcode_profiles(jcode_bin: str) -> list[dict]:
         check=True,
     )
     return json.loads(result.stdout)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.3 — collision-safe bulk import
+# ---------------------------------------------------------------------------
+
+
+def import_a0_providers(
+    jcode_bin: str,
+    providers: list[dict] | None = None,
+    api_keys: dict[str, str] | None = None,
+) -> dict:
+    """Bulk-import A0 providers into jcode as ``_a0_imported_*`` profiles.
+
+    Returns ``{imported: [provider_id, ...], skipped: {provider_id: reason}}``.
+
+    Skip rules:
+      - name collision with a USER-OWNED jcode profile (no plugin prefix)
+      - missing API key (env var unset)
+      - missing default model
+
+    Idempotent for plugin-owned profiles via ``add_jcode_profile``'s
+    overwrite path. If ``list_jcode_profiles`` fails, we proceed with an
+    empty user-owned set rather than aborting the whole import.
+    """
+    if providers is None:
+        providers = discover_a0_providers()
+    if api_keys is None:
+        api_keys = {}
+        for p in providers:
+            env = p["api_key_env"]
+            if env in os.environ:
+                api_keys[p["id"]] = os.environ[env]
+
+    try:
+        existing = list_jcode_profiles(jcode_bin)
+    except (subprocess.CalledProcessError, OSError, json.JSONDecodeError):
+        existing = []
+    user_owned = {
+        p["name"]
+        for p in existing
+        if not p["name"].startswith(PLUGIN_PROFILE_PREFIX)
+    }
+
+    imported: list[str] = []
+    skipped: dict[str, str] = {}
+
+    for p in providers:
+        pid = p["id"]
+        if pid in user_owned:
+            skipped[pid] = "name collision with user-owned profile"
+            continue
+        if pid not in api_keys:
+            skipped[pid] = "no API key in environment"
+            continue
+        if not p.get("default_model"):
+            skipped[pid] = "no default model"
+            continue
+        try:
+            add_jcode_profile(
+                jcode_bin,
+                f"{PLUGIN_PROFILE_PREFIX}{pid}",
+                p["api_base"],
+                p["default_model"],
+                api_keys[pid],
+                overwrite=True,
+            )
+            imported.append(pid)
+        except (ValueError, RuntimeError) as e:
+            skipped[pid] = str(e)
+
+    return {"imported": imported, "skipped": skipped}
