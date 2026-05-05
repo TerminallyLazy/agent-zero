@@ -107,7 +107,23 @@ def _ensure_helpers_tool_loaded() -> None:
         async def _noop(*a, **kw):
             return None
 
+        class _Extension:
+            """Minimal real-shaped Extension base for plugin extension tests.
+
+            Mirrors helpers.extension.Extension's __init__ signature so the
+            plugin's extension classes (which subclass Extension) construct
+            cleanly under the tests' stubbed framework.
+            """
+
+            def __init__(self, agent=None, **kwargs):
+                self.agent = agent
+                self.kwargs = kwargs
+
+            async def execute(self, **kwargs):  # pragma: no cover
+                return None
+
         e.call_extensions_async = _noop
+        e.Extension = _Extension
         sys.modules["helpers.extension"] = e
 
     # Preload ``helpers.notification`` so the plugin's ``helpers.notifications``
