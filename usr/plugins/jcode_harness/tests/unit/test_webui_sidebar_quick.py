@@ -23,6 +23,34 @@ def test_quick_html_has_two_buttons():
     assert "resumeSessionList()" in text
 
 
+def test_quick_html_uses_material_symbols_icons_only():
+    """Per user UX direction: Material Icons only, no text labels, theme-aware bg."""
+    text = HTML.read_text(encoding="utf-8")
+    # Material Symbols spans for both actions
+    assert text.count('class="material-symbols-outlined"') == 2, \
+        "both buttons must use material-symbols-outlined span"
+    # No literal "New ..." / "Resume" labels in button bodies
+    # (Title attribute is fine — that's the tooltip, not a visible label.)
+    # Inspect the button INNER content: between <button ...> and </button>
+    button_bodies = re.findall(r"<button[^>]*>(.*?)</button>", text, re.DOTALL)
+    for body in button_bodies:
+        # Strip the icon span; any remaining text content (after whitespace) means text labels
+        no_span = re.sub(r"<span[^>]*>[^<]*</span>", "", body)
+        no_tags = re.sub(r"<[^>]+>", "", no_span).strip()
+        assert no_tags == "", f"button has visible text label: {no_tags!r}"
+
+
+def test_quick_html_uses_theme_aware_button_class():
+    """Reuse A0's .config-button so background follows the theme (no white)."""
+    text = HTML.read_text(encoding="utf-8")
+    assert 'class="config-button"' in text, \
+        "buttons should use A0's .config-button class for theme-aware styling"
+    # No inline white backgrounds
+    assert "background:white" not in text.lower().replace(" ", "")
+    assert "background-color:white" not in text.lower().replace(" ", "")
+    assert "background:#fff" not in text.lower().replace(" ", "")
+
+
 def test_quick_js_exports_jcodeQuick():
     assert JS.exists(), f"missing {JS}"
     text = JS.read_text(encoding="utf-8")

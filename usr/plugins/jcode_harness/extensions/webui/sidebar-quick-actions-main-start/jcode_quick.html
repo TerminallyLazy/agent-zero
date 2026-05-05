@@ -1,14 +1,16 @@
-<div x-data="jcodeQuick()" class="jcode-quick-actions">
+<div x-data="jcodeQuick()" class="jcode-quick-actions" style="display: contents;">
   <button type="button"
-          class="jcode-quick-button"
+          class="config-button"
           @click="newSession()"
+          aria-label="New jcode session"
           title="Start a new jcode coding session">
-    <span class="jcode-quick-icon">&#9881;</span> New jcode session
+    <span class="material-symbols-outlined">code</span>
   </button>
   <button type="button"
-          class="jcode-quick-button"
+          class="config-button"
           @click="resumeSessionList()"
+          aria-label="Resume jcode session"
           title="Pick a resumable session from any harness">
-    <span class="jcode-quick-icon">&#8634;</span> Resume&hellip;
+    <span class="material-symbols-outlined">history</span>
   </button>
 </div>
