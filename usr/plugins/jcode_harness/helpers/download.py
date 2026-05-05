@@ -136,22 +136,40 @@ def download_and_verify(
         archive_path = Path(tmp) / asset_name
         archive_path.write_bytes(tarball)
         with tarfile.open(archive_path, mode="r:gz") as tf:
-            jcode_member = None
-            for m in tf.getmembers():
-                if not m.isfile():
-                    continue
-                base = os.path.basename(m.name)
-                if base == "jcode":
-                    jcode_member = m
-                    break
+            # jcode v0.11.x release tarballs contain a single executable file
+            # named after the asset (e.g. `jcode-linux-aarch64`) at the
+            # archive root — NOT a folder with an inner `jcode` file.
+            # Verified by `tar tzf jcode-{os}-{arch}.tar.gz` against v0.11.10.
+            #
+            # Accept either layout for forward-compat:
+            #   1. base == "jcode"                            (idiomatic name)
+            #   2. base.startswith("jcode")                    (named-after-asset)
+            # If multiple matches: prefer exact "jcode", else first jcode-*
+            # entry. Skip non-files (directories, symlinks).
+            files = [m for m in tf.getmembers() if m.isfile()]
+            jcode_member = next(
+                (m for m in files if os.path.basename(m.name) == "jcode"),
+                None,
+            )
             if jcode_member is None:
+                jcode_member = next(
+                    (
+                        m for m in files
+                        if os.path.basename(m.name).startswith("jcode")
+                    ),
+                    None,
+                )
+            if jcode_member is None:
+                names = [m.name for m in files]
                 raise ValueError(
-                    f"no inner 'jcode' binary in archive {asset_name!r}"
+                    f"no jcode binary in archive {asset_name!r}; "
+                    f"contained: {names}"
                 )
             extracted = tf.extractfile(jcode_member)
             if extracted is None:
                 raise ValueError(
-                    f"could not extract 'jcode' from {asset_name!r}"
+                    f"could not extract {jcode_member.name!r} "
+                    f"from {asset_name!r}"
                 )
             with open(target_path, "wb") as out:
                 shutil.copyfileobj(extracted, out)

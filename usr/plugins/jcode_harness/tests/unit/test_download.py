@@ -212,8 +212,36 @@ def test_download_extracts_jcode_binary(monkeypatch, tmp_path):
     assert mode == 0o700
 
 
-def test_download_raises_when_inner_jcode_missing(monkeypatch, tmp_path):
-    # tarball has no "jcode" file
+def test_download_extracts_top_level_named_after_asset(monkeypatch, tmp_path):
+    """jcode v0.11.10 release tarballs contain a single executable file
+    named after the asset (e.g. ``jcode-linux-aarch64``) at the archive
+    ROOT — no enclosing directory, no inner ``jcode`` filename.
+
+    Regression: 'no inner jcode binary in archive jcode-linux-aarch64.tar.gz'
+    when the user clicked Execute from the plugin settings UI on Linux."""
+    payload = b"BINARY-CONTENT"
+    tarball = _make_tarball("jcode-linux-aarch64", payload)  # NO inner dir
+    digest = hashlib.sha256(tarball).hexdigest()
+    sha_text = f"{digest}  jcode-linux-aarch64.tar.gz\n"
+
+    monkeypatch.setattr(
+        download,
+        "_http_get",
+        lambda url: tarball if url.endswith(".tar.gz") else sha_text.encode(),
+    )
+    target = tmp_path / "bin" / "jcode"
+    download.download_and_verify(
+        "https://example.invalid/jcode-linux-aarch64.tar.gz",
+        "https://example.invalid/SHA256SUMS",
+        target,
+    )
+    assert target.read_bytes() == payload, (
+        "must accept top-level binary named after the asset"
+    )
+
+
+def test_download_raises_when_no_jcode_binary(monkeypatch, tmp_path):
+    """Tarball has no jcode-* entry at all — fail loud with file list."""
     tarball = _make_tarball("jcode-linux-x86_64/README.md", b"hi")
     digest = hashlib.sha256(tarball).hexdigest()
     sha_text = f"{digest}  jcode-linux-x86_64.tar.gz\n"
@@ -224,7 +252,7 @@ def test_download_raises_when_inner_jcode_missing(monkeypatch, tmp_path):
         lambda url: tarball if url.endswith(".tar.gz") else sha_text.encode(),
     )
     target = tmp_path / "jcode"
-    with pytest.raises(ValueError, match="no inner 'jcode' binary"):
+    with pytest.raises(ValueError, match="no jcode binary in archive"):
         download.download_and_verify(
             "https://example.invalid/jcode-linux-x86_64.tar.gz",
             "https://example.invalid/SHA256SUMS",
