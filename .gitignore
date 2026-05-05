@@ -63,3 +63,6 @@ agent_history.gif
 .claude/**
 
 /notebooks/**
+
+# jcode_harness plugin local config (may contain secrets)
+usr/plugins/jcode_harness/config.json
