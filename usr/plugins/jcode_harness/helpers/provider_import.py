@@ -163,14 +163,24 @@ def add_jcode_profile(
 
 
 def list_jcode_profiles(jcode_bin: str) -> list[dict]:
-    """List jcode provider profiles via ``provider list --json``."""
+    """List jcode provider profiles via ``provider list --json``.
+
+    jcode v0.11.x returns ``{"providers": [{"id": str, ...}, ...]}``; older
+    or future shapes may return a bare list. Normalise both to a list of
+    profile dicts. The canonical key on each profile is ``"id"``.
+    """
     result = subprocess.run(
         [jcode_bin, "provider", "list", "--json"],
         capture_output=True,
         text=True,
         check=True,
     )
-    return json.loads(result.stdout)
+    data = json.loads(result.stdout)
+    if isinstance(data, dict):
+        return list(data.get("providers", []))
+    if isinstance(data, list):
+        return data
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -209,10 +219,15 @@ def import_a0_providers(
         existing = list_jcode_profiles(jcode_bin)
     except (subprocess.CalledProcessError, OSError, json.JSONDecodeError):
         existing = []
+    # jcode profile shape uses "id" (verified against v0.11.10
+    # `provider list --json`); fall back to "name" for forward-compat.
+    def _profile_id(prof: dict) -> str:
+        return prof.get("id") or prof.get("name") or ""
+
     user_owned = {
-        p["name"]
+        _profile_id(p)
         for p in existing
-        if not p["name"].startswith(PLUGIN_PROFILE_PREFIX)
+        if _profile_id(p) and not _profile_id(p).startswith(PLUGIN_PROFILE_PREFIX)
     }
 
     imported: list[str] = []

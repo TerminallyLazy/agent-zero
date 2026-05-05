@@ -288,6 +288,67 @@ def test_list_jcode_profiles_returns_parsed_json(monkeypatch):
     assert list_jcode_profiles("/bin/jcode") == payload
 
 
+def test_list_jcode_profiles_unwraps_providers_envelope(monkeypatch):
+    """jcode v0.11.10 returns {"providers": [...]} not a bare list.
+    Regression: 'string indices must be integers, not str' caught when
+    iterating the envelope dict instead of the inner list."""
+    real_shape = {
+        "providers": [
+            {"id": "jcode", "display_name": "Jcode Subscription"},
+            {"id": "_a0_imported_acme"},
+        ],
+    }
+
+    def fake_run(argv, **kw):
+        return _ok_run(stdout=json.dumps(real_shape))
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    from usr.plugins.jcode_harness.helpers.provider_import import (
+        list_jcode_profiles,
+    )
+
+    profiles = list_jcode_profiles("/bin/jcode")
+    assert isinstance(profiles, list), "envelope must be unwrapped"
+    assert profiles == real_shape["providers"]
+
+
+def test_import_uses_id_field_not_name_for_collision_check(monkeypatch):
+    """Real jcode profile dicts use {"id": ...} not {"name": ...}.
+    Regression: import_a0_providers iterated profile dicts and indexed
+    `p["name"]`, but jcode v0.11.10 emits `id`. Result: KeyError or wrong
+    collision detection that lets _a0_imported_* names clash silently."""
+    monkeypatch.setattr(
+        "usr.plugins.jcode_harness.helpers.provider_import.list_jcode_profiles",
+        lambda _b: [
+            {"id": "userprof"},          # user-owned (no plugin prefix)
+            {"id": "_a0_imported_old"},  # plugin-owned, ignored for collision set
+        ],
+    )
+    monkeypatch.setattr(
+        "usr.plugins.jcode_harness.helpers.provider_import.add_jcode_profile",
+        lambda *a, **kw: {"ok": True},
+    )
+    from usr.plugins.jcode_harness.helpers.provider_import import (
+        import_a0_providers,
+    )
+
+    # `userprof` would clash; `acme` is fresh
+    providers = [
+        _provider("userprof"),
+        _provider("acme"),
+    ]
+    api_keys = {"userprof": "k1", "acme": "k2"}
+    result = import_a0_providers(
+        "/bin/jcode", providers=providers, api_keys=api_keys,
+    )
+    assert "userprof" in result["skipped"], (
+        "id-field collision must be detected"
+    )
+    assert "acme" in result["imported"], (
+        "non-colliding provider must import"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Task 6.3 — import_a0_providers
 # ---------------------------------------------------------------------------

@@ -28,13 +28,16 @@ def test_execute_runs_as_subprocess_from_foreign_cwd(tmp_path):
     (api/plugins.py:292). Without an explicit sys.path bootstrap, `usr.plugins.*`
     imports raise ModuleNotFoundError. This test locks in the bootstrap.
 
+    Use ``--cleanup`` mode so the test doesn't try to download a binary
+    over the network in environments where that would fail.
+
     Regression: 'ModuleNotFoundError: No module named usr' from user's plugin run.
     """
     # Use HOME=tmp_path so the script touches a sandbox, not real ~/.amplihack/.jcode
     env = dict(os.environ, HOME=str(tmp_path))
     # Run from /tmp (NOT the repo root) — this is what reproduced the failure.
     result = subprocess.run(
-        [sys.executable, str(_EXECUTE_PY)],
+        [sys.executable, str(_EXECUTE_PY), "--cleanup"],
         cwd="/tmp",
         env=env,
         capture_output=True,
@@ -46,6 +49,41 @@ def test_execute_runs_as_subprocess_from_foreign_cwd(tmp_path):
     )
     assert "No module named" not in result.stderr
     assert "No module named" not in result.stdout
+
+
+def test_execute_default_runs_setup_not_cleanup(tmp_path, monkeypatch):
+    """Default invocation (no args) is SETUP, not cleanup. Regression: previous
+    execute.py defaulted to cleanup, so users clicking [Execute] in plugin
+    settings just deleted state instead of installing the binary."""
+    from usr.plugins.jcode_harness import execute as execute_mod
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    setup_calls = []
+    cleanup_calls = []
+
+    def fake_run_setup(report=None):
+        setup_calls.append(1)
+        if report:
+            report("info", "stub setup")
+        return {
+            "ok": True, "binary_path": "/fake/jcode", "version": "v0.0.0",
+            "self_dev_available": False, "imported": [], "skipped": {},
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(hooks_mod, "run_setup", fake_run_setup)
+    monkeypatch.setattr(
+        "usr.plugins.jcode_harness.helpers.daemon.locate_jcode_binary",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        execute_mod, "cleanup", lambda **_: cleanup_calls.append(1) or 0,
+    )
+
+    rc = execute_mod.main([])  # NO args -> setup
+    assert rc == 0
+    assert setup_calls == [1], "default invocation must run setup"
+    assert cleanup_calls == [], "default invocation must NOT run cleanup"
 
 
 def _ensure_framework_notification_stubbed() -> None:
@@ -139,7 +177,7 @@ def test_cleanup_removes_amplihack_dir_only_by_default(
         lambda: None,
     )
 
-    rc = execute_mod.main(also_delete_user_data=False)
+    rc = execute_mod.main(["--cleanup"])
 
     assert rc == 0
     assert not runtime_layout["instance"].exists()
@@ -156,7 +194,7 @@ def test_cleanup_removes_user_data_when_flagged(
         lambda: None,
     )
 
-    rc = execute_mod.main(also_delete_user_data=True)
+    rc = execute_mod.main(["--cleanup", "--delete-user-data"])
 
     assert rc == 0
     assert not runtime_layout["instance"].exists()
@@ -188,7 +226,7 @@ def test_cleanup_calls_daemon_stop(
         _FakeSup,
     )
 
-    rc = execute_mod.main(also_delete_user_data=False)
+    rc = execute_mod.main(["--cleanup"])
 
     assert rc == 0
     assert stop_calls == [1]
@@ -217,7 +255,7 @@ def test_cleanup_handles_missing_amplihack(
         lambda: None,
     )
 
-    rc = execute_mod.main(also_delete_user_data=False)
+    rc = execute_mod.main(["--cleanup"])
     assert rc == 0
 
 
@@ -245,7 +283,7 @@ def test_cleanup_handles_missing_binary(
         _FakeSup,
     )
 
-    rc = execute_mod.main(also_delete_user_data=False)
+    rc = execute_mod.main(["--cleanup"])
 
     assert rc == 0
     assert sentinel == []  # supervisor never constructed

@@ -1,18 +1,23 @@
 """Framework runtime hooks for jcode_harness plugin.
 
 Per AGENTS.plugins.md §2, A0's plugin manager calls ``install()`` after the
-plugin is copied into place and ``pre_update()`` before plugin code is
-replaced. Both may be sync or async; async is awaited. Cleanup lives in
-``execute.py`` (Spec §5.2) so it can be re-run after plugin removal.
+plugin is copied into place via the Plugin Hub. Note: when the plugin is
+installed manually (e.g., ``git clone`` into ``usr/plugins/`` or developer
+checkout), ``install()`` does NOT fire — A0 only calls it from
+``plugins/_plugin_installer/helpers/install.py``. For that case, the user
+runs ``execute.py`` from the Plugins UI to set up the binary + providers.
 
-The order in :func:`install` matters:
+Both ``install()`` and ``execute.py`` share the :func:`run_setup` core so
+the binary download, smoke test, and provider import always run identical
+logic. Cleanup is also exposed through ``execute.py`` via ``--cleanup``.
+
+Setup order in :func:`run_setup` matters:
 
 1. Resolve binary (user-supplied path → existing PATH → download release).
 2. Smoke-test ``--version``.
 3. Probe ``cargo --version`` to set ``self_dev_available`` for telemetry.
 4. Run the provider importer once (idempotent for plugin-prefixed profiles).
 5. Persist install metadata under ``<amplihack>/jcode/install.json`` (0600).
-6. Surface every step via the A0 notification helper.
 
 Spike 0.6 confirmed ``jcode serve`` refuses to start without a configured
 provider, so this hook intentionally does NOT spawn the daemon — first
@@ -86,58 +91,87 @@ def _get_plugin_config() -> dict:
         return {}
 
 
-async def install() -> None:
-    """Set up the jcode binary + provider profiles. Called by A0 plugin mgr."""
-    notify.info("Setting up jcode harness…")
+def run_setup(report=None) -> dict:
+    """Resolve binary + import providers + persist meta. Returns a status dict.
+
+    ``report`` is an optional callable taking ``(level, message)`` where
+    level is one of ``"info" | "success" | "warning" | "error"``. If omitted,
+    the function runs silently — useful for tests.
+
+    Idempotent. Safe to re-run after a partial failure.
+
+    Returns ``{"ok": bool, "binary_path": str, "version": str,
+    "self_dev_available": bool, "imported": list[str], "skipped": dict,
+    "warnings": list[str]}``.
+    """
+    def _say(level: str, msg: str) -> None:
+        if report is not None:
+            report(level, msg)
+
+    warnings: list[str] = []
+    _say("info", "Setting up jcode harness…")
 
     if _is_overlay_fs(Path.home()):
-        notify.warning(
+        warning = (
             "Home directory is on an ephemeral container layer. "
             "Mount ~/.jcode and ~/.amplihack as volumes to persist state."
         )
+        warnings.append(warning)
+        _say("warning", warning)
 
     # 0. User-supplied binary path takes priority (offline / air-gapped).
     cfg = _get_plugin_config()
     user_path = (cfg.get("binary") or {}).get("path", "").strip()
     if user_path and Path(user_path).is_file() and os.access(user_path, os.X_OK):
         binary_path = user_path
-        notify.success(f"Using user-supplied jcode at {binary_path}")
+        _say("success", f"Using user-supplied jcode at {binary_path}")
     elif (existing := locate_jcode_binary()):
         # 1. PATH detect.
         binary_path = existing
-        notify.success(f"Found existing jcode at {existing}")
+        _say("success", f"Found existing jcode at {existing}")
     else:
         # 2. Download release matching host arch.
-        notify.info("Downloading jcode binary…")
+        _say("info", "Downloading jcode binary…")
         release = fetch_latest_release_metadata()
         target = detect_release_asset_target()
         asset_url, sha_url = pick_asset(release, target)
         download_and_verify(asset_url, sha_url, INSTALL_TARGET)
         binary_path = str(INSTALL_TARGET)
-        notify.success(
-            f"jcode {release.get('tag_name', '?')} installed at {binary_path}"
+        _say(
+            "success",
+            f"jcode {release.get('tag_name', '?')} installed at {binary_path}",
         )
 
     # 3. Smoke test.
-    out = subprocess.check_output(
+    version_line = subprocess.check_output(
         [binary_path, "--version"], text=True, timeout=10
     ).strip()
-    notify.info(f"Smoke test: {out}")
+    _say("info", f"Smoke test: {version_line}")
 
     # 4. cargo probe — operators with ``cargo`` can run self-dev workflows.
     cargo_present = shutil.which("cargo") is not None
+    if cargo_present:
+        _say("info", "Rust toolchain detected — self-dev tool available")
+    else:
+        _say("info", "No Rust toolchain — self-dev tool will be hidden")
 
     # 5. Provider import (idempotent for plugin-prefixed profiles).
+    imported: list[str] = []
+    skipped: dict[str, str] = {}
     try:
         result = import_a0_providers(binary_path)
-        if result.get("imported"):
-            notify.success(
-                f"Imported {len(result['imported'])} A0 providers as jcode profiles"
+        imported = result.get("imported") or []
+        skipped = result.get("skipped") or {}
+        if imported:
+            _say(
+                "success",
+                f"Imported {len(imported)} A0 providers as jcode profiles",
             )
-        for pid, reason in (result.get("skipped") or {}).items():
-            notify.warning(f"Skipped provider '{pid}': {reason}")
+        for pid, reason in skipped.items():
+            _say("warning", f"Skipped provider '{pid}': {reason}")
     except Exception as e:
-        notify.warning(f"Provider import failed: {e}")
+        warnings.append(f"Provider import failed: {e}")
+        _say("warning", f"Provider import failed: {e}")
 
     # 6. Persist install meta.
     meta_path = _install_meta_path()
@@ -146,7 +180,7 @@ async def install() -> None:
         json.dumps(
             {
                 "binary_path": binary_path,
-                "version": out,
+                "version": version_line,
                 "installed_at": int(time.time()),
                 "self_dev_available": cargo_present,
             }
@@ -154,7 +188,28 @@ async def install() -> None:
     )
     meta_path.chmod(0o600)
 
-    notify.success("jcode_harness ready")
+    _say("success", "jcode_harness ready")
+    return {
+        "ok": True,
+        "binary_path": binary_path,
+        "version": version_line,
+        "self_dev_available": cargo_present,
+        "imported": imported,
+        "skipped": skipped,
+        "warnings": warnings,
+    }
+
+
+async def install() -> None:
+    """Plugin Hub install hook. Surfaces every step as A0 notifications."""
+    def _notify(level: str, msg: str) -> None:
+        getattr(notify, level)(msg)
+
+    try:
+        run_setup(report=_notify)
+    except Exception as e:
+        notify.error(f"jcode setup failed: {e}")
+        raise
 
 
 async def pre_update() -> None:

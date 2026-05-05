@@ -65,7 +65,7 @@ def test_default_cleanup_preserves_jcode_user_data(
     """`amplihack uninstall` (no flag) must NEVER touch ``~/.jcode/``."""
     from usr.plugins.jcode_harness.execute import main
 
-    rc = main(also_delete_user_data=False)
+    rc = main(["--cleanup"])
     assert rc == 0
 
     assert not fake_home["instance"].exists(), (
@@ -85,7 +85,7 @@ def test_delete_user_data_flag_removes_jcode_dir(
     """Only the explicit ``--delete-user-data`` opt-in removes ``~/.jcode/``."""
     from usr.plugins.jcode_harness.execute import main
 
-    rc = main(also_delete_user_data=True)
+    rc = main(["--cleanup", "--delete-user-data"])
     assert rc == 0
 
     assert not fake_home["instance"].exists()
@@ -100,5 +100,5 @@ def test_cleanup_is_idempotent_when_dirs_already_gone(
     """Re-running cleanup after a successful run must still succeed."""
     from usr.plugins.jcode_harness.execute import main
 
-    assert main(also_delete_user_data=False) == 0
-    assert main(also_delete_user_data=False) == 0  # second run, dirs gone
+    assert main(["--cleanup"]) == 0
+    assert main(["--cleanup"]) == 0  # second run, dirs gone
