@@ -28,8 +28,9 @@ Rationale:
   reimplementing the agent loop, memory pipeline, embedding inference, and provider drivers.
 - jcode already ships a server/client split (`jcode serve` + `jcode connect`, see
   `jcode/docs/SERVER_ARCHITECTURE.md`). The plugin attaches as just another client.
-- The IPC wire format is line-delimited JSON (`jcode/src/protocol.rs:1412-1421`) — trivially
-  consumable from Python with `asyncio.open_unix_connection`. No SDK or Rust FFI required.
+- The IPC wire format is line-delimited JSON (`jcode/src/protocol.rs:1412-1421`) — consumable
+  from Python with `asyncio.open_unix_connection` and a hand-written dataclass codec mirroring
+  the Rust `Request`/`ServerEvent` enums. No SDK or Rust FFI required.
 
 Two interaction modes are designed; only one ships in v1:
 
@@ -217,8 +218,9 @@ Functions called by A0 framework runtime (`/opt/venv-a0`) per AGENTS.plugins.md 
 - `install()` — runs after plugin copy. Detect existing `jcode` on PATH; else fetch latest
   release asset matching host architecture (see §4.1.1) from
   `api.github.com/repos/1jehuang/jcode/releases/latest`, extract to `~/.jcode/builds/stable/jcode`,
-  verify SHA-256 against the release's `SHA256SUMS` file (existence verified — jcode CI publishes
-  it), smoke-test with `jcode --version`. Probe `cargo --version` to set `self_dev_available`.
+  verify SHA-256 against the release's `SHA256SUMS` file (verified at `.github/workflows/release.yml`
+  in the jcode repo — CI generates and uploads SHA256SUMS per release), smoke-test with
+  `jcode --version`. Probe `cargo --version` to set `self_dev_available`.
   Run provider importer once. All progress reported via A0 notification API
   (`AgentNotification.success/error/info`).
 - `pre_update()` — graceful daemon stop before plugin code is replaced (see §5.3 stop method).
@@ -350,7 +352,7 @@ into A0's progress UI.
 | `jcode_grep` | agentgrep semantic+structure-aware grep | session-less RPC: short-lived subscribe |
 | `jcode_memory` | `action: remember/recall/search/forget/tag/link` | dispatches `memory_manage` inside ephemeral session |
 | `jcode_skill` | `action: load/list/reload/read` | dispatches `skill_manage` |
-| `jcode_resume` | List + resume cross-harness sessions | `Request::ListSessions` + `Subscribe { target_session_id }` |
+| `jcode_resume` | List + resume cross-harness sessions | subprocess `jcode session list --json` (or fallback; see §6.3 + §11 spike) + `Subscribe { target_session_id }` |
 | `jcode_swarm_msg` | DM / broadcast / channel-send | `CommMessage`, `CommShare`, `CommRead` |
 | `jcode_self_dev` | Trigger self-modification cycle (gated) | dispatches selfdev session |
 
@@ -464,7 +466,9 @@ the framework change.
 Soft-interrupt mapping (works in v1 for embedded sessions and v2 for full-takeover):
 
 - A0 cancel button (single press) → `Request::SoftInterrupt { content, urgent: false }`, jcode
-  injects message at safe point D.
+  injects message at safe injection point **D** (after all tools complete in current batch,
+  before next API call — the default safe site per `jcode/docs/SOFT_INTERRUPT.md` §"Injection
+  Points").
 - A0 cancel button (double press / hard stop) → `Request::Cancel`, jcode interrupts cleanly.
 
 Memory and skill auto-injection are native to embedded sessions: jcode's memory_agent computes
@@ -606,8 +610,9 @@ unloads. Recovery uses `client_instance_id` resubscribe; the current turn may em
 
 ### 7.9 Cancellation discipline
 
-- Single-stop with text: `Request::SoftInterrupt`, injected at point D. No cancellation. User's
-  redirect lands at next safe boundary.
+- Single-stop with text: `Request::SoftInterrupt`, injected at safe point **D** (post-tool-batch,
+  pre-next-API-call; see `jcode/docs/SOFT_INTERRUPT.md`). No cancellation. User's redirect lands
+  at the next safe boundary.
 - Double-stop: hard `Request::Cancel`. In-flight tools allowed to finalize. `Interrupted` event.
 - Network drop during turn: treated as hard cancel, last received state persisted.
 
@@ -634,17 +639,26 @@ Plugin must never write keys to plugin config files, toast messages, log lines, 
 responses; never use `--api-key VALUE` argument form (visible in `ps`); add plugin `config.json`
 to `.gitignore` as part of install.
 
-### 8.3 Cross-harness import opt-in
+### 8.3 Cross-harness import opt-in (v2 design — deferred)
 
-Off by default. When user enables via WebUI:
+**Cross-harness credential import is deferred to v2** per §3.2; the protocol requests
+`Request::ImportExternalCreds` and `Request::ForgetExternalCreds` referenced in earlier drafts
+do not exist in the jcode protocol. v1 only reads credentials the user explicitly creates via
+`jcode login` flows from the plugin UI.
 
-1. Modal lists exact files that would be read with size and last-modified timestamps.
-2. User clicks "Allow" per source (granular, not all-or-nothing).
-3. Plugin writes consent record to `~/.amplihack/jcode/import_consent.json`.
-4. jcode IPC `Request::ImportExternalCreds { sources: [...] }` invoked.
-5. On future re-import, consent record is consulted; if file path or hash differs, re-prompt.
+The consent model below is reserved for v2 implementation:
 
-Revocation: settings page button deletes consent record plus `Request::ForgetExternalCreds`.
+1. Off by default in `default_config.yaml` (`features.cross_harness_import: false`).
+2. When enabled via WebUI: modal lists exact files that would be read with size and last-modified
+   timestamps.
+3. User clicks "Allow" per source (granular, not all-or-nothing).
+4. Plugin writes consent record to `~/.amplihack/jcode/<instance-id>/import_consent.json`.
+5. v2 implementation either uses a new jcode protocol request, a `jcode import` CLI subcommand,
+   or a direct subprocess against `src/import.rs`-equivalent bindings.
+6. On future re-import, consent record is consulted; if file path or hash differs, re-prompt.
+
+Revocation (v2): settings page button deletes consent record and triggers credential purge via
+the chosen v2 mechanism.
 
 ### 8.4 Socket and file permissions
 
@@ -716,9 +730,19 @@ user-managed; plugin only smoke-tests `--version`.
 
 ### 8.7 Plugin removal hygiene
 
-`uninstall()` kills daemon, removes `~/.amplihack/jcode/`, leaves `~/.jcode/` user data alone
-unless user opts in via uninstall confirmation modal. Does not touch `~/.cargo/`, `~/.claude/`,
-`~/.codex/`. After uninstall, user's external `jcode` CLI keeps working.
+AGENTS.plugins.md §2 only guarantees `install()` and `pre_update()` hooks. Cleanup runs from a
+manual `execute.py`-driven path (see §5.2 "Plugin removal") rather than an `uninstall()` hook.
+
+The `execute.py`-driven cleanup:
+
+- Stops the daemon via `DaemonSupervisor.stop()` (SIGTERM, SIGKILL fallback).
+- Removes `~/.amplihack/jcode/<instance-id>/`.
+- Leaves `~/.jcode/` user data alone unless the user opts in via the cleanup confirmation modal.
+- Does not touch `~/.cargo/`, `~/.claude/`, `~/.codex/`.
+
+If the user removes the plugin via A0's plugin manager **without** running cleanup, the daemon
+process orphans cleanly when its socket FD closes; `~/.amplihack/jcode/` remains on disk. After
+cleanup, the user's external `jcode` CLI keeps working with `~/.jcode/` unchanged.
 
 ### 8.8 Threat model summary
 
@@ -730,7 +754,7 @@ unless user opts in via uninstall confirmation modal. Does not touch `~/.cargo/`
 | Local privilege escalation via socket | 0600 perms, PID ownership check |
 | Cross-A0-instance leakage | Per-A0-instance daemon (per Q5b) — isolated socket and logs |
 | Self-dev rebuilds malicious binary | Gated behind cargo detection plus settings opt-in; rollback artifacts in `~/.jcode/builds/versions/`; original `stable` preserved |
-| WebSocket gateway accidentally exposed | `--no-gateway` at spawn, explicit setting required to enable |
+| WebSocket gateway accidentally exposed | `JCODE_CONFIG` overlay sets `[gateway] enabled = false`; explicit setting required to enable |
 
 ### 8.9 Compliance lockdown profile
 
@@ -779,9 +803,13 @@ change, plugin update required before pin bump.
   `~/.amplihack/jcode/` but leaves `~/.jcode/`.
 - Embedded session: `jcode_session("hello")` streams text, returns final message, history
   captures result via `hist_add_tool_result`, streaming progress visible, cancel during stream
-  stops generation cleanly.
-- Full-takeover: profile triggers `monologue_start` short-circuit, A0 LLM never called,
-  `MemoryInjected` events surface in side panel, multi-turn persists same session_id.
+  stops generation cleanly. `MemoryInjected` events surface in side panel during multi-turn
+  embedded conversations.
+- Prompt-routing profile: with `jcode_coder` selected, A0's model consistently chooses
+  `jcode_session` for non-trivial coding requests (verified by replay of canned prompts and
+  inspection of selected tool calls).
+- (v2) Full-takeover: profile triggers `monologue_start` short-circuit, A0 LLM never called,
+  multi-turn persists same session_id. **Out of scope for v1; gated on upstream A0 PR.**
 - Cross-harness resume: lists sessions from claude-code, codex, opencode, pi; resume restores
   history; `provider_session_id` round-trips.
 - Memory + skills: `jcode_memory` round-trips remember/recall/search; persists across daemon
@@ -817,7 +845,10 @@ If plugin adds >10% overhead vs raw jcode: regression, optimize before ship.
 - Embedded session mode demonstrated. (True full-takeover is v2.)
 - Prompt-routing profile `jcode_coder` demonstrated to consistently route coding work through
   `jcode_session`.
-- Cross-harness resume works for at least Claude Code, Codex, OpenCode, pi.
+- Cross-harness resume works for at least Claude Code, Codex, OpenCode, pi. Cache-warmth on
+  resume is **downgrade-tolerant**: resume is acceptance-passing even when the upstream
+  provider's KV cache has been evicted (jcode pays a one-time cache-creation cost; subsequent
+  turns hit warm cache).
 - Memory graph + skills function (auto + manual).
 - Swarm messaging works between two A0 instances in same repo.
 - Self-dev gracefully degrades when Rust absent.
@@ -857,7 +888,7 @@ If plugin adds >10% overhead vs raw jcode: regression, optimize before ship.
 | Risk | Spike |
 |---|---|
 | jcode `Reloading { new_socket }` event field name and reconnect semantics | 0.5-day: trigger self-update mid-stream, observe variant + verify field is `new_socket` |
-| `jcode session list --json` output schema for cross-harness resume | 0.5-day: invoke against repo with seeded Claude Code / Codex / OpenCode / pi sessions |
+| `jcode session list --json` subcommand existence and output schema | 0.5-day: confirm subcommand exists in `src/cli/args.rs`; if absent, identify fallback (e.g., `jcode resume --json` no-id form, or direct read of `~/.jcode/sessions/` index) |
 | `provider_session_id` round-trip actually keeps Claude/OpenAI cache warm | 1-day: instrument before/after, measure cache_read_input_tokens |
 | `jcode provider add --json` exit-code/error-shape coverage | 0.5-day: enumerate failure modes (collision, bad URL, missing model, network error) |
 | WebUI `x-extension` breakpoint fit for jcode `SidePanel*` events | 0.5-day: grep `x-extension`, prototype panel render |
@@ -906,5 +937,10 @@ Total v1 spikes: ~3.5 days. Findings fold into the implementation plan.
   `--socket` placement on subcommand), `Request::Shutdown`/`ListSessions`/`ImportExternalCreds`
   fictional, `allow_takeover` field name wrong, `provider add` missing required `--model`,
   Python import discipline missing, "A0 instance" undefined, Windows ACL semantics not
-  addressed, plugin reload UUID loss not addressed, swarm scope contradiction. **All
-  critical and major issues addressed in this revision.**
+  addressed, plugin reload UUID loss not addressed, swarm scope contradiction.
+- **Iter 2 (2026-05-05):** All critical and major issues addressed. Reviewer flagged consistency
+  drift in untouched sections (§5.6 tool table, §8.3 import flow, §8.7 uninstall naming, §8.8
+  threat-table mitigation, §9.3 full-takeover test) plus need for explicit `point D` definition
+  and a spike on `jcode session list --json` subcommand existence.
+- **Iter 3 (2026-05-05):** Consistency drift swept. Spike list expanded. Cache-warmth claim
+  downgraded to tolerant. SHA256SUMS source linked. Ready for user review.
