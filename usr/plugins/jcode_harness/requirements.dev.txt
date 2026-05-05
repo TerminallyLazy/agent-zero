@@ -1,0 +1,14 @@
+# Plugin-local test-time dependencies for jcode_harness.
+#
+# The repo's top-level requirements.dev.txt is owned by the A0 framework; we
+# keep our test deps here so plugin work cannot drift the framework's pin set.
+# CI invokes:
+#   pip install -r requirements.dev.txt -r usr/plugins/jcode_harness/requirements.dev.txt
+playwright>=1.42
+psutil>=5.9
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-benchmark>=4.0
+pytest-mock>=3.12
+PyYAML>=6.0
+tomli_w>=1.0

@@ -122,6 +122,19 @@ for the full set. Common entries:
 - Docker / volume mount caveats
 - Windows v1 (named-pipe stub — use WSL2)
 
+## Development
+
+Plugin test-time dependencies live in this directory's
+[`requirements.dev.txt`](./requirements.dev.txt) — kept separate from the A0
+framework's top-level `requirements.dev.txt` so plugin work cannot drift the
+framework pin set. Install both before running the suite:
+
+```bash
+pip install -r requirements.dev.txt \
+            -r usr/plugins/jcode_harness/requirements.dev.txt
+pytest usr/plugins/jcode_harness/tests/
+```
+
 ## References
 
 - Spec: `docs/superpowers/specs/2026-05-05-jcode-harness-plugin-design.md`
