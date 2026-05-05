@@ -1,50 +1,309 @@
-<div x-data>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>jcode Coding Harness</title>
   <script type="module">
     import { store } from "/plugins/jcode_harness/webui/main.js";
   </script>
-  <h2>jcode Coding Harness</h2>
-
-  <section class="jcode-daemon-status">
-    <h3>Daemon</h3>
-    <div x-show="$store.jcodeMain.daemon.running" class="jcode-daemon-running">
-      Running (PID <span x-text="$store.jcodeMain.daemon.pid"></span>)
-      &mdash; uptime <span x-text="Math.round($store.jcodeMain.daemon.uptime_s || 0)"></span>s
+</head>
+<body>
+  <div x-data class="jcode-main">
+    <div class="section-description">
+      Memory graph, skills, swarm coordination, agentgrep, cross-harness session
+      resume, and 28 native coding tools. Daemon is lazy-spawned on first use.
     </div>
-    <div x-show="!$store.jcodeMain.daemon.running" class="jcode-daemon-stopped">
-      Stopped (lazy-spawned on first tool use)
-    </div>
-    <button type="button" @click="$store.jcodeMain.refresh()">Refresh</button>
-  </section>
 
-  <section class="jcode-sessions">
-    <h3>Resumable Sessions</h3>
-    <button type="button" @click="$store.jcodeMain.refreshSessions()">Refresh List</button>
-    <ul class="jcode-session-list">
+    <div class="section-title">Daemon</div>
+
+    <div class="jcode-daemon-row">
+      <div class="jcode-daemon-state">
+        <template x-if="$store.jcodeMain.daemon.running">
+          <span class="jcode-status-pill jcode-status-running">
+            <span class="material-symbols-outlined">play_circle</span>
+            <span>
+              Running &middot; PID <span x-text="$store.jcodeMain.daemon.pid"></span>
+              &middot; uptime <span x-text="Math.round($store.jcodeMain.daemon.uptime_s || 0)"></span>s
+            </span>
+          </span>
+        </template>
+        <template x-if="!$store.jcodeMain.daemon.running">
+          <span class="jcode-status-pill jcode-status-stopped">
+            <span class="material-symbols-outlined">stop_circle</span>
+            <span>Stopped &middot; lazy-spawned on first tool use</span>
+          </span>
+        </template>
+      </div>
+      <button type="button" class="button" @click="$store.jcodeMain.refresh()">
+        <span class="icon material-symbols-outlined">refresh</span>
+        Refresh
+      </button>
+    </div>
+
+    <div class="section-title">Resumable sessions</div>
+    <div class="section-description">
+      Pick up where you left off. Reads journals from
+      <code>~/.jcode/sessions/</code>, including imported sessions from
+      Claude Code, Codex, OpenCode, and pi.
+    </div>
+
+    <div class="jcode-toolbar">
+      <button type="button" class="button" @click="$store.jcodeMain.refreshSessions()">
+        <span class="icon material-symbols-outlined">refresh</span>
+        Refresh list
+      </button>
+      <span class="jcode-toolbar-count"
+            x-show="$store.jcodeMain.sessions.length > 0"
+            x-text="`${$store.jcodeMain.sessions.length} session${$store.jcodeMain.sessions.length === 1 ? '' : 's'}`"></span>
+    </div>
+
+    <div class="jcode-session-list">
       <template x-for="s in $store.jcodeMain.sessions" :key="s.id">
-        <li>
-          <span class="jcode-provider-badge" x-text="s.provider_key"></span>
-          <span class="jcode-session-title" x-text="s.title || '(untitled)'"></span>
-          <span class="jcode-session-id" x-text="s.id"></span>
-          <button type="button" @click="$store.jcodeMain.resumeSession(s.id)">Resume</button>
-        </li>
+        <div class="jcode-session-card">
+          <div class="jcode-session-meta">
+            <span class="jcode-provider-badge"
+                  :class="`jcode-provider-${s.provider_key}`"
+                  x-text="s.provider_key"></span>
+            <div class="jcode-session-copy">
+              <div class="jcode-session-title" x-text="s.title || '(untitled)'"></div>
+              <div class="jcode-session-id" x-text="s.id"></div>
+            </div>
+          </div>
+          <button type="button"
+                  class="button"
+                  @click="$store.jcodeMain.resumeSession(s.id)">
+            <span class="icon material-symbols-outlined">history</span>
+            Resume
+          </button>
+        </div>
       </template>
       <template x-if="$store.jcodeMain.sessions.length === 0">
-        <li class="jcode-empty">No resumable sessions found.</li>
+        <div class="jcode-empty">No resumable sessions found.</div>
       </template>
-    </ul>
-  </section>
+    </div>
 
-  <section class="jcode-providers">
-    <h3>Providers</h3>
-    <p>Log in to a provider so jcode can serve. OAuth flows open in a new tab.</p>
-    <button type="button" @click="$store.jcodeMain.oauthLogin('claude')">Login with Claude</button>
-    <button type="button" @click="$store.jcodeMain.oauthLogin('openai')">Login with OpenAI</button>
-    <button type="button" @click="$store.jcodeMain.oauthLogin('gemini')">Login with Gemini</button>
-    <button type="button" @click="$store.jcodeMain.oauthLogin('copilot')">Login with Copilot</button>
-    <p>
-      <button type="button" class="jcode-danger" @click="$store.jcodeMain.purgeImported()">
-        Purge plugin-imported provider profiles
+    <div class="section-title">Providers</div>
+    <div class="section-description">
+      Log in to a provider so jcode can serve. OAuth flows open in a new tab.
+    </div>
+
+    <div class="jcode-provider-grid">
+      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('claude')">
+        <span class="icon material-symbols-outlined">key</span>
+        Login with Claude
       </button>
-    </p>
-  </section>
-</div>
+      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('openai')">
+        <span class="icon material-symbols-outlined">key</span>
+        Login with OpenAI
+      </button>
+      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('gemini')">
+        <span class="icon material-symbols-outlined">key</span>
+        Login with Gemini
+      </button>
+      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('copilot')">
+        <span class="icon material-symbols-outlined">key</span>
+        Login with Copilot
+      </button>
+    </div>
+
+    <div class="jcode-danger-zone">
+      <div class="jcode-danger-copy">
+        <div class="jcode-danger-title">Purge imported provider profiles</div>
+        <div class="jcode-danger-description">
+          Removes all <code>_a0_imported_*</code> profiles from
+          <code>~/.jcode/config.toml</code>. User-owned profiles untouched.
+        </div>
+      </div>
+      <button type="button" class="button cancel" @click="$store.jcodeMain.purgeImported()">
+        <span class="icon material-symbols-outlined">delete_sweep</span>
+        Purge
+      </button>
+    </div>
+  </div>
+
+  <style>
+    .jcode-main {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .jcode-daemon-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.75rem;
+      background: var(--color-bg-primary);
+      margin-top: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .jcode-daemon-state {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .jcode-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 999px;
+      font-size: var(--font-size-small);
+      border: 1px solid var(--color-border);
+    }
+
+    .jcode-status-pill .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    .jcode-status-running {
+      color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+      background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg-primary));
+    }
+
+    .jcode-status-stopped {
+      color: var(--color-text-secondary);
+      background: var(--color-bg-primary);
+    }
+
+    .jcode-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.25rem;
+    }
+
+    .jcode-toolbar-count {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-small);
+      font-weight: 600;
+    }
+
+    .jcode-session-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .jcode-session-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.75rem;
+      background: var(--color-bg-primary);
+    }
+
+    .jcode-session-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .jcode-provider-badge {
+      flex: 0 0 auto;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: var(--font-size-small);
+      font-weight: 600;
+      text-transform: lowercase;
+      border: 1px solid var(--color-border);
+      color: var(--color-text-secondary);
+      background: color-mix(in srgb, var(--color-text) 6%, transparent);
+    }
+
+    .jcode-provider-badge.jcode-provider-claude-code,
+    .jcode-provider-badge.jcode-provider-claude {
+      color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+    }
+
+    .jcode-session-copy {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .jcode-session-title {
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .jcode-session-id {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-small);
+      font-family: var(--font-family-mono, monospace);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .jcode-empty {
+      padding: 1rem;
+      border: 1px dashed var(--color-border);
+      border-radius: 0.75rem;
+      color: var(--color-text-secondary);
+      text-align: center;
+    }
+
+    .jcode-provider-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .jcode-provider-grid .button {
+      justify-content: flex-start;
+    }
+
+    .jcode-danger-zone {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.75rem 0.9rem;
+      margin-top: 0.5rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.75rem;
+      background: var(--color-bg-primary);
+    }
+
+    .jcode-danger-copy {
+      flex: 1 1 18rem;
+      min-width: 0;
+    }
+
+    .jcode-danger-title {
+      font-weight: 600;
+    }
+
+    .jcode-danger-description {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-small);
+      margin-top: 0.2rem;
+    }
+
+    code {
+      font-family: var(--font-family-mono, monospace);
+      font-size: 0.92em;
+      color: var(--color-text-secondary);
+    }
+  </style>
+</body>
+</html>
