@@ -45,6 +45,10 @@ class JcodeClient:
         self._socket_path: str | None = None
         self._subscribed: bool = False
         self._id_counter: int = 0
+        # Reconnect state — populated on first subscribe(); _reconnect() replays
+        # the same args after EOF or after a Reloading event.
+        self._last_subscribe: tuple[str, str | None, str, bool] | None = None
+        self._reconnect_max_delay: float = 30.0
 
     async def connect(self, socket_path: str) -> None:
         """Open a Unix-socket connection to ``socket_path``.
@@ -97,6 +101,14 @@ class JcodeClient:
         await self._send(req)
         ev = await self._recv_until(lambda e: e.type == "session")
         self._subscribed = True
+        # Record args so _reconnect() can replay subscription verbatim after
+        # EOF or after following a Reloading event to a new socket path.
+        self._last_subscribe = (
+            working_dir,
+            target_session_id,
+            client_instance_id,
+            allow_session_takeover,
+        )
         return ev  # type: ignore[return-value]
 
     # ------------------------------------------------------------------
@@ -178,6 +190,64 @@ class JcodeClient:
         """Request the full session history snapshot."""
         await self._send(GetHistory(id=self._next_id()))
 
+    async def _reconnect(self) -> None:
+        """Reconnect to ``self._socket_path`` with exponential backoff and
+        replay the last Subscribe args. Called on EOF or after a Reloading
+        event.
+
+        Backoff schedule: 1s → 2s → 4s … capped at ``self._reconnect_max_delay``
+        (default 30s; tests may override). Loop continues until the connect +
+        subscribe pair both succeed; callers cannot opt out — once a client has
+        subscribed, the harness owns recovery.
+        """
+        if self._socket_path is None or self._last_subscribe is None:
+            raise ConnectionError("cannot reconnect: never subscribed")
+        delay = 1.0
+        while True:
+            try:
+                await self.connect(self._socket_path)
+                wd, target_sid, cid, allow = self._last_subscribe
+                await self.subscribe(wd, target_sid, cid, allow)
+                return
+            except (ConnectionRefusedError, FileNotFoundError, ConnectionError, OSError):
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, self._reconnect_max_delay)
+
+    def _extract_reloading_socket(self, ev) -> str | None:
+        """Defensive lookup for the new socket path on a Reloading event.
+
+        The exact field name is unverified (Spike 0.1 deferred); we try
+        ``new_socket`` then ``socket`` on the dataclass, then fall back to the
+        ``raw`` dict on :class:`UnknownEvent`-style payloads. ``None`` means
+        the caller should reuse the current socket path.
+        """
+        for attr in ("new_socket", "socket"):
+            v = getattr(ev, attr, None)
+            if isinstance(v, str) and v:
+                return v
+        raw = getattr(ev, "raw", None)
+        if isinstance(raw, dict):
+            for k in ("new_socket", "socket"):
+                v = raw.get(k)
+                if isinstance(v, str) and v:
+                    return v
+        return None
+
+    async def _follow_reloading(self, ev) -> bool:
+        """If ``ev`` is a Reloading event, switch socket and resubscribe.
+
+        Returns ``True`` if the reload was followed (caller must NOT yield this
+        event to its consumer). ``False`` means it was not a reloading event.
+        """
+        if ev.type != "reloading":
+            return False
+        new_path = self._extract_reloading_socket(ev) or self._socket_path
+        await self.close()
+        await asyncio.sleep(0.1)
+        self._socket_path = new_path
+        await self._reconnect()
+        return True
+
     async def events(self) -> AsyncIterator[ServerEvent]:
         """Yield decoded ServerEvent dataclasses until the daemon closes.
 
@@ -185,14 +255,29 @@ class JcodeClient:
         through to :class:`UnknownEvent` (handled inside :func:`decode_event`).
         Lines that fail JSON parsing are logged to stderr and skipped so a
         single corrupt frame can't kill the event loop.
+
+        On socket EOF mid-iteration we transparently reconnect (exponential
+        backoff, last-Subscribe replay) and continue yielding. On a Reloading
+        event we follow the new socket path, resubscribe, and resume — the
+        Reloading event itself is consumed and never yielded.
         """
         assert self._reader is not None, "connect() must be called before events()"
         while True:
-            line = await self._reader.readline()
-            if not line:
-                return
             try:
-                yield decode_event(line)
+                line = await self._reader.readline()
+            except ConnectionError:
+                # Reader raised mid-iteration — reconnect and resume.
+                await self._reconnect()
+                continue
+            if not line:
+                # EOF. If we have subscribe state, treat as a transient
+                # disconnect and reconnect; otherwise we're truly done.
+                if self._last_subscribe is None or self._socket_path is None:
+                    return
+                await self._reconnect()
+                continue
+            try:
+                ev = decode_event(line)
             except json.JSONDecodeError:
                 print(
                     f"[jcode_harness.client] malformed JSON line skipped: "
@@ -200,6 +285,10 @@ class JcodeClient:
                     file=sys.stderr,
                 )
                 continue
+            # Reloading is handled internally — never surfaced to the consumer.
+            if await self._follow_reloading(ev):
+                continue
+            yield ev
 
     async def close(self) -> None:
         """Idempotent close — safe to call multiple times."""

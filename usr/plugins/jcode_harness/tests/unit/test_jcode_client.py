@@ -524,3 +524,358 @@ async def test_events_handles_done_event():
     assert len(seen) == 1
     assert isinstance(seen[0], Done)
     assert seen[0].id == 99
+
+
+# ---------------------------------------------------------------------------
+# Reconnect + Reloading event tests (Task 3.7)
+# ---------------------------------------------------------------------------
+
+
+from usr.plugins.jcode_harness.helpers.protocol import Reloading, UnknownEvent  # noqa: E402
+
+
+async def _start_subscribe_emit_close_daemon(
+    socket_path: str, payloads_after_subscribe: list[bytes]
+) -> _FakeDaemon:
+    """Daemon variant that accepts a Subscribe, emits a SessionId, then emits
+    ``payloads_after_subscribe`` and closes the connection.
+    """
+
+    async def script(d, reader, writer):
+        await reader.readline()  # subscribe request
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        for p in payloads_after_subscribe:
+            writer.write(p)
+            await writer.drain()
+        writer.close()
+
+    daemon = _FakeDaemon(script)
+    daemon.socket_path = socket_path
+
+    # Start a server explicitly at the given path so we can re-bind later.
+    async def _handle(reader, writer):
+        try:
+            await daemon._script(daemon, reader, writer)
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    daemon._server = await asyncio.start_unix_server(_handle, path=socket_path)
+    return daemon
+
+
+async def _stop_daemon_keep_dir(daemon: _FakeDaemon) -> None:
+    """Stop a daemon but leave the parent tempdir intact so a second daemon
+    can rebind at the same path."""
+    if daemon._server is not None:
+        daemon._server.close()
+        await daemon._server.wait_closed()
+    try:
+        os.unlink(daemon.socket_path)
+    except OSError:
+        pass
+
+
+async def test_reconnect_on_eof():
+    """Server 1 emits one text_delta then EOF (and stops listening). A second
+    server at the same path emits another text_delta + done. The client must
+    transparently reconnect, resubscribe, and yield both deltas."""
+    tmpdir = tempfile.mkdtemp(prefix="jc-rc-")
+    sock = str(Path(tmpdir) / "s")
+
+    # daemon1 — handles exactly one connection then closes its listener so the
+    # client's reconnect attempt fails until daemon2 takes over.
+    daemon1_holder: dict = {}
+
+    async def script1(d, reader, writer):
+        await reader.readline()  # subscribe
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        writer.write(b'{"type":"text_delta","text":"first"}\n')
+        await writer.drain()
+        # Stop the listener so the client's reconnect can't re-hit daemon1.
+        srv = daemon1_holder.get("server")
+        if srv is not None:
+            srv.close()
+        writer.close()
+
+    daemon1 = _FakeDaemon(script1)
+    daemon1.socket_path = sock
+
+    async def _h1(reader, writer):
+        try:
+            await daemon1._script(daemon1, reader, writer)
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    daemon1._server = await asyncio.start_unix_server(_h1, path=sock)
+    daemon1_holder["server"] = daemon1._server
+
+    client = JcodeClient()
+    client._reconnect_max_delay = 0.1  # keep the test fast
+    await client.connect(sock)
+    await client.subscribe(
+        working_dir="/w",
+        target_session_id=None,
+        client_instance_id="iid",
+    )
+
+    seen: list = []
+
+    async def collect():
+        async for ev in client.events():
+            seen.append(ev)
+            if len(seen) >= 2:
+                return
+
+    collector = asyncio.create_task(collect())
+
+    # Give the client time to read first delta and hit EOF.
+    await asyncio.sleep(0.15)
+    # Wait for daemon1 server to fully close (script1 closed it); then unlink
+    # the socket file so daemon2 can rebind at the same path.
+    await daemon1._server.wait_closed()
+    try:
+        os.unlink(sock)
+    except OSError:
+        pass
+
+    # Bring up a second server at the same path that satisfies the
+    # post-reconnect Subscribe + emits two more events.
+    daemon2 = await _start_subscribe_emit_close_daemon(
+        sock,
+        [
+            b'{"type":"text_delta","text":"second"}\n',
+            b'{"type":"done","id":1}\n',
+        ],
+    )
+
+    try:
+        await asyncio.wait_for(collector, timeout=10.0)
+    finally:
+        await client.close()
+        await _stop_daemon_keep_dir(daemon2)
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+    assert len(seen) >= 2
+    texts = [getattr(e, "text", None) for e in seen]
+    assert texts == ["first", "second"]
+
+
+async def test_reloading_event_switches_socket_and_resubscribes():
+    """First server emits a Reloading event pointing at a new socket path.
+    Client follows the reload, resubscribes on the new path, and yields the
+    text_delta from the second server. Reloading itself is never yielded."""
+    tmpdir = tempfile.mkdtemp(prefix="jc-rl-")
+    sock1 = str(Path(tmpdir) / "s1")
+    sock2 = str(Path(tmpdir) / "s2")
+
+    async def script1(d, reader, writer):
+        await reader.readline()  # subscribe
+        writer.write(b'{"type":"session","session_id":"x"}\n')
+        await writer.drain()
+        writer.write(
+            (
+                '{"type":"reloading","new_socket":"' + sock2 + '"}\n'
+            ).encode()
+        )
+        await writer.drain()
+        # Hold open briefly, then close.
+        await asyncio.sleep(0.05)
+
+    daemon1 = _FakeDaemon(script1)
+    daemon1.socket_path = sock1
+
+    async def _h1(reader, writer):
+        try:
+            await daemon1._script(daemon1, reader, writer)
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    daemon1._server = await asyncio.start_unix_server(_h1, path=sock1)
+
+    daemon2 = await _start_subscribe_emit_close_daemon(
+        sock2,
+        [
+            b'{"type":"text_delta","text":"after-reload"}\n',
+            b'{"type":"done","id":1}\n',
+        ],
+    )
+
+    client = JcodeClient()
+    client._reconnect_max_delay = 0.05
+    await client.connect(sock1)
+    await client.subscribe(
+        working_dir="/w",
+        target_session_id=None,
+        client_instance_id="iid",
+    )
+
+    seen: list = []
+    try:
+        async def collect():
+            async for ev in client.events():
+                seen.append(ev)
+                if any(isinstance(e, Done) for e in seen):
+                    return
+
+        await asyncio.wait_for(collect(), timeout=10.0)
+    finally:
+        await client.close()
+        await _stop_daemon_keep_dir(daemon1)
+        await _stop_daemon_keep_dir(daemon2)
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+    # Reloading event must NOT be yielded to consumers.
+    assert not any(isinstance(e, Reloading) for e in seen)
+    # Must include the text_delta from the new socket.
+    assert any(
+        isinstance(e, TextDelta) and e.text == "after-reload" for e in seen
+    )
+
+
+async def test_reloading_event_with_missing_field_falls_back_to_current_socket():
+    """A Reloading event with no new_socket/socket field should not crash —
+    the client closes and reopens the same socket and resubscribes."""
+    tmpdir = tempfile.mkdtemp(prefix="jc-rlm-")
+    sock = str(Path(tmpdir) / "s")
+
+    state = {"connection": 0}
+
+    async def script(d, reader, writer):
+        state["connection"] += 1
+        await reader.readline()  # subscribe
+        writer.write(b'{"type":"session","session_id":"x"}\n')
+        await writer.drain()
+        if state["connection"] == 1:
+            # First connection: emit reloading with NO new_socket/socket key,
+            # then close so client reconnects.
+            writer.write(b'{"type":"reloading"}\n')
+            await writer.drain()
+            await asyncio.sleep(0.05)
+        else:
+            # Second connection: deliver one event and shut down.
+            writer.write(b'{"type":"text_delta","text":"ok"}\n')
+            await writer.drain()
+            writer.write(b'{"type":"done","id":1}\n')
+            await writer.drain()
+
+    daemon = _FakeDaemon(script)
+    daemon.socket_path = sock
+
+    async def _handle(reader, writer):
+        try:
+            await daemon._script(daemon, reader, writer)
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    daemon._server = await asyncio.start_unix_server(_handle, path=sock)
+
+    client = JcodeClient()
+    client._reconnect_max_delay = 0.05
+    await client.connect(sock)
+    await client.subscribe(
+        working_dir="/w",
+        target_session_id=None,
+        client_instance_id="iid",
+    )
+
+    seen: list = []
+    try:
+        async def collect():
+            async for ev in client.events():
+                seen.append(ev)
+                if any(isinstance(e, Done) for e in seen):
+                    return
+
+        await asyncio.wait_for(collect(), timeout=10.0)
+    finally:
+        await client.close()
+        await _stop_daemon_keep_dir(daemon)
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+    assert state["connection"] == 2
+    assert not any(isinstance(e, Reloading) for e in seen)
+    assert any(isinstance(e, TextDelta) and e.text == "ok" for e in seen)
+
+
+async def test_extract_reloading_socket_prefers_new_socket_over_socket():
+    """Unit test on the defensive lookup helper directly."""
+    client = JcodeClient()
+
+    class _Ev:
+        type = "reloading"
+
+        def __init__(self, **kw):
+            for k, v in kw.items():
+                setattr(self, k, v)
+
+    # new_socket wins over socket.
+    ev = _Ev(new_socket="/a", socket="/b")
+    assert client._extract_reloading_socket(ev) == "/a"
+
+    # falls back to socket if new_socket is missing.
+    ev = _Ev(socket="/b")
+    assert client._extract_reloading_socket(ev) == "/b"
+
+    # raw dict path.
+    ev = UnknownEvent(raw={"type": "reloading", "new_socket": "/c"})
+    assert client._extract_reloading_socket(ev) == "/c"
+
+    # nothing usable.
+    ev = _Ev()
+    assert client._extract_reloading_socket(ev) is None
+
+
+async def test_reconnect_caps_at_max_delay(monkeypatch):
+    """With socket missing, reconnect must back off, doubling each time, and
+    cap at ``_reconnect_max_delay``. We patch ``asyncio.sleep`` to record the
+    sequence without actually waiting."""
+    import usr.plugins.jcode_harness.helpers.jcode_client as jc_mod
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay):
+        sleeps.append(delay)
+        # Bail out after a few iterations so the test terminates.
+        if len(sleeps) >= 6:
+            raise RuntimeError("stop-loop")
+
+    client = JcodeClient()
+    client._socket_path = "/nonexistent/path-for-test.sock"
+    client._last_subscribe = ("/w", None, "iid", False)
+    client._reconnect_max_delay = 4.0  # small cap so we hit it quickly
+
+    monkeypatch.setattr(jc_mod.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(RuntimeError, match="stop-loop"):
+        await client._reconnect()
+
+    # Expected schedule: 1, 2, 4, 4, 4, 4 — capped at 4.0.
+    assert sleeps[:3] == [1.0, 2.0, 4.0]
+    assert all(s == 4.0 for s in sleeps[2:])
