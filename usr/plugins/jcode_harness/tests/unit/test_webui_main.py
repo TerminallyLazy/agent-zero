@@ -100,10 +100,64 @@ def test_main_js_calls_correct_api_endpoints():
 def test_main_js_uses_notification_store_for_toasts():
     p = WEBUI / "main.js"
     text = p.read_text(encoding="utf-8")
-    # Confirm we route through $store.notificationStore (compliance with §3).
+    # Compliance with AGENTS.plugins.md §3: success + error toasts must
+    # route through $store.notificationStore. (Info toasts removed in
+    # favour of an inline pending-login panel; warning kept for daemon
+    # status fallback.)
     assert "$store?.notificationStore?.frontendSuccess" in text
     assert "$store?.notificationStore?.frontendError" in text
-    assert "$store?.notificationStore?.frontendInfo" in text
+
+
+def test_main_js_has_two_leg_oauth_flow_state():
+    """Login flow state machine: oauthLogin opens auth_url and stores a
+    pending record; user pastes the response into a panel; submitLoginPaste
+    auto-detects callback URL vs auth code; cancelLoginPaste resets state.
+
+    Regression: 2026-05-05 — initial UI just opened the auth URL with no
+    place to paste the callback / auth code back, so users hit dead-end
+    pages (OpenAI 'site can't be reached' on localhost:1455 and Claude/
+    Gemini codes with nowhere to enter them).
+    """
+    p = WEBUI / "main.js"
+    text = p.read_text(encoding="utf-8")
+
+    # State fields exist
+    assert "loginPending: null" in text or "loginPending:null" in text
+    assert "loginPasteValue" in text
+    assert "loginInFlight" in text
+
+    # Methods exist
+    for fn in (
+        "oauthLogin",
+        "submitLoginPaste",
+        "cancelLoginPaste",
+        "loginHint",
+    ):
+        assert fn in text, f"missing login method: {fn}"
+
+    # Auto-detect of callback URL vs auth code via /^https?:\/\//i regex.
+    assert re.search(r"https\?:\\\/\\\/|https\?://", text), (
+        "submitLoginPaste must auto-detect URL vs code by https?:// prefix"
+    )
+
+    # Both completion fields are sent on the wire.
+    assert "callback_url" in text
+    assert "auth_code" in text
+
+    # Provider-specific hints reference the OpenAI localhost:1455 redirect
+    # gotcha so the user understands the broken redirect is expected.
+    assert "localhost:1455" in text
+
+
+def test_main_html_renders_pending_login_panel():
+    p = WEBUI / "main.html"
+    text = p.read_text(encoding="utf-8")
+    # Pending-login panel + paste field + submit/cancel buttons.
+    assert "loginPending" in text
+    assert "loginPasteValue" in text
+    assert "submitLoginPaste" in text
+    assert "cancelLoginPaste" in text
+    assert "loginHint" in text
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not on PATH")

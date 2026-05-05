@@ -87,23 +87,89 @@
     </div>
 
     <div class="jcode-provider-grid">
-      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('claude')">
+      <button type="button" class="button"
+              :disabled="!!$store.jcodeMain.loginPending"
+              @click="$store.jcodeMain.oauthLogin('claude')">
         <span class="icon material-symbols-outlined">key</span>
         Login with Claude
       </button>
-      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('openai')">
+      <button type="button" class="button"
+              :disabled="!!$store.jcodeMain.loginPending"
+              @click="$store.jcodeMain.oauthLogin('openai')">
         <span class="icon material-symbols-outlined">key</span>
         Login with OpenAI
       </button>
-      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('gemini')">
+      <button type="button" class="button"
+              :disabled="!!$store.jcodeMain.loginPending"
+              @click="$store.jcodeMain.oauthLogin('gemini')">
         <span class="icon material-symbols-outlined">key</span>
         Login with Gemini
       </button>
-      <button type="button" class="button" @click="$store.jcodeMain.oauthLogin('copilot')">
+      <button type="button" class="button"
+              :disabled="!!$store.jcodeMain.loginPending"
+              @click="$store.jcodeMain.oauthLogin('copilot')">
         <span class="icon material-symbols-outlined">key</span>
         Login with Copilot
       </button>
     </div>
+
+    <template x-if="$store.jcodeMain.loginPending">
+      <div class="jcode-login-pending">
+        <div class="section-title">
+          Complete <span x-text="$store.jcodeMain.loginPending.provider"></span> login
+        </div>
+        <div class="section-description"
+             x-text="$store.jcodeMain.loginHint()"></div>
+
+        <template x-if="$store.jcodeMain.loginPending.user_code">
+          <div class="jcode-login-code">
+            <span>Code:</span>
+            <code x-text="$store.jcodeMain.loginPending.user_code"></code>
+            <button type="button"
+                    class="button icon-button"
+                    title="Copy code"
+                    aria-label="Copy code"
+                    @click="navigator.clipboard?.writeText($store.jcodeMain.loginPending.user_code)">
+              <span class="material-symbols-outlined">content_copy</span>
+            </button>
+          </div>
+        </template>
+
+        <template x-if="$store.jcodeMain.loginPending.auth_url">
+          <div class="jcode-login-link">
+            <a :href="$store.jcodeMain.loginPending.auth_url"
+               target="_blank"
+               rel="noopener noreferrer">
+              <span class="material-symbols-outlined">open_in_new</span>
+              Re-open auth URL
+            </a>
+          </div>
+        </template>
+
+        <textarea class="jcode-login-paste"
+                  rows="2"
+                  placeholder="Paste the callback URL (starts with http) or auth code here. Leave empty for Copilot once you've approved on github.com."
+                  x-model="$store.jcodeMain.loginPasteValue"
+                  :disabled="$store.jcodeMain.loginInFlight"></textarea>
+
+        <div class="jcode-login-actions">
+          <button type="button"
+                  class="button confirm"
+                  :disabled="$store.jcodeMain.loginInFlight"
+                  @click="$store.jcodeMain.submitLoginPaste()">
+            <span class="icon material-symbols-outlined">check</span>
+            <span x-text="$store.jcodeMain.loginInFlight ? 'Completing…' : 'Complete login'"></span>
+          </button>
+          <button type="button"
+                  class="button cancel"
+                  :disabled="$store.jcodeMain.loginInFlight"
+                  @click="$store.jcodeMain.cancelLoginPaste()">
+            <span class="icon material-symbols-outlined">close</span>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </template>
 
     <div class="jcode-danger-zone">
       <div class="jcode-danger-copy">
@@ -303,6 +369,78 @@
       font-family: var(--font-family-mono, monospace);
       font-size: 0.92em;
       color: var(--color-text-secondary);
+    }
+
+    .jcode-login-pending {
+      margin-top: 0.75rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+      border-radius: 0.75rem;
+      background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-primary));
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .jcode-login-pending .section-title {
+      margin-top: 0;
+    }
+
+    .jcode-login-code {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 0.5rem;
+      background: var(--color-bg-primary);
+      border: 1px solid var(--color-border);
+      font-size: var(--font-size-small);
+      width: fit-content;
+    }
+
+    .jcode-login-code code {
+      font-size: 1.05em;
+      letter-spacing: 0.05em;
+      color: var(--color-text);
+    }
+
+    .jcode-login-code .icon-button {
+      width: 2rem;
+      min-width: 2rem;
+      padding: 0;
+    }
+
+    .jcode-login-link a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text));
+      text-decoration: none;
+      font-size: var(--font-size-small);
+    }
+
+    .jcode-login-link a:hover {
+      text-decoration: underline;
+    }
+
+    .jcode-login-paste {
+      width: 100%;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.5rem;
+      background: var(--color-bg-primary);
+      color: var(--color-text);
+      font-family: var(--font-family-mono, monospace);
+      font-size: 0.92em;
+      resize: vertical;
+      min-height: 3rem;
+    }
+
+    .jcode-login-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
   </style>
 </body>
