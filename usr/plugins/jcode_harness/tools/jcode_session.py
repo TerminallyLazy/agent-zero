@@ -10,6 +10,7 @@ Spec ref: §3 "1. Bounded sessions", §5.6, §6.1.
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 from helpers.tool import Tool, Response
@@ -25,6 +26,11 @@ from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
 from usr.plugins.jcode_harness.helpers.persistence import (
     get_or_create_client_instance_id,
 )
+
+
+# Polling interval (seconds) for the cancel-signal watcher. Module-level so
+# tests can monkeypatch a faster value without exercising real-time delays.
+_CANCEL_POLL_INTERVAL = 0.5
 
 
 class JcodeSession(Tool):
@@ -57,6 +63,28 @@ class JcodeSession(Tool):
         client = JcodeClient()
         await client.connect(sock)
         final_text: list[str] = []
+
+        # Map A0's single-stop cancel signal onto jcode's soft_interrupt.
+        # ``streaming_agent`` is the A0 runtime hook for in-flight redirect;
+        # the lookup is defensive (signal API may be absent in tests).
+        cancel_signal = getattr(self.agent.context, "streaming_agent", None)
+
+        async def _watch_for_cancel() -> None:
+            if cancel_signal is None:
+                return
+            while True:
+                await asyncio.sleep(_CANCEL_POLL_INTERVAL)
+                if getattr(cancel_signal, "cancel_requested", False):
+                    try:
+                        await client.soft_interrupt(
+                            content="user requested redirect", urgent=False
+                        )
+                        cancel_signal.cancel_requested = False
+                    except Exception:
+                        pass
+                    return  # one shot per session; user can re-click
+
+        watcher = asyncio.create_task(_watch_for_cancel())
         try:
             await client.subscribe(
                 wd, resume_session_id, cid, allow_session_takeover=True
@@ -104,4 +132,9 @@ class JcodeSession(Tool):
                     break
             return Response(message="".join(final_text), break_loop=False)
         finally:
+            watcher.cancel()
+            try:
+                await watcher
+            except (asyncio.CancelledError, Exception):
+                pass
             await client.close()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -192,6 +194,71 @@ async def test_session_logs_memory_injected_event(
         "prompt_chars": 42,
         "computed_age_ms": 1234,
     }
+
+
+async def test_session_forwards_cancel_to_soft_interrupt(
+    fake_agent, fake_daemon, patch_supervisor, monkeypatch
+):
+    """A0 ``streaming_agent.cancel_requested`` must be forwarded as a
+    ``soft_interrupt`` request to the jcode daemon."""
+    # Speed up the cancel-signal poll loop so the test doesn't sleep 500ms.
+    monkeypatch.setattr(
+        "usr.plugins.jcode_harness.tools.jcode_session._CANCEL_POLL_INTERVAL",
+        0.01,
+    )
+
+    cancel_signal = SimpleNamespace(cancel_requested=False)
+    fake_agent.context.streaming_agent = cancel_signal
+
+    interrupt_seen = asyncio.Event()
+
+    async def script(daemon, reader, writer):
+        # subscribe handshake
+        await read_line(reader)
+        writer.write(b'{"type":"session","session_id":"s1"}\n')
+        await writer.drain()
+        # initial message request
+        msg_line = await read_line(reader)
+        msg_id = json.loads(msg_line)["id"]
+
+        # Trip the cancel signal so the watcher injects a soft_interrupt.
+        cancel_signal.cancel_requested = True
+
+        # Wait for the soft_interrupt request to land. Don't write ``done``
+        # until we've seen it (or timed out), otherwise the session loop
+        # exits before the watcher polls.
+        try:
+            line = await asyncio.wait_for(reader.readline(), timeout=2.0)
+        except asyncio.TimeoutError:
+            line = b""
+        if line:
+            try:
+                payload = json.loads(line)
+                if payload.get("type") == "soft_interrupt":
+                    daemon.received_lines.append(line)
+                    interrupt_seen.set()
+            except json.JSONDecodeError:
+                pass
+        # Now end the session.
+        writer.write(
+            b'{"type":"done","id":' + str(msg_id).encode() + b"}\n"
+        )
+        await writer.drain()
+
+    daemon = fake_daemon(script)
+    sock = await daemon.start()
+    patch_supervisor(sock)
+
+    tool = make_tool(JcodeSession, fake_agent)
+    await tool.execute(task="x", working_dir="/tmp")
+
+    assert interrupt_seen.is_set(), "soft_interrupt was not sent"
+    assert daemon.received_lines, "no soft_interrupt captured"
+    payload = json.loads(daemon.received_lines[0])
+    assert payload["type"] == "soft_interrupt"
+    assert "redirect" in payload["content"]
+    # Watcher resets the flag after firing.
+    assert cancel_signal.cancel_requested is False
 
 
 async def test_session_uses_persistent_client_instance_id(
