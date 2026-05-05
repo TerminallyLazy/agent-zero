@@ -243,3 +243,66 @@ def import_a0_providers(
             skipped[pid] = str(e)
 
     return {"imported": imported, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# Task 6.4 — purge plugin-managed profiles via direct config edit (Spike 0.9)
+# ---------------------------------------------------------------------------
+
+
+def _config_path() -> Path:
+    """Return jcode's primary config TOML path."""
+    return Path.home() / ".jcode" / "config.toml"
+
+
+def purge_imported_profiles(jcode_bin: str) -> list[str]:
+    """Remove all plugin-prefixed profiles from ``~/.jcode/config.toml``.
+
+    Spike 0.9: jcode v0.11.10 has no ``provider remove`` subcommand, so we
+    edit the config TOML directly. The daemon must be stopped first to avoid
+    racing with jcode's own config writer.
+
+    Returns the list of profile names removed.
+    """
+    import sys
+
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:  # pragma: no cover — project requires 3.11+
+        import tomli as tomllib  # type: ignore
+    import tomli_w
+
+    from usr.plugins.jcode_harness.helpers.daemon import DaemonSupervisor
+    from usr.plugins.jcode_harness.helpers.paths import jcode_runtime_dir
+
+    sup = DaemonSupervisor(jcode_bin, jcode_runtime_dir())
+    if sup.is_running():
+        sup.stop()
+
+    config_path = _config_path()
+    purged: list[str] = []
+    if not config_path.exists():
+        return purged
+
+    data = tomllib.loads(config_path.read_text())
+    providers = data.get("providers", {})
+    to_remove = [
+        n for n in providers if n.startswith(PLUGIN_PROFILE_PREFIX)
+    ]
+    if not to_remove:
+        return purged
+
+    for n in to_remove:
+        del providers[n]
+        purged.append(n)
+        env_file = (
+            Path.home() / ".config" / "jcode" / f"provider-{n}.env"
+        )
+        env_file.unlink(missing_ok=True)
+
+    if data.get("provider", {}).get("default_provider") in purged:
+        data["provider"]["default_provider"] = "auto"
+
+    config_path.write_text(tomli_w.dumps(data))
+    config_path.chmod(0o600)
+    return purged
