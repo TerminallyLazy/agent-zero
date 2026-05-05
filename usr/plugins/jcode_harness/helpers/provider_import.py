@@ -20,7 +20,9 @@ Spike findings baked in (jcode v0.11.10):
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -88,3 +90,84 @@ def discover_a0_providers() -> list[dict]:
                 }
             )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Task 6.2 — add_jcode_profile / list_jcode_profiles
+# ---------------------------------------------------------------------------
+
+
+def add_jcode_profile(
+    jcode_bin: str,
+    profile_name: str,
+    base_url: str,
+    model: str,
+    api_key: str,
+    overwrite: bool = True,
+) -> dict:
+    """Add an OpenAI-compatible jcode provider profile.
+
+    The API key is passed via a private env var (``JCODE_PROVIDER_<NAME>_API_KEY``)
+    that exists only in the spawned subprocess's environment — never argv,
+    never shell history, never persisted in the parent process.
+
+    Per Spike 0.4, ``--api-key-stdin`` does not exist on jcode v0.11.10, and
+    the visibility of ``--json`` / ``--overwrite`` on ``provider add`` is not
+    confirmed. We attempt them and retry without on rejection.
+    """
+    if not profile_name.startswith(PLUGIN_PROFILE_PREFIX):
+        raise ValueError(
+            f"plugin-managed profiles must start with {PLUGIN_PROFILE_PREFIX}"
+        )
+    env_var = (
+        f"JCODE_PROVIDER_{profile_name.upper().replace('-', '_')}_API_KEY"
+    )
+    child_env = dict(os.environ, **{env_var: api_key})
+    base_cmd = [
+        jcode_bin,
+        "provider",
+        "add",
+        profile_name,
+        "--base-url",
+        base_url,
+        "--model",
+        model,
+        "--api-key-env",
+        env_var,
+    ]
+    cmd_full = base_cmd + ["--json"] + (["--overwrite"] if overwrite else [])
+    result = subprocess.run(
+        cmd_full, env=child_env, capture_output=True, text=True
+    )
+    if result.returncode != 0 and (
+        "--json" in result.stderr
+        or "--overwrite" in result.stderr
+        or "unrecognized" in result.stderr
+        or "unexpected" in result.stderr
+    ):
+        result = subprocess.run(
+            base_cmd, env=child_env, capture_output=True, text=True
+        )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"jcode provider add failed: {result.stderr.strip()}"
+        )
+    try:
+        return (
+            json.loads(result.stdout)
+            if result.stdout.strip()
+            else {"ok": True}
+        )
+    except json.JSONDecodeError:
+        return {"ok": True, "stdout": result.stdout}
+
+
+def list_jcode_profiles(jcode_bin: str) -> list[dict]:
+    """List jcode provider profiles via ``provider list --json``."""
+    result = subprocess.run(
+        [jcode_bin, "provider", "list", "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(result.stdout)
