@@ -1,7 +1,7 @@
 <template x-if="$store.rightCanvas && $store.rightCanvas.isSurfaceActive && $store.rightCanvas.isSurfaceActive('jcode')">
   <div x-data class="jcode-panel">
     <script type="module">
-      import "/plugins/jcode_harness/extensions/webui/right-canvas-panels/jcode_panel.js";
+      import { store } from "/plugins/jcode_harness/extensions/webui/right-canvas-panels/jcode_panel.js";
     </script>
     <div class="jcode-tabstrip" role="tablist">
       <template x-for="page in $store.jcodePanel.pages" :key="page.id">

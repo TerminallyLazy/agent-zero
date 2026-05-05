@@ -39,10 +39,16 @@ def test_banner_html_exists_and_gates_on_needsLogin():
     text = BANNER_HTML.read_text(encoding="utf-8")
     # Alpine store pattern: bare x-data + module import + $store-gated visibility.
     assert "<div x-data" in text
+    # Named import `{ store }` required — components.js only rewrites that form.
+    assert (
+        'import { store } from "/plugins/jcode_harness/extensions/webui/'
+        'welcome-banners-start/jcode_login_required.js"'
+    ) in text
+    # Bare side-effect imports break in blob URL context.
     assert (
         'import "/plugins/jcode_harness/extensions/webui/'
         'welcome-banners-start/jcode_login_required.js"'
-    ) in text
+    ) not in text
     assert 'x-show="$store.jcodeLoginBanner.needsLogin"' in text
     assert 'x-data="jcodeLoginBanner()"' not in text
 

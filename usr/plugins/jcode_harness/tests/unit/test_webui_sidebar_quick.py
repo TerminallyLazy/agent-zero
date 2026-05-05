@@ -28,10 +28,16 @@ def test_quick_html_uses_alpine_store_pattern():
     text = HTML.read_text(encoding="utf-8")
     # Bare x-data + module import — globals are not loaded by importHtmlExtensions.
     assert "<div x-data" in text
+    # Named import `{ store }` required — components.js only rewrites that form.
+    assert (
+        'import { store } from "/plugins/jcode_harness/extensions/webui/'
+        'sidebar-quick-actions-main-start/jcode_quick.js"'
+    ) in text
+    # Bare side-effect imports break in blob URL context.
     assert (
         'import "/plugins/jcode_harness/extensions/webui/'
         'sidebar-quick-actions-main-start/jcode_quick.js"'
-    ) in text
+    ) not in text
     assert 'x-data="jcodeQuick()"' not in text
 
 

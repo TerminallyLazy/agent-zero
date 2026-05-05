@@ -17,7 +17,11 @@ def test_main_html_exists_and_has_alpine_data():
     text = p.read_text(encoding="utf-8")
     # Alpine store pattern: bare x-data + module import + $store.jcodeMain refs.
     assert "<div x-data>" in text
-    assert 'import "/plugins/jcode_harness/webui/main.js"' in text
+    # Named import `{ store }` is required — A0's components.js only rewrites
+    # `import X from "..."` syntax; bare side-effect imports fail to resolve
+    # absolute paths in the blob URL context (regression caught 2026-05-05).
+    assert 'import { store } from "/plugins/jcode_harness/webui/main.js"' in text
+    assert 'import "/plugins/jcode_harness/webui/main.js"' not in text  # bare-import banned
     assert "$store.jcodeMain" in text
     # Old broken global pattern must be gone.
     assert 'x-data="jcodeMain()"' not in text

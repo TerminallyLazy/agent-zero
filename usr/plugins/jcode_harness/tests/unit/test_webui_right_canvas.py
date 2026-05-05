@@ -40,10 +40,16 @@ def test_panel_html_renders_pages_with_xfor():
 def test_panel_html_uses_alpine_store_pattern():
     text = PANEL_HTML.read_text(encoding="utf-8")
     assert "<div x-data" in text
+    # Named import `{ store }` required — components.js only rewrites that form.
+    assert (
+        'import { store } from "/plugins/jcode_harness/extensions/webui/'
+        'right-canvas-panels/jcode_panel.js"'
+    ) in text
+    # Bare side-effect imports break in blob URL context.
     assert (
         'import "/plugins/jcode_harness/extensions/webui/'
         'right-canvas-panels/jcode_panel.js"'
-    ) in text
+    ) not in text
     assert 'x-data="jcodePanel()"' not in text
 
 
