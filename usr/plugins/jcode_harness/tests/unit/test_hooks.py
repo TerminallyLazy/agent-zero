@@ -433,3 +433,66 @@ def test_install_warns_on_overlay_fs(
         "ephemeral" in m.lower() or "overlay" in m.lower() or "volume" in m.lower()
         for kind, m in recorder.events if kind == "warning"
     )
+
+
+# ---------------------------------------------------------------------------
+# pre_update()
+# ---------------------------------------------------------------------------
+
+
+def test_pre_update_calls_stop_when_binary_present(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    monkeypatch.setattr(hooks_mod, "locate_jcode_binary", lambda: "/bin/jcode")
+
+    stop_calls = []
+
+    class _FakeSup:
+        def __init__(self, bin_path, instance_dir):
+            self.bin_path = bin_path
+            self.instance_dir = instance_dir
+
+        def stop(self):
+            stop_calls.append(1)
+
+    monkeypatch.setattr(hooks_mod, "DaemonSupervisor", _FakeSup)
+
+    _run(hooks_mod.pre_update())
+
+    assert stop_calls == [1]
+    assert any("stopped" in m.lower() for kind, m in recorder.events if kind == "info")
+
+
+def test_pre_update_skips_when_binary_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_home: Path,
+    recorder: _NotifyRecorder,
+    tmp_path: Path,
+) -> None:
+    from usr.plugins.jcode_harness import hooks as hooks_mod
+
+    monkeypatch.setattr(hooks_mod, "locate_jcode_binary", lambda: None)
+
+    sentinel = []
+
+    class _FakeSup:
+        def __init__(self, *_a, **_kw):
+            sentinel.append("constructed")
+
+        def stop(self):
+            sentinel.append("stopped")
+
+    monkeypatch.setattr(hooks_mod, "DaemonSupervisor", _FakeSup)
+
+    _run(hooks_mod.pre_update())
+
+    assert sentinel == []  # never constructed, never stopped
+    assert any(
+        "missing" in m.lower() or "nothing" in m.lower()
+        for kind, m in recorder.events if kind == "info"
+    )

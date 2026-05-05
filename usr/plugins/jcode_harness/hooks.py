@@ -155,3 +155,19 @@ async def install() -> None:
     meta_path.chmod(0o600)
 
     notify.success("jcode_harness ready")
+
+
+async def pre_update() -> None:
+    """Stop the daemon before plugin code is replaced.
+
+    Called by A0's plugin manager before swapping in a new version of the
+    plugin. We graceful-stop the daemon so the new code can rebind the
+    socket without a stale-pid race.
+    """
+    bin_path = locate_jcode_binary()
+    if bin_path is None:
+        notify.info("jcode binary missing; nothing to stop")
+        return
+    sup = DaemonSupervisor(bin_path, jcode_runtime_dir())
+    sup.stop()
+    notify.info("jcode daemon stopped for plugin update")
