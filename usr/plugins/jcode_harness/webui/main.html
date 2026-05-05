@@ -1,0 +1,47 @@
+<div x-data="jcodeMain()" x-init="init()">
+  <h2>jcode Coding Harness</h2>
+
+  <section class="jcode-daemon-status">
+    <h3>Daemon</h3>
+    <div x-show="daemon.running" class="jcode-daemon-running">
+      Running (PID <span x-text="daemon.pid"></span>)
+      &mdash; uptime <span x-text="Math.round(daemon.uptime_s || 0)"></span>s
+    </div>
+    <div x-show="!daemon.running" class="jcode-daemon-stopped">
+      Stopped (lazy-spawned on first tool use)
+    </div>
+    <button type="button" @click="refresh()">Refresh</button>
+  </section>
+
+  <section class="jcode-sessions">
+    <h3>Resumable Sessions</h3>
+    <button type="button" @click="refreshSessions()">Refresh List</button>
+    <ul class="jcode-session-list">
+      <template x-for="s in sessions" :key="s.id">
+        <li>
+          <span class="jcode-provider-badge" x-text="s.provider_key"></span>
+          <span class="jcode-session-title" x-text="s.title || '(untitled)'"></span>
+          <span class="jcode-session-id" x-text="s.id"></span>
+          <button type="button" @click="resumeSession(s.id)">Resume</button>
+        </li>
+      </template>
+      <template x-if="sessions.length === 0">
+        <li class="jcode-empty">No resumable sessions found.</li>
+      </template>
+    </ul>
+  </section>
+
+  <section class="jcode-providers">
+    <h3>Providers</h3>
+    <p>Log in to a provider so jcode can serve. OAuth flows open in a new tab.</p>
+    <button type="button" @click="oauthLogin('claude')">Login with Claude</button>
+    <button type="button" @click="oauthLogin('openai')">Login with OpenAI</button>
+    <button type="button" @click="oauthLogin('gemini')">Login with Gemini</button>
+    <button type="button" @click="oauthLogin('copilot')">Login with Copilot</button>
+    <p>
+      <button type="button" class="jcode-danger" @click="purgeImported()">
+        Purge plugin-imported provider profiles
+      </button>
+    </p>
+  </section>
+</div>
