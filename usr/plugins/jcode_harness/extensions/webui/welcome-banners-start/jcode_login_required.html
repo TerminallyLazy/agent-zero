@@ -1,0 +1,7 @@
+<div x-data="jcodeLoginBanner()" x-init="init()" x-show="needsLogin">
+  <div class="jcode-banner-warning">
+    <strong>jcode harness needs a provider.</strong>
+    Log in to Claude/OpenAI/Gemini/Copilot to enable coding sessions.
+    <button type="button" @click="openSettings()">Open jcode settings</button>
+  </div>
+</div>
