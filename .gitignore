@@ -47,6 +47,10 @@ usr/**/*
 !usr/plugins/dj_booth/**
 # Re-ignore python caches inside the allowed plugin tree
 usr/plugins/dj_booth/**/__pycache__/
+# In-repo plugin development: jcode_harness
+!usr/plugins/jcode_harness/
+!usr/plugins/jcode_harness/**
+usr/plugins/jcode_harness/**/__pycache__/
 
 
 # Global rule to include .gitkeep files anywhere
