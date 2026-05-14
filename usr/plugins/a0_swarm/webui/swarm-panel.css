@@ -4,67 +4,24 @@
     display: flex;
     flex-direction: column;
     background-color: var(--color-panel);
-    border-top: 1px solid var(--color-border);
     color: var(--color-text);
-    font-size: 0.8rem;
-    max-height: 50vh;
+    font-size: 0.85rem;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
 }
 
-.a0swarm-panel--collapsed {
-    max-height: 2.1rem;
-}
-
-.a0swarm-header {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.75rem;
-    cursor: pointer;
-    user-select: none;
-    border-bottom: 1px solid var(--color-border);
-}
-
-.a0swarm-header:hover {
-    background-color: var(--color-background-hover);
-}
-
-.a0swarm-header__title {
-    flex: 1;
-    font-weight: 600;
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-text);
-}
-
-.a0swarm-header__count {
-    background-color: var(--color-highlight);
-    color: #fff;
-    border-radius: 0.6rem;
-    padding: 0 0.4rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    line-height: 1.1rem;
-    min-width: 1.1rem;
-    text-align: center;
-}
-
-.a0swarm-header__chevron {
-    color: var(--color-text-muted);
-    font-size: 0.7rem;
-    font-family: monospace;
-    width: 0.8rem;
-    text-align: center;
+.a0swarm-panel--canvas {
+    background-color: transparent;
 }
 
 .a0swarm-body {
     overflow-y: auto;
     flex: 1 1 auto;
-    padding: 0.4rem;
+    padding: 0.6rem;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.5rem;
 }
 
 .a0swarm-empty {

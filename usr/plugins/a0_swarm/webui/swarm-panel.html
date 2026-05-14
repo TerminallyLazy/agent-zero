@@ -4,23 +4,13 @@
 <div
     x-data
     x-init="$store.swarmStore.init()"
-    class="a0swarm-panel"
-    :class="{ 'a0swarm-panel--collapsed': !$store.swarmStore.panelOpen }"
+    class="a0swarm-panel a0swarm-panel--canvas"
     x-cloak
 >
-    <div class="a0swarm-header" @click="$store.swarmStore.togglePanel()">
-        <span class="a0swarm-header__title">Parallel Swarm</span>
-        <span class="a0swarm-header__count"
-              x-show="$store.swarmStore.agents.length > 0"
-              x-text="$store.swarmStore.agents.length"></span>
-        <span class="a0swarm-header__chevron"
-              x-text="$store.swarmStore.panelOpen ? 'v' : '>'"></span>
-    </div>
-
-    <div class="a0swarm-body" x-show="$store.swarmStore.panelOpen" x-transition>
+    <div class="a0swarm-body">
 
         <div class="a0swarm-empty" x-show="!$store.swarmStore.hasAgents">
-            No swarm agents. Call <code>delegate_parallel</code> to spawn some.
+            No swarm agents. Call <code>delegate_parallel</code> from the orchestrator to spawn some.
         </div>
 
         <template x-if="$store.swarmStore.activeAgents.length > 0">
