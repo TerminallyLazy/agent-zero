@@ -3,6 +3,7 @@ import asyncio
 import logging
 
 from agent import AgentContext, UserMessage
+from helpers import plugins
 from helpers.tool import Tool, Response
 from initialize import initialize_agent
 from usr.plugins.a0_swarm.helpers.registry import (
@@ -10,6 +11,13 @@ from usr.plugins.a0_swarm.helpers.registry import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _load_cfg(agent) -> dict:
+    try:
+        return plugins.get_plugin_config("a0_swarm", agent=agent) or {}
+    except Exception:
+        return {}
 
 
 class DelegateParallel(Tool):
@@ -20,7 +28,21 @@ class DelegateParallel(Tool):
                 break_loop=False,
             )
 
-        if len(tasks) > 16:
+        cfg = _load_cfg(self.agent)
+        max_parallel = int(cfg.get("max_parallel") or 0)
+        default_profile = (cfg.get("default_profile") or "").strip()
+        result_kb_cap = int(cfg.get("result_kb_cap") or 0)
+        self._result_byte_cap = (result_kb_cap * 1024) if result_kb_cap > 0 else MAX_RESULT_BYTES
+
+        if max_parallel > 0 and len(tasks) > max_parallel:
+            return Response(
+                message=(
+                    f"delegate_parallel rejected: requested {len(tasks)} tasks "
+                    f"but plugin setting max_parallel={max_parallel}."
+                ),
+                break_loop=False,
+            )
+        if max_parallel == 0 and len(tasks) > 16:
             logger.warning(
                 "delegate_parallel: large fan-out (%d tasks); no cap enforced.",
                 len(tasks),
@@ -34,7 +56,7 @@ class DelegateParallel(Tool):
         for i, td in enumerate(tasks):
             label = td.get("label", f"Agent-{i+1}")
             task_text = td.get("task", "")
-            profile = td.get("profile", "")
+            profile = td.get("profile", "") or default_profile
 
             config = initialize_agent()
             if profile:
@@ -69,8 +91,9 @@ class DelegateParallel(Tool):
             result = await sub_agent.monologue()
             raw = (result or "")
             encoded = raw.encode("utf-8")
-            if len(encoded) > MAX_RESULT_BYTES:
-                stored = encoded[:MAX_RESULT_BYTES].decode("utf-8", errors="ignore") + "\n[...truncated]"
+            cap = getattr(self, "_result_byte_cap", MAX_RESULT_BYTES)
+            if len(encoded) > cap:
+                stored = encoded[:cap].decode("utf-8", errors="ignore") + "\n[...truncated]"
             else:
                 stored = raw
             registry.update_status(

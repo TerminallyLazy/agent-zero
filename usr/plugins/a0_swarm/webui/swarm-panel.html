@@ -4,82 +4,78 @@
 <div
     x-data
     x-init="$store.swarmStore.init()"
-    class="swarm-panel"
-    :class="{ 'swarm-panel--collapsed': !$store.swarmStore.panelOpen }"
-    x-show="$store.swarmStore.hasAgents || $store.swarmStore.panelOpen"
+    class="a0swarm-panel"
+    :class="{ 'a0swarm-panel--collapsed': !$store.swarmStore.panelOpen }"
+    x-show="$store.swarmStore.hasAgents"
+    x-cloak
 >
-    <div class="swarm-header" @click="$store.swarmStore.togglePanel()">
-        <span class="swarm-header__icon">⚡</span>
-        <span class="swarm-header__title">Parallel Swarm</span>
-        <span class="swarm-header__count"
+    <div class="a0swarm-header" @click="$store.swarmStore.togglePanel()">
+        <span class="a0swarm-header__title">Parallel Swarm</span>
+        <span class="a0swarm-header__count"
               x-show="$store.swarmStore.agents.length > 0"
               x-text="$store.swarmStore.agents.length"></span>
-        <span class="swarm-header__chevron"
-              :class="{ 'swarm-header__chevron--up': $store.swarmStore.panelOpen }">›</span>
+        <span class="a0swarm-header__chevron"
+              x-text="$store.swarmStore.panelOpen ? 'v' : '>'"></span>
     </div>
 
-    <div class="swarm-body" x-show="$store.swarmStore.panelOpen" x-transition>
-        <div class="swarm-empty" x-show="!$store.swarmStore.hasAgents">
-            <span>No active swarm agents.</span>
-        </div>
+    <div class="a0swarm-body" x-show="$store.swarmStore.panelOpen" x-transition>
 
         <template x-if="$store.swarmStore.activeAgents.length > 0">
-            <div class="swarm-section">
-                <div class="swarm-section__label">Active</div>
+            <div class="a0swarm-section">
+                <div class="a0swarm-section__label">Active</div>
                 <template x-for="agent in $store.swarmStore.activeAgents" :key="agent.agent_name">
-                    <div class="swarm-card" :class="$store.swarmStore.statusClass(agent.status)">
-                        <div class="swarm-card__header">
-                            <span class="swarm-card__icon" x-text="$store.swarmStore.statusIcon(agent.status)"></span>
-                            <span class="swarm-card__label" x-text="agent.label"></span>
-                            <span class="swarm-card__name" x-text="agent.agent_name"></span>
-                            <span class="swarm-card__unread"
+                    <div class="a0swarm-card" :class="$store.swarmStore.statusClass(agent.status)">
+                        <div class="a0swarm-card__header">
+                            <span class="a0swarm-card__status" x-text="agent.status"></span>
+                            <span class="a0swarm-card__label" x-text="agent.label"></span>
+                            <span class="a0swarm-card__name" x-text="agent.agent_name"></span>
+                            <span class="a0swarm-card__unread"
                                   x-show="$store.swarmStore.unreadCount(agent) > 0"
                                   x-text="$store.swarmStore.unreadCount(agent)"></span>
                         </div>
-                        <div class="swarm-card__task" x-text="agent.task"></div>
-                        <div class="swarm-card__activity"
+                        <div class="a0swarm-card__task" x-text="agent.task"></div>
+                        <div class="a0swarm-card__activity"
                              x-show="agent.current_activity"
                              x-text="agent.current_activity"></div>
-                        <div class="swarm-card__blocker" x-show="agent.blocker">
-                            <span class="swarm-card__blocker-icon">🚧</span>
+                        <div class="a0swarm-card__blocker" x-show="agent.blocker">
+                            <span class="a0swarm-card__blocker-label">Blocked:</span>
                             <span x-text="agent.blocker"></span>
                         </div>
-                        <div class="swarm-card__messages"
+                        <div class="a0swarm-card__messages"
                              x-show="agent.messages && agent.messages.length > 0"
                              @click="$store.swarmStore.markRead(agent.agent_name)">
                             <template x-for="msg in agent.messages" :key="msg.timestamp">
-                                <div class="swarm-msg"
-                                     :class="msg.sender === 'orchestrator' ? 'swarm-msg--out' : 'swarm-msg--in'">
-                                    <span class="swarm-msg__sender" x-text="msg.sender"></span>
-                                    <span class="swarm-msg__content" x-text="msg.content"></span>
-                                    <span class="swarm-msg__time" x-text="$store.swarmStore.relativeTime(msg.timestamp)"></span>
+                                <div class="a0swarm-msg"
+                                     :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
+                                    <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                    <span class="a0swarm-msg__content" x-text="msg.content"></span>
                                 </div>
                             </template>
                         </div>
-                        <div class="swarm-card__compose"
+                        <div class="a0swarm-card__compose"
                              x-show="$store.swarmStore.composingFor === agent.agent_name">
                             <textarea
-                                class="swarm-compose__input"
+                                class="a0swarm-compose__input"
                                 x-model="$store.swarmStore.composeText"
                                 placeholder="Message this agent..."
                                 rows="2"
                                 @keydown.enter.ctrl="$store.swarmStore.sendMessage(agent.agent_name)"
                             ></textarea>
-                            <div class="swarm-compose__actions">
-                                <button class="swarm-btn swarm-btn--send"
+                            <div class="a0swarm-compose__actions">
+                                <button class="a0swarm-btn a0swarm-btn--primary"
                                         @click="$store.swarmStore.sendMessage(agent.agent_name)">Send</button>
-                                <button class="swarm-btn swarm-btn--unblock"
+                                <button class="a0swarm-btn a0swarm-btn--warn"
                                         x-show="agent.status === 'blocked'"
-                                        @click="$store.swarmStore.sendMessage(agent.agent_name, true)">Send & Unblock</button>
-                                <button class="swarm-btn swarm-btn--cancel-compose"
+                                        @click="$store.swarmStore.sendMessage(agent.agent_name, true)">Send &amp; Unblock</button>
+                                <button class="a0swarm-btn"
                                         @click="$store.swarmStore.closeCompose()">Cancel</button>
                             </div>
                         </div>
-                        <div class="swarm-card__actions">
-                            <button class="swarm-btn swarm-btn--message"
+                        <div class="a0swarm-card__actions">
+                            <button class="a0swarm-btn"
                                     x-show="$store.swarmStore.composingFor !== agent.agent_name"
                                     @click="$store.swarmStore.openCompose(agent.agent_name)">Message</button>
-                            <button class="swarm-btn swarm-btn--cancel"
+                            <button class="a0swarm-btn a0swarm-btn--danger"
                                     @click="$store.swarmStore.cancelAgent(agent.agent_name)">Cancel</button>
                         </div>
                     </div>
@@ -88,24 +84,23 @@
         </template>
 
         <template x-if="$store.swarmStore.completedAgents.length > 0">
-            <div class="swarm-section">
-                <div class="swarm-section__label">
+            <div class="a0swarm-section">
+                <div class="a0swarm-section__label">
                     <span>Completed</span>
-                    <button class="swarm-btn swarm-btn--cancel-compose"
-                            @click="$store.swarmStore.clearCompleted()">Clear Completed</button>
+                    <button class="a0swarm-btn a0swarm-btn--small"
+                            @click="$store.swarmStore.clearCompleted()">Clear</button>
                 </div>
                 <template x-for="agent in $store.swarmStore.completedAgents" :key="agent.agent_name">
-                    <div class="swarm-card swarm-card--completed" :class="$store.swarmStore.statusClass(agent.status)">
-                        <div class="swarm-card__header">
-                            <span class="swarm-card__icon" x-text="$store.swarmStore.statusIcon(agent.status)"></span>
-                            <span class="swarm-card__label" x-text="agent.label"></span>
-                            <span class="swarm-card__name" x-text="agent.agent_name"></span>
-                            <span class="swarm-card__time" x-text="$store.swarmStore.relativeTime(agent.finished_at)"></span>
+                    <div class="a0swarm-card a0swarm-card--completed" :class="$store.swarmStore.statusClass(agent.status)">
+                        <div class="a0swarm-card__header">
+                            <span class="a0swarm-card__status" x-text="agent.status"></span>
+                            <span class="a0swarm-card__label" x-text="agent.label"></span>
+                            <span class="a0swarm-card__name" x-text="agent.agent_name"></span>
                         </div>
-                        <div class="swarm-card__task" x-text="agent.task"></div>
-                        <div class="swarm-card__result"
+                        <div class="a0swarm-card__task" x-text="agent.task"></div>
+                        <div class="a0swarm-card__result"
                              x-show="agent.result"
-                             x-text="agent.result.substring(0, 200) + (agent.result.length > 200 ? '…' : '')"></div>
+                             x-text="(agent.result || '').substring(0, 200) + ((agent.result || '').length > 200 ? '...' : '')"></div>
                     </div>
                 </template>
             </div>

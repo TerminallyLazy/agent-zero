@@ -11,7 +11,7 @@ socket.addHandlers(["ws_webui"]);
 
 const proto = {
     agents: [],
-    panelOpen: true,
+    panelOpen: false,
     composingFor: null,
     composeText: "",
     _initialized: false,
@@ -58,9 +58,6 @@ const proto = {
     },
     get hasAgents() { return this.agents.length > 0; },
 
-    statusIcon(s) {
-        return ({pending:"⏳",working:"⚙️",blocked:"🚧",done:"✅",failed:"❌",cancelled:"🚫"}[s]) || "❓";
-    },
     statusClass(s) { return "status-" + s; },
     unreadCount(a) {
         return (a.messages || []).filter(m => !m.read && m.sender !== "orchestrator").length;

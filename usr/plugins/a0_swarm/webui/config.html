@@ -1,0 +1,65 @@
+<html>
+<head>
+    <title>A0 Swarm</title>
+</head>
+<body>
+    <div x-data>
+        <template x-if="config">
+            <div>
+                <div class="section-title">A0 Swarm</div>
+                <div class="section-description">
+                    Settings for the parallel subagent swarm.
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Max parallel agents</div>
+                        <div class="field-description">
+                            Hard cap on subagents spawned by a single delegate_parallel call.
+                            0 means no cap (warning logged above 16).
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number" min="0" max="64"
+                            x-model.number="config.max_parallel"
+                            x-init="if (config.max_parallel === undefined || config.max_parallel === null) config.max_parallel = 0" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Default subagent profile</div>
+                        <div class="field-description">
+                            Agent profile name used for spawned subagents when the
+                            delegate_parallel call does not specify one. Leave blank
+                            to inherit the parent profile.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text"
+                            x-model="config.default_profile"
+                            x-init="if (config.default_profile === undefined || config.default_profile === null) config.default_profile = ''"
+                            placeholder="(inherit parent)" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Result size cap (KB)</div>
+                        <div class="field-description">
+                            Maximum kilobytes of result text stored per subagent in the
+                            registry / panel. Larger results are truncated with a marker.
+                            The tool summary returned to the orchestrator is not capped.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number" min="1" max="1024"
+                            x-model.number="config.result_kb_cap"
+                            x-init="if (config.result_kb_cap === undefined || config.result_kb_cap === null) config.result_kb_cap = 64" />
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</body>
+</html>

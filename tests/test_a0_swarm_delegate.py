@@ -45,6 +45,17 @@ if "initialize" not in sys.modules:
     _init_stub.initialize_agent = MagicMock(return_value=MagicMock())
     sys.modules["initialize"] = _init_stub
 
+# helpers.plugins.get_plugin_config — stub the submodule and ensure the
+# `helpers` package exposes `plugins` as attribute (matches `from helpers import plugins`)
+_plugins_stub = types.ModuleType("helpers.plugins")
+_plugins_stub.get_plugin_config = MagicMock(return_value={})
+sys.modules["helpers.plugins"] = _plugins_stub
+if "helpers" not in sys.modules:
+    _helpers_pkg = types.ModuleType("helpers")
+    _helpers_pkg.__path__ = []
+    sys.modules["helpers"] = _helpers_pkg
+sys.modules["helpers"].plugins = _plugins_stub
+
 import pytest
 
 from usr.plugins.a0_swarm.helpers.registry import (
@@ -242,3 +253,26 @@ async def test_delegate_parallel_small_result_not_truncated(monkeypatch):
     a = SwarmRegistry.get().get_agent("SA1_1")
     assert a.result == "short result"
     assert "[...truncated]" not in a.result
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_max_parallel_cap_rejects(monkeypatch):
+    """When plugin config max_parallel is set, fan-out above it is rejected."""
+    _plugins_stub.get_plugin_config = MagicMock(return_value={"max_parallel": 2})
+    monkeypatch.setattr(dp_mod, "plugins", _plugins_stub)
+
+    parent = MagicMock(); parent.number = 0; parent.context.id = "P"
+    parent.context.log.log = MagicMock(); parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    resp = await tool.execute(tasks=[
+        {"label": "A", "task": "t"},
+        {"label": "B", "task": "t"},
+        {"label": "C", "task": "t"},
+    ])
+    assert "rejected" in resp.message
+    assert "max_parallel=2" in resp.message
+    assert SwarmRegistry.get().snapshot() == []
+
+    _plugins_stub.get_plugin_config = MagicMock(return_value={})
