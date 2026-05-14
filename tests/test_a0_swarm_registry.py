@@ -161,3 +161,26 @@ async def test_remove_subscriber_stops_callbacks():
     reg.update_status("SA1_1", SwarmAgentStatus.WORKING)
     await asyncio.sleep(0.05)
     assert calls == 1
+
+
+def test_registry_thread_safety_under_contention():
+    import threading
+    reg = SwarmRegistry.get()
+    for i in range(20):
+        reg.register(_new_agent(f"SA1_{i}"))
+
+    def churn(i):
+        for _ in range(200):
+            reg.update_status(f"SA1_{i}", SwarmAgentStatus.WORKING)
+            reg.update_activity(f"SA1_{i}", "x")
+            reg.add_message(SwarmMessage(sender="orchestrator", recipient=f"SA1_{i}", content="m"))
+
+    threads = [threading.Thread(target=churn, args=(i,)) for i in range(20)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+
+    snap = reg.snapshot()
+    assert len(snap) == 20
+    for entry in snap:
+        assert entry["status"] == "working"
+        assert len(entry["messages"]) == 200
