@@ -933,7 +933,8 @@
 
                         <!-- Expanded body -->
                         <div class="a0swarm-card__collapsible">
-                            <div class="a0swarm-card__task" x-text="agent.task"></div>
+                            <div class="a0swarm-card__task a0swarm-md"
+                                 x-html="$store.swarmStore.renderMd(agent.task)"></div>
 
                             <div class="a0swarm-card__messages"
                                  x-show="agent.messages && agent.messages.length > 0"
@@ -1036,7 +1037,8 @@
                         </header>
 
                         <div class="a0swarm-card__collapsible">
-                            <div class="a0swarm-card__task" x-text="agent.task"></div>
+                            <div class="a0swarm-card__task a0swarm-md"
+                                 x-html="$store.swarmStore.renderMd(agent.task)"></div>
                             <div class="a0swarm-card__result a0swarm-md"
                                  x-show="agent.result"
                                  x-html="$store.swarmStore.renderMd(agent.result)"></div>
