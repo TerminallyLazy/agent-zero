@@ -100,3 +100,86 @@ async def test_delegate_parallel_runs_two_tasks(monkeypatch):
     assert "result-ctx-0" in resp.message
     assert "result-ctx-1" in resp.message
     assert AC.remove.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_one_fails_others_succeed(monkeypatch):
+    counter = {"i": 0}
+    def fake_context(*, config):
+        ctx = MagicMock()
+        ctx.id = f"ctx-{counter['i']}"
+        sub = MagicMock()
+        if counter["i"] == 0:
+            sub.monologue = AsyncMock(return_value="ok")
+        else:
+            sub.monologue = AsyncMock(side_effect=RuntimeError("boom"))
+        sub.hist_add_user_message = MagicMock()
+        ctx.agent0 = sub
+        counter["i"] += 1
+        return ctx
+
+    AC = MagicMock(side_effect=fake_context)
+    AC.remove = MagicMock()
+    monkeypatch.setattr(dp_mod, "AgentContext", AC)
+    monkeypatch.setattr(dp_mod, "initialize_agent", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(dp_mod, "UserMessage", lambda message: {"message": message})
+
+    parent = MagicMock()
+    parent.number = 0
+    parent.context.id = "P"
+    parent.context.log.log = MagicMock()
+    parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    resp = await tool.execute(tasks=[{"label": "A", "task": "t"}, {"label": "B", "task": "t"}])
+
+    snap = sorted(SwarmRegistry.get().snapshot(), key=lambda a: a["agent_name"])
+    assert snap[0]["status"] == "done"
+    assert snap[1]["status"] == "failed"
+    assert "boom" in snap[1]["blocker"]
+    assert "FAILED" in resp.message and "DONE" in resp.message
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_pre_cancelled_is_absorbed(monkeypatch):
+    """If status is set to CANCELLED mid-flight, the eventual DONE/FAILED is dropped."""
+    started = asyncio.Event()
+    proceed = asyncio.Event()
+
+    async def slow_monologue():
+        started.set()
+        await proceed.wait()
+        return "late"
+
+    def fake_context(*, config):
+        ctx = MagicMock()
+        ctx.id = "ctx-0"
+        sub = MagicMock()
+        sub.monologue = slow_monologue
+        sub.hist_add_user_message = MagicMock()
+        ctx.agent0 = sub
+        return ctx
+
+    AC = MagicMock(side_effect=fake_context)
+    AC.remove = MagicMock()
+    monkeypatch.setattr(dp_mod, "AgentContext", AC)
+    monkeypatch.setattr(dp_mod, "initialize_agent", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(dp_mod, "UserMessage", lambda message: {"message": message})
+
+    parent = MagicMock()
+    parent.number = 0
+    parent.context.id = "P"
+    parent.context.log.log = MagicMock()
+    parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    task = asyncio.create_task(tool.execute(tasks=[{"label": "A", "task": "t"}]))
+
+    await started.wait()
+    SwarmRegistry.get().update_status("SA1_1", SwarmAgentStatus.CANCELLED)
+    proceed.set()
+    await task
+
+    assert SwarmRegistry.get().get_agent("SA1_1").status == SwarmAgentStatus.CANCELLED
