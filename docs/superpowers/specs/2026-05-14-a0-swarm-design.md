@@ -4,12 +4,13 @@
 **Install path:** `usr/plugins/a0_swarm/`
 **Python import root:** `usr.plugins.a0_swarm`
 **Target version:** 1.0.0
+**Supersedes:** `A0-Swarm.md` (draft).
 
-This document is the validated design for the `a0_swarm` plugin. It supersedes
-`A0-Swarm.md` where the two disagree; the prior document was a draft that
-referenced several framework APIs that do not exist as written. Every framework
-integration point below has been verified against the current Agent Zero
-codebase.
+This document is the validated design for the `a0_swarm` plugin and
+**supersedes `A0-Swarm.md`** wherever the two disagree. The prior draft
+referenced several framework APIs that do not exist as written; every
+framework integration point in this spec has been verified against the current
+Agent Zero codebase (see §13).
 
 ---
 
@@ -132,6 +133,61 @@ Methods:
     _notify()  # internal — scheduled via run_coroutine_threadsafe
 ```
 
+### Concurrency contract (binding)
+
+These rules are mandatory; deviating from them creates subtle races that the
+test suite will not catch.
+
+1. **All mutations go through `update_status`, `update_activity`, `add_message`,
+   `register`, `remove`, `clear_*`. Callers never assign to `SwarmAgent` fields
+   directly.** No exceptions.
+
+2. **`update_status` enforces terminal-state absorbing:**
+   ```
+   TERMINAL = {DONE, FAILED, CANCELLED}
+   def update_status(name, new_status, **fields):
+       with self._rlock:
+           agent = self._agents.get(name)
+           if agent is None: return
+           if agent.status in TERMINAL and new_status != agent.status:
+               return                      # absorbing: ignore further writes
+           agent.status = new_status
+           for k, v in fields.items():
+               if hasattr(agent, k): setattr(agent, k, v)
+           if new_status in TERMINAL and not agent.finished_at:
+               agent.finished_at = utc_iso_now()
+           subs_copy = list(self._subscribers)
+       self._fire(subs_copy)
+   ```
+   This makes the cancel-vs-failure race in §4.1 / §6.3 a pure ordering
+   problem: whichever terminal status lands first wins, and the loser is
+   silently dropped. Callers must rely on this; do not re-check status
+   elsewhere.
+
+3. **`_notify()` / `_fire()` discipline:**
+   - Subscriber list is copied **inside** `_rlock`.
+   - The lock is released **before** iterating subscribers.
+   - Each subscriber is invoked via
+     `asyncio.run_coroutine_threadsafe(cb(), loop)` using the loop captured at
+     subscribe time. The current thread is never used to await.
+   - Subscriber callbacks must not call back into the registry synchronously;
+     they should `await registry.snapshot(...)` (which acquires the lock
+     briefly) and then `emit_to`.
+
+4. **`snapshot()` acquires `_rlock` for the duration of the copy and returns
+   a deep-converted list of dicts.** Returned objects share no mutable state
+   with the registry — safe to ship across threads.
+
+5. **`register()` and `remove()` both fire `_notify()`** so UI cards appear /
+   disappear without a poll.
+
+6. **Subscriber thread origin.** The asyncio loop captured by the
+   `webui_ws_event` extension is the UI event loop. Mutations from
+   `_run_subagent` (running on subagent task loops via `asyncio.gather`) and
+   from API handlers (running on the UI loop) both schedule onto the UI loop
+   via `run_coroutine_threadsafe`. This avoids needing the calling thread to
+   itself be on the UI loop.
+
 ### Key choices versus prior draft
 
 1. **`parent_context_id` field added** so each browser tab sees only swarms
@@ -208,20 +264,29 @@ class DelegateParallel(Tool):
         try:
             sub_ag.hist_add_user_message(UserMessage(message=text))
             result = await sub_ag.monologue()
-            # honour pre-set CANCELLED (set by cancel endpoint before kill)
-            cur = reg.get_agent(entry.agent_name)
-            if cur and cur.status != SwarmAgentStatus.CANCELLED:
-                reg.update_status(entry.agent_name, SwarmAgentStatus.DONE,
-                                  result=result or "", current_activity="")
+            # update_status is absorbing on terminal states — if cancel landed
+            # first, this DONE write is silently dropped. No re-read needed.
+            reg.update_status(entry.agent_name, SwarmAgentStatus.DONE,
+                              result=result or "", current_activity="")
             return result or ""
         except Exception as e:
-            cur = reg.get_agent(entry.agent_name)
-            if cur and cur.status != SwarmAgentStatus.CANCELLED:
-                reg.update_status(entry.agent_name, SwarmAgentStatus.FAILED,
-                                  blocker=str(e), current_activity="")
+            # Likewise absorbed if cancelled or already done.
+            reg.update_status(entry.agent_name, SwarmAgentStatus.FAILED,
+                              blocker=str(e)[:2000], current_activity="")
             raise
         finally:
             AgentContext.remove(sub_ctx.id)
+```
+
+**Result-size truncation.** `result or ""` is stored verbatim in the registry.
+To guard against runaway output OOMing the registry, the value is truncated
+to 64 KiB before storage; a `_truncated: True` marker is appended when
+truncation occurs. The unbounded result is still returned to the orchestrator
+in the tool's markdown summary.
+
+```python
+MAX_RESULT_BYTES = 64 * 1024
+# applied inside _run_subagent before update_status(DONE, result=...)
 ```
 
 Verified APIs:
@@ -428,12 +493,18 @@ class SwarmCancel(ApiHandler):
         entry = reg.get_agent(agent_name)
         if not entry:
             return Response(...404...)
-        # set CANCELLED *before* killing so _run_subagent doesn't overwrite
+        # Two-step cancel, in this order — relies on the absorbing terminal
+        # state in update_status (§3 concurrency rule 2):
+        #   1. Set CANCELLED first. Subsequent DONE/FAILED writes from
+        #      _run_subagent are silently dropped.
+        #   2. Then kill the underlying DeferredTask. The exception raised
+        #      into the subagent loop will trigger _run_subagent's except
+        #      branch, but that write is absorbed.
         reg.update_status(agent_name, SwarmAgentStatus.CANCELLED,
                           current_activity="")
         ctx = AgentContext.get(entry.context_id)
         if ctx:
-            ctx.kill_process()
+            ctx.kill_process()        # sync; calls self.task.kill() — agent.py:224
         return {"ok": True}
 ```
 
@@ -465,6 +536,34 @@ handlers from `api/`.
 ---
 
 ## 7. Frontend
+
+### 7.0 WebSocket message schema (binding)
+
+Event names and payload shapes are part of the public contract between
+backend and frontend.
+
+| Direction | Event | Payload | When |
+|---|---|---|---|
+| client → server | `swarm_subscribe` | `{parent_context_id: str}` | Panel mount / parent context switch |
+| server → client (ack) | (response_data on subscribe) | `{agents: SwarmAgent[]}` | Immediate snapshot for the subscribed parent |
+| client → server | `swarm_unsubscribe` | `{}` | Panel unmount / parent context switch away |
+| server → client (push) | `swarm_push` | `{agents: SwarmAgent[]}` | Any registry mutation that affects this sid's parent |
+
+`SwarmAgent` JSON shape matches `SwarmAgent.to_dict()`:
+```
+{
+  agent_name, label, task, context_id, parent_context_id,
+  status, current_activity, blocker, result,
+  messages: [{sender, recipient, content, timestamp, read}],
+  started_at, finished_at
+}
+```
+
+**Reconnect / replay.** On every `swarm_subscribe` the server returns the
+current snapshot for that parent. The client therefore needs no replay buffer;
+it discards local state and rebuilds from the snapshot. If the socket
+disconnects, the client must re-emit `swarm_subscribe` on reconnect (Alpine
+store hooks into the existing websocket's `connect` event).
 
 ### 7.1 Mount point
 
@@ -616,12 +715,19 @@ Filename pattern `tool.*.md` is the existing convention for tool descriptions.
 
 ## 12. Non-Goals (out of scope for v1.0.0)
 
-- Persistence to disk / DB across process restarts.
+- **Persistence across restarts.** In-flight subagents are orphaned on Agent
+  Zero process reload; the registry is in-memory only. UI shows an empty panel
+  after restart, even if `AgentContext` objects survive in the framework.
 - Cross-process or distributed swarms (single Agent Zero process only).
 - Plugin Settings UI (`settings_sections: []`).
 - Per-project or per-agent config (`per_*_config: false`).
 - Plugin Index submission / community publish (handled separately).
 - Automatic concurrency cap (user accepted no cap; warn-log above 16).
+
+**In scope but bounded:**
+- Result size is capped at 64 KiB per subagent (§4.1). Tool-summary text
+  delivered to the orchestrator is unbounded — the cap applies only to the
+  copy stored in the registry / shown in the UI panel.
 
 ---
 
@@ -633,7 +739,9 @@ Filename pattern `tool.*.md` is the existing convention for tool descriptions.
 - `AgentContext.remove(id)`.
 - `AgentContext.get(id)`.
 - `AgentContext.communicate(UserMessage)` (`agent.py:251`).
-- `AgentContext.kill_process()` (`agent.py:224`).
+- `AgentContext.kill_process()` (`agent.py:224`, **synchronous**, returns `None`,
+  internally calls `self.task.kill()` on the underlying `DeferredTask`; no-op
+  if `self.task` is unset; does not raise on already-killed tasks).
 - `Agent.monologue()` (async).
 - `Agent.hist_add_user_message(UserMessage)` (`tools/call_subordinate.py:31`).
 - `helpers.tool.Tool`, `Response`.
