@@ -595,28 +595,50 @@
 .a0swarm-card__result { cursor: auto; }
 
 .a0swarm-card__avatar {
+    position: relative;
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    font-size: 0.65rem;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--color-background) 70%, transparent);
+    border: 1px solid var(--a0swarm-chrome-border);
+    color: var(--color-text);
+}
+.a0swarm-card__avatar-icon {
+    font-size: 1.15rem !important;
+    line-height: 1;
+    color: var(--a0swarm-avatar-accent, var(--color-text-muted));
+}
+.a0swarm-card__avatar-num {
+    position: absolute;
+    right: -0.25rem;
+    bottom: -0.25rem;
+    min-width: 0.95rem;
+    height: 0.95rem;
+    padding: 0 0.22rem;
+    border-radius: 999px;
+    background: var(--color-panel);
+    border: 1px solid var(--a0swarm-chrome-border);
+    color: var(--color-text);
+    font-size: 0.55rem;
     font-weight: 700;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    color: #fff;
-    border: 1px solid color-mix(in srgb, #000 25%, transparent);
-    text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
-.a0swarm-card__avatar.slot-1 { background: linear-gradient(135deg, #4a9eff, #2563eb); }
-.a0swarm-card__avatar.slot-2 { background: linear-gradient(135deg, #22c55e, #15803d); }
-.a0swarm-card__avatar.slot-3 { background: linear-gradient(135deg, #f59e0b, #b45309); }
-.a0swarm-card__avatar.slot-4 { background: linear-gradient(135deg, #ef4444, #b91c1c); }
-.a0swarm-card__avatar.slot-5 { background: linear-gradient(135deg, #a855f7, #6b21a8); }
-.a0swarm-card__avatar.slot-6 { background: linear-gradient(135deg, #ec4899, #9d174d); }
-.a0swarm-card__avatar.slot-7 { background: linear-gradient(135deg, #14b8a6, #115e59); }
-.a0swarm-card__avatar.slot-8 { background: linear-gradient(135deg, #f97316, #9a3412); }
+.a0swarm-card__avatar.slot-1 { --a0swarm-avatar-accent: #4a9eff; }
+.a0swarm-card__avatar.slot-2 { --a0swarm-avatar-accent: #22c55e; }
+.a0swarm-card__avatar.slot-3 { --a0swarm-avatar-accent: #f59e0b; }
+.a0swarm-card__avatar.slot-4 { --a0swarm-avatar-accent: #ef4444; }
+.a0swarm-card__avatar.slot-5 { --a0swarm-avatar-accent: #a855f7; }
+.a0swarm-card__avatar.slot-6 { --a0swarm-avatar-accent: #ec4899; }
+.a0swarm-card__avatar.slot-7 { --a0swarm-avatar-accent: #14b8a6; }
+.a0swarm-card__avatar.slot-8 { --a0swarm-avatar-accent: #f97316; }
 
 .a0swarm-card__progress {
     position: relative;

@@ -106,6 +106,24 @@ const proto = {
         return (h % 8) + 1;
     },
 
+    /**
+     * Material-symbols glyph per slot. Distinct, role-evocative, not
+     * status-coloured (status is shown by the pill + progress bar).
+     */
+    slotIcon(name) {
+        const icons = [
+            "psychology",        // 1 — cognition / planner
+            "science",           // 2 — analysis
+            "engineering",       // 3 — builder
+            "auto_stories",      // 4 — researcher / reading
+            "terminal",          // 5 — code
+            "support_agent",     // 6 — helper
+            "troubleshoot",      // 7 — debugger
+            "inventory_2",       // 8 — generalist
+        ];
+        return icons[this.slotIndex(name) - 1] || "smart_toy";
+    },
+
     openCompose(name)  { this.composingFor = name; this.composeText = ""; if (!this.expandedFor[name]) this.toggleExpand(name); },
     closeCompose()     { this.composingFor = null; this.composeText = ""; },
     togglePanel()      { this.panelOpen = !this.panelOpen; },
