@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -127,3 +128,36 @@ def test_clear_for_parent_removes_all_for_that_parent():
     reg.clear_for_parent("P1")
     assert reg.get_agent("SA1_1") is None
     assert reg.get_agent("SA2_1") is not None
+
+
+@pytest.mark.asyncio
+async def test_subscriber_called_on_mutation():
+    reg = SwarmRegistry.get()
+    loop = asyncio.get_running_loop()
+    fired = asyncio.Event()
+
+    async def cb():
+        fired.set()
+
+    reg.add_subscriber(loop, cb)
+    reg.register(_new_agent("SA1_1"))
+    await asyncio.wait_for(fired.wait(), timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_remove_subscriber_stops_callbacks():
+    reg = SwarmRegistry.get()
+    loop = asyncio.get_running_loop()
+    calls = 0
+
+    async def cb():
+        nonlocal calls
+        calls += 1
+
+    reg.add_subscriber(loop, cb)
+    reg.register(_new_agent("SA1_1"))
+    await asyncio.sleep(0.05)
+    reg.remove_subscriber(cb)
+    reg.update_status("SA1_1", SwarmAgentStatus.WORKING)
+    await asyncio.sleep(0.05)
+    assert calls == 1

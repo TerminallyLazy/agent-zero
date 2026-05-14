@@ -171,6 +171,14 @@ class SwarmRegistry:
             subs = list(self._subscribers)
         self._fire(subs)
 
+    def add_subscriber(self, loop: asyncio.AbstractEventLoop, cb: Callable[[], Coroutine]) -> None:
+        with self._rlock:
+            self._subscribers.append((loop, cb))
+
+    def remove_subscriber(self, cb: Callable[[], Coroutine]) -> None:
+        with self._rlock:
+            self._subscribers = [(l, c) for (l, c) in self._subscribers if c is not cb]
+
     def _fire(self, subs: list[tuple[asyncio.AbstractEventLoop, Callable[[], Coroutine]]]) -> None:
         for loop, cb in subs:
             try:
