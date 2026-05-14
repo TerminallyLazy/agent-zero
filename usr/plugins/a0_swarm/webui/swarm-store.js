@@ -6,6 +6,8 @@ const EVT_SUB   = "swarm_subscribe";
 const EVT_UNSUB = "swarm_unsubscribe";
 const EVT_PUSH  = "swarm_push";
 
+const POLL_INTERVAL_MS = 1500;
+
 const socket = getNamespacedClient("/ws");
 socket.addHandlers(["ws_webui"]);
 
@@ -16,16 +18,35 @@ const proto = {
     composeText: "",
     _initialized: false,
     _parentCtxId: "",
+    _pollTimer: null,
+    _wsBound: false,
 
     async init() {
         if (this._initialized) return;
         this._initialized = true;
         this._parentCtxId = this._readParentCtxId();
+
+        // 1. Register push handler BEFORE subscribing so we don't lose events.
+        if (!this._wsBound) {
+            this._wsBound = true;
+            try {
+                socket.on(EVT_PUSH, (data) => {
+                    if (data && Array.isArray(data.agents)) this.agents = data.agents;
+                });
+                socket.on("connect", () => { this._subscribe(); });
+            } catch (_) {}
+        }
+
+        // 2. Subscribe (best-effort; failures are silent and the poll keeps us alive).
         await this._subscribe();
-        socket.on(EVT_PUSH, (data) => {
-            if (data && Array.isArray(data.agents)) this.agents = data.agents;
-        });
-        socket.on("connect", async () => { await this._subscribe(); });
+
+        // 3. Polling fallback. Runs every POLL_INTERVAL_MS regardless of WS state.
+        //    Cheap (~1 KB JSON), guarantees the panel reflects backend state even when
+        //    the push channel is down.
+        await this._poll();
+        if (!this._pollTimer) {
+            this._pollTimer = setInterval(() => this._poll(), POLL_INTERVAL_MS);
+        }
     },
 
     _readParentCtxId() {
@@ -38,16 +59,19 @@ const proto = {
 
     async _subscribe() {
         try {
-            const resp = await socket.emit(EVT_SUB, { parent_context_id: this._parentCtxId });
-            // Some impls return ack; if agents arrive on push, this no-ops harmlessly
-            if (resp && Array.isArray(resp.agents)) this.agents = resp.agents;
-        } catch (_) {
-            // fall back to one-shot fetch
-            try {
-                const r = await callJsonApi("/api/swarm_status", { parent_context_id: this._parentCtxId });
-                if (r && Array.isArray(r.agents)) this.agents = r.agents;
-            } catch (_) {}
-        }
+            await socket.emit(EVT_SUB, { parent_context_id: this._parentCtxId });
+        } catch (_) {}
+    },
+
+    async _poll() {
+        // Re-read parent ctx in case the user switched chat contexts.
+        this._parentCtxId = this._readParentCtxId();
+        try {
+            const r = await callJsonApi("/api/swarm_status", {
+                parent_context_id: this._parentCtxId,
+            });
+            if (r && Array.isArray(r.agents)) this.agents = r.agents;
+        } catch (_) {}
     },
 
     get activeAgents() {
@@ -80,12 +104,15 @@ const proto = {
                 agent_name: name, content, unblock,
             });
         } catch (_) {}
+        // Refresh immediately so the user sees their message land.
+        this._poll();
     },
 
     async cancelAgent(name) {
         try {
             await callJsonApi("/api/swarm_cancel", { agent_name: name });
         } catch (_) {}
+        this._poll();
     },
 
     async clearCompleted() {
@@ -94,6 +121,7 @@ const proto = {
                 parent_context_id: this._parentCtxId,
             });
         } catch (_) {}
+        this._poll();
     },
 
     relativeTime(iso) {
