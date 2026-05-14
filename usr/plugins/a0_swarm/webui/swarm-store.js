@@ -67,7 +67,7 @@ const proto = {
         // Re-read parent ctx in case the user switched chat contexts.
         this._parentCtxId = this._readParentCtxId();
         try {
-            const r = await callJsonApi("/api/swarm_status", {
+            const r = await callJsonApi("/plugins/a0_swarm/swarm_status", {
                 parent_context_id: this._parentCtxId,
             });
             if (r && Array.isArray(r.agents)) this.agents = r.agents;
@@ -100,7 +100,7 @@ const proto = {
         if (!content) return;
         this.closeCompose();
         try {
-            await callJsonApi("/api/swarm_send_message", {
+            await callJsonApi("/plugins/a0_swarm/swarm_send_message", {
                 agent_name: name, content, unblock,
             });
         } catch (_) {}
@@ -110,14 +110,14 @@ const proto = {
 
     async cancelAgent(name) {
         try {
-            await callJsonApi("/api/swarm_cancel", { agent_name: name });
+            await callJsonApi("/plugins/a0_swarm/swarm_cancel", { agent_name: name });
         } catch (_) {}
         this._poll();
     },
 
     async clearCompleted() {
         try {
-            await callJsonApi("/api/swarm_clear_completed", {
+            await callJsonApi("/plugins/a0_swarm/swarm_clear_completed", {
                 parent_context_id: this._parentCtxId,
             });
         } catch (_) {}
