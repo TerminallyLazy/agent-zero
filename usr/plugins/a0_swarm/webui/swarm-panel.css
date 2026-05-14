@@ -692,10 +692,19 @@
 .a0swarm-md h3 { font-size: 0.88rem; }
 .a0swarm-md h4, .a0swarm-md h5, .a0swarm-md h6 { font-size: 0.82rem; }
 .a0swarm-md ul, .a0swarm-md ol { padding-left: 1.3rem; }
-.a0swarm-md li { margin: 0; }
-.a0swarm-md li + li { margin-top: 0.15em; }
-.a0swarm-md li > p { display: inline; }
-.a0swarm-md li > p + p { display: block; margin-top: 0.15em; }
+/* cb: spacing-v3 */
+.a0swarm-md li, .a0swarm-md li > *, .a0swarm-md li > * > *  {
+    margin: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+.a0swarm-md li      { padding: 0 !important; }
+.a0swarm-md li + li { margin-top: 0.15em !important; }
+.a0swarm-md li > p  { display: inline !important; }
+.a0swarm-md li > p + p,
+.a0swarm-md li > ul,
+.a0swarm-md li > ol,
+.a0swarm-md li > pre { display: block !important; margin-top: 0.2em !important; }
 .a0swarm-md a {
     color: var(--color-highlight);
     text-decoration: underline;
