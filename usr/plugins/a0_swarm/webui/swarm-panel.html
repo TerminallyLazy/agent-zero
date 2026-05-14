@@ -565,16 +565,102 @@
     .a0swarm-card__result {
         font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
         font-size: 0.72rem;
-        line-height: 1.4;
-        color: var(--color-text-muted);
+        line-height: 1.45;
+        color: var(--color-text);
         background: color-mix(in srgb, var(--color-background) 55%, transparent);
         border: 1px solid var(--a0swarm-chrome-border);
         border-radius: 0.35rem;
-        padding: 0.45rem 0.55rem;
-        max-height: 5.5rem;
-        overflow: hidden;
+        padding: 0.55rem 0.65rem;
+        max-height: 18rem;
+        overflow-y: auto;
         white-space: pre-wrap;
         word-break: break-word;
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--color-border) 78%, transparent) transparent;
+    }
+
+    .a0swarm-card__result::-webkit-scrollbar { width: 6px; }
+    .a0swarm-card__result::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--color-border) 78%, transparent);
+        border-radius: 999px;
+    }
+
+    /* ----- Collapsible card behavior ----- */
+    .a0swarm-card { cursor: pointer; }
+    .a0swarm-card__header { cursor: pointer; }
+    .a0swarm-card__chevron {
+        margin-left: auto;
+        color: var(--color-text-muted);
+        font-size: 1rem !important;
+        transition: transform 0.18s ease;
+    }
+    .a0swarm-card.is-expanded .a0swarm-card__chevron { transform: rotate(180deg); }
+
+    .a0swarm-card__collapsible {
+        display: none;
+        flex-direction: column;
+        gap: 0.55rem;
+    }
+    .a0swarm-card.is-expanded .a0swarm-card__collapsible { display: flex; }
+
+    /* Click on interactive children should NOT toggle the card. */
+    .a0swarm-card__collapsible button,
+    .a0swarm-card__collapsible textarea,
+    .a0swarm-card__collapsible input,
+    .a0swarm-card__messages,
+    .a0swarm-card__result { cursor: auto; }
+
+    /* ----- Slot avatar ----- */
+    .a0swarm-card__avatar {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        font-size: 0.65rem;
+        font-weight: 700;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: #fff;
+        border: 1px solid color-mix(in srgb, #000 25%, transparent);
+        text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+    }
+    .a0swarm-card__avatar.slot-1 { background: linear-gradient(135deg, #4a9eff, #2563eb); }
+    .a0swarm-card__avatar.slot-2 { background: linear-gradient(135deg, #22c55e, #15803d); }
+    .a0swarm-card__avatar.slot-3 { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .a0swarm-card__avatar.slot-4 { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .a0swarm-card__avatar.slot-5 { background: linear-gradient(135deg, #a855f7, #6b21a8); }
+    .a0swarm-card__avatar.slot-6 { background: linear-gradient(135deg, #ec4899, #9d174d); }
+    .a0swarm-card__avatar.slot-7 { background: linear-gradient(135deg, #14b8a6, #115e59); }
+    .a0swarm-card__avatar.slot-8 { background: linear-gradient(135deg, #f97316, #9a3412); }
+
+    /* ----- Working progress bar (indeterminate) ----- */
+    .a0swarm-card__progress {
+        position: relative;
+        height: 3px;
+        margin-top: 0.1rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--color-highlight) 12%, transparent);
+        overflow: hidden;
+    }
+    .a0swarm-card__progress::after {
+        content: "";
+        position: absolute;
+        left: -40%;
+        top: 0;
+        bottom: 0;
+        width: 40%;
+        background: linear-gradient(90deg,
+            transparent,
+            var(--color-highlight),
+            transparent);
+        animation: a0swarm-progress 1.4s ease-in-out infinite;
+        border-radius: 999px;
+    }
+    @keyframes a0swarm-progress {
+        0%   { left: -45%; }
+        100% { left: 105%; }
     }
 </style>
 
@@ -634,8 +720,17 @@
                 </div>
 
                 <template x-for="agent in $store.swarmStore.activeAgents" :key="agent.agent_name">
-                    <article class="a0swarm-card" :class="$store.swarmStore.statusClass(agent.status)">
-                        <header class="a0swarm-card__header">
+                    <article class="a0swarm-card"
+                             :class="[
+                                $store.swarmStore.statusClass(agent.status),
+                                $store.swarmStore.isExpanded(agent.agent_name) ? 'is-expanded' : ''
+                             ]">
+                        <header class="a0swarm-card__header"
+                                @click="$store.swarmStore.toggleExpand(agent.agent_name)">
+                            <span class="a0swarm-card__avatar"
+                                  :class="'slot-' + $store.swarmStore.slotIndex(agent.agent_name)"
+                                  x-text="$store.swarmStore.slotIndex(agent.agent_name)"
+                                  :title="agent.agent_name"></span>
                             <span class="a0swarm-card__status" x-text="agent.status"></span>
                             <span class="a0swarm-card__label" x-text="agent.label" :title="agent.label"></span>
                             <span class="a0swarm-card__name" x-text="agent.agent_name" :title="agent.agent_name"></span>
@@ -643,13 +738,18 @@
                                   x-show="$store.swarmStore.unreadCount(agent) > 0"
                                   x-text="$store.swarmStore.unreadCount(agent)"
                                   :title="$store.swarmStore.unreadCount(agent) + ' unread'"></span>
+                            <span class="material-symbols-outlined a0swarm-card__chevron"
+                                  aria-hidden="true">expand_more</span>
                         </header>
 
-                        <div class="a0swarm-card__task" x-text="agent.task"></div>
-
+                        <!-- Always-visible compact info -->
                         <div class="a0swarm-card__activity"
                              x-show="agent.current_activity"
                              x-text="agent.current_activity"></div>
+
+                        <div class="a0swarm-card__progress"
+                             x-show="agent.status === 'working'"
+                             aria-hidden="true"></div>
 
                         <div class="a0swarm-card__blocker" x-show="agent.blocker">
                             <span class="material-symbols-outlined" aria-hidden="true">block</span>
@@ -659,56 +759,61 @@
                             </div>
                         </div>
 
-                        <div class="a0swarm-card__messages"
-                             x-show="agent.messages && agent.messages.length > 0"
-                             @click="$store.swarmStore.markRead(agent.agent_name)">
-                            <template x-for="msg in agent.messages" :key="msg.timestamp">
-                                <div class="a0swarm-msg"
-                                     :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
-                                    <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
-                                    <span class="a0swarm-msg__content" x-text="msg.content"></span>
-                                </div>
-                            </template>
-                        </div>
+                        <!-- Expanded body -->
+                        <div class="a0swarm-card__collapsible">
+                            <div class="a0swarm-card__task" x-text="agent.task"></div>
 
-                        <div class="a0swarm-card__compose"
-                             x-show="$store.swarmStore.composingFor === agent.agent_name">
-                            <textarea
-                                class="a0swarm-compose__input"
-                                x-model="$store.swarmStore.composeText"
-                                placeholder="Message this agent..."
-                                rows="2"
-                                @keydown.enter.ctrl="$store.swarmStore.sendMessage(agent.agent_name)"
-                            ></textarea>
-                            <div class="a0swarm-compose__actions">
-                                <button type="button" class="a0swarm-btn a0swarm-btn--primary"
-                                        @click="$store.swarmStore.sendMessage(agent.agent_name)">
-                                    <span class="material-symbols-outlined" aria-hidden="true">send</span>
-                                    <span>Send</span>
-                                </button>
-                                <button type="button" class="a0swarm-btn a0swarm-btn--warn"
-                                        x-show="agent.status === 'blocked'"
-                                        @click="$store.swarmStore.sendMessage(agent.agent_name, true)">
-                                    <span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
-                                    <span>Send &amp; Unblock</span>
-                                </button>
-                                <button type="button" class="a0swarm-btn"
-                                        @click="$store.swarmStore.closeCompose()">Cancel</button>
+                            <div class="a0swarm-card__messages"
+                                 x-show="agent.messages && agent.messages.length > 0"
+                                 @click="$store.swarmStore.markRead(agent.agent_name)">
+                                <template x-for="msg in agent.messages" :key="msg.timestamp">
+                                    <div class="a0swarm-msg"
+                                         :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
+                                        <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                        <span class="a0swarm-msg__content" x-text="msg.content"></span>
+                                    </div>
+                                </template>
                             </div>
-                        </div>
 
-                        <div class="a0swarm-card__actions">
-                            <button type="button" class="a0swarm-btn"
-                                    x-show="$store.swarmStore.composingFor !== agent.agent_name"
-                                    @click="$store.swarmStore.openCompose(agent.agent_name)">
-                                <span class="material-symbols-outlined" aria-hidden="true">forum</span>
-                                <span>Message</span>
-                            </button>
-                            <button type="button" class="a0swarm-btn a0swarm-btn--danger"
-                                    @click="$store.swarmStore.cancelAgent(agent.agent_name)">
-                                <span class="material-symbols-outlined" aria-hidden="true">cancel</span>
-                                <span>Cancel</span>
-                            </button>
+                            <div class="a0swarm-card__compose"
+                                 x-show="$store.swarmStore.composingFor === agent.agent_name">
+                                <textarea
+                                    class="a0swarm-compose__input"
+                                    x-model="$store.swarmStore.composeText"
+                                    placeholder="Message this agent..."
+                                    rows="2"
+                                    @keydown.enter.ctrl="$store.swarmStore.sendMessage(agent.agent_name)"
+                                ></textarea>
+                                <div class="a0swarm-compose__actions">
+                                    <button type="button" class="a0swarm-btn a0swarm-btn--primary"
+                                            @click.stop="$store.swarmStore.sendMessage(agent.agent_name)">
+                                        <span class="material-symbols-outlined" aria-hidden="true">send</span>
+                                        <span>Send</span>
+                                    </button>
+                                    <button type="button" class="a0swarm-btn a0swarm-btn--warn"
+                                            x-show="agent.status === 'blocked'"
+                                            @click.stop="$store.swarmStore.sendMessage(agent.agent_name, true)">
+                                        <span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
+                                        <span>Send &amp; Unblock</span>
+                                    </button>
+                                    <button type="button" class="a0swarm-btn"
+                                            @click.stop="$store.swarmStore.closeCompose()">Cancel</button>
+                                </div>
+                            </div>
+
+                            <div class="a0swarm-card__actions">
+                                <button type="button" class="a0swarm-btn"
+                                        x-show="$store.swarmStore.composingFor !== agent.agent_name"
+                                        @click.stop="$store.swarmStore.openCompose(agent.agent_name)">
+                                    <span class="material-symbols-outlined" aria-hidden="true">forum</span>
+                                    <span>Message</span>
+                                </button>
+                                <button type="button" class="a0swarm-btn a0swarm-btn--danger"
+                                        @click.stop="$store.swarmStore.cancelAgent(agent.agent_name)">
+                                    <span class="material-symbols-outlined" aria-hidden="true">cancel</span>
+                                    <span>Cancel</span>
+                                </button>
+                            </div>
                         </div>
                     </article>
                 </template>
@@ -734,16 +839,40 @@
                 </div>
 
                 <template x-for="agent in $store.swarmStore.completedAgents" :key="agent.agent_name">
-                    <article class="a0swarm-card" :class="$store.swarmStore.statusClass(agent.status)">
-                        <header class="a0swarm-card__header">
+                    <article class="a0swarm-card"
+                             :class="[
+                                $store.swarmStore.statusClass(agent.status),
+                                $store.swarmStore.isExpanded(agent.agent_name) ? 'is-expanded' : ''
+                             ]">
+                        <header class="a0swarm-card__header"
+                                @click="$store.swarmStore.toggleExpand(agent.agent_name)">
+                            <span class="a0swarm-card__avatar"
+                                  :class="'slot-' + $store.swarmStore.slotIndex(agent.agent_name)"
+                                  x-text="$store.swarmStore.slotIndex(agent.agent_name)"
+                                  :title="agent.agent_name"></span>
                             <span class="a0swarm-card__status" x-text="agent.status"></span>
                             <span class="a0swarm-card__label" x-text="agent.label" :title="agent.label"></span>
                             <span class="a0swarm-card__name" x-text="agent.agent_name" :title="agent.agent_name"></span>
+                            <span class="material-symbols-outlined a0swarm-card__chevron"
+                                  aria-hidden="true">expand_more</span>
                         </header>
-                        <div class="a0swarm-card__task" x-text="agent.task"></div>
-                        <div class="a0swarm-card__result"
-                             x-show="agent.result"
-                             x-text="(agent.result || '').substring(0, 200) + ((agent.result || '').length > 200 ? '...' : '')"></div>
+
+                        <div class="a0swarm-card__collapsible">
+                            <div class="a0swarm-card__task" x-text="agent.task"></div>
+                            <div class="a0swarm-card__result"
+                                 x-show="agent.result"
+                                 x-text="agent.result"></div>
+                            <div class="a0swarm-card__messages"
+                                 x-show="agent.messages && agent.messages.length > 0">
+                                <template x-for="msg in agent.messages" :key="msg.timestamp">
+                                    <div class="a0swarm-msg"
+                                         :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
+                                        <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                        <span class="a0swarm-msg__content" x-text="msg.content"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
                     </article>
                 </template>
             </section>

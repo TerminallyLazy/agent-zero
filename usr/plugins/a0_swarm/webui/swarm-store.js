@@ -16,6 +16,7 @@ const proto = {
     panelOpen: true,
     composingFor: null,
     composeText: "",
+    expandedFor: {},        // map agent_name -> bool
     _initialized: false,
     _parentCtxId: "",
     _pollTimer: null,
@@ -87,7 +88,25 @@ const proto = {
         return (a.messages || []).filter(m => !m.read && m.sender !== "orchestrator").length;
     },
 
-    openCompose(name)  { this.composingFor = name; this.composeText = ""; },
+    isExpanded(name) { return !!this.expandedFor[name]; },
+    toggleExpand(name) {
+        this.expandedFor = { ...this.expandedFor, [name]: !this.expandedFor[name] };
+        if (this.expandedFor[name]) this.markRead(name);
+    },
+
+    /**
+     * Derive a 1-8 slot index from agent_name "SA{parent}_{slot}".
+     * Falls back to a stable hash if the name doesn't match.
+     */
+    slotIndex(name) {
+        const m = /^SA\d+_(\d+)$/.exec(name || "");
+        if (m) return ((parseInt(m[1], 10) - 1) % 8) + 1;
+        let h = 0;
+        for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+        return (h % 8) + 1;
+    },
+
+    openCompose(name)  { this.composingFor = name; this.composeText = ""; if (!this.expandedFor[name]) this.toggleExpand(name); },
     closeCompose()     { this.composingFor = null; this.composeText = ""; },
     togglePanel()      { this.panelOpen = !this.panelOpen; },
     markRead(name) {

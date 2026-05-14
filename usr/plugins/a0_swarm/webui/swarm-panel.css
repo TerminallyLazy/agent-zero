@@ -557,8 +557,87 @@
     border: 1px solid var(--a0swarm-chrome-border);
     border-radius: 0.35rem;
     padding: 0.45rem 0.55rem;
-    max-height: 5.5rem;
-    overflow: hidden;
+    max-height: 18rem;
+    overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-border) 78%, transparent) transparent;
+}
+
+.a0swarm-card__result::-webkit-scrollbar { width: 6px; }
+.a0swarm-card__result::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-border) 78%, transparent);
+    border-radius: 999px;
+}
+
+.a0swarm-card { cursor: pointer; }
+.a0swarm-card__header { cursor: pointer; }
+.a0swarm-card__chevron {
+    margin-left: auto;
+    color: var(--color-text-muted);
+    font-size: 1rem !important;
+    transition: transform 0.18s ease;
+}
+.a0swarm-card.is-expanded .a0swarm-card__chevron { transform: rotate(180deg); }
+
+.a0swarm-card__collapsible {
+    display: none;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+.a0swarm-card.is-expanded .a0swarm-card__collapsible { display: flex; }
+
+.a0swarm-card__collapsible button,
+.a0swarm-card__collapsible textarea,
+.a0swarm-card__collapsible input,
+.a0swarm-card__messages,
+.a0swarm-card__result { cursor: auto; }
+
+.a0swarm-card__avatar {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: #fff;
+    border: 1px solid color-mix(in srgb, #000 25%, transparent);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+}
+.a0swarm-card__avatar.slot-1 { background: linear-gradient(135deg, #4a9eff, #2563eb); }
+.a0swarm-card__avatar.slot-2 { background: linear-gradient(135deg, #22c55e, #15803d); }
+.a0swarm-card__avatar.slot-3 { background: linear-gradient(135deg, #f59e0b, #b45309); }
+.a0swarm-card__avatar.slot-4 { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+.a0swarm-card__avatar.slot-5 { background: linear-gradient(135deg, #a855f7, #6b21a8); }
+.a0swarm-card__avatar.slot-6 { background: linear-gradient(135deg, #ec4899, #9d174d); }
+.a0swarm-card__avatar.slot-7 { background: linear-gradient(135deg, #14b8a6, #115e59); }
+.a0swarm-card__avatar.slot-8 { background: linear-gradient(135deg, #f97316, #9a3412); }
+
+.a0swarm-card__progress {
+    position: relative;
+    height: 3px;
+    margin-top: 0.1rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-highlight) 12%, transparent);
+    overflow: hidden;
+}
+.a0swarm-card__progress::after {
+    content: "";
+    position: absolute;
+    left: -40%;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--color-highlight), transparent);
+    animation: a0swarm-progress 1.4s ease-in-out infinite;
+    border-radius: 999px;
+}
+@keyframes a0swarm-progress {
+    0%   { left: -45%; }
+    100% { left: 105%; }
 }
