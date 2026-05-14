@@ -761,3 +761,22 @@
 }
 .a0swarm-md th { background: color-mix(in srgb, var(--color-background) 70%, transparent); }
 .a0swarm-card__result.a0swarm-md { font-family: inherit; font-size: 0.78rem; color: var(--color-text); }
+
+.a0swarm-card__remote {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-highlight) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-highlight) 38%, transparent);
+    color: var(--color-text);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.a0swarm-card__remote .material-symbols-outlined {
+    font-size: 0.8rem !important;
+    color: var(--color-highlight);
+}

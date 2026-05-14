@@ -276,3 +276,67 @@ async def test_delegate_parallel_max_parallel_cap_rejects(monkeypatch):
     assert SwarmRegistry.get().snapshot() == []
 
     _plugins_stub.get_plugin_config = MagicMock(return_value={})
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_unknown_remote_endpoint_is_failed(monkeypatch):
+    """If a task's `endpoint` doesn't resolve to any configured remote and isn't
+    a raw URL, the entry is recorded as FAILED with a clear blocker."""
+    _plugins_stub.get_plugin_config = MagicMock(return_value={"remotes": []})
+    monkeypatch.setattr(dp_mod, "plugins", _plugins_stub)
+    # resolve_endpoint is imported by name in delegate_parallel
+    monkeypatch.setattr(dp_mod, "resolve_endpoint", lambda ep, agent=None: None)
+
+    parent = MagicMock(); parent.number = 0; parent.context.id = "P"
+    parent.context.log.log = MagicMock(); parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    await tool.execute(tasks=[
+        {"label": "Remote", "task": "ping", "endpoint": "does-not-exist"},
+    ])
+
+    a = SwarmRegistry.get().get_agent("SA1_1")
+    assert a.status == SwarmAgentStatus.FAILED
+    assert "Unknown remote endpoint" in a.blocker
+    assert a.remote_label == "does-not-exist"
+
+    _plugins_stub.get_plugin_config = MagicMock(return_value={})
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_remote_happy_path(monkeypatch):
+    """Configured remote endpoint: tool sends via a2a_runner, status flips
+    PENDING -> WORKING -> DONE, result stored, remote_task_id captured."""
+    from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
+    fake_remote = RemoteEndpoint(label="rig", base_url="http://x:55000", auth_token="tok")
+    monkeypatch.setattr(dp_mod, "resolve_endpoint",
+                        lambda ep, agent=None: fake_remote if ep == "rig" else None)
+
+    fake_conn = MagicMock()
+    fake_conn.close = AsyncMock()
+    runner = dp_mod.a2a_runner
+    monkeypatch.setattr(runner, "is_available", lambda: True)
+    monkeypatch.setattr(runner, "submit_task",
+                        AsyncMock(return_value=(fake_conn, "task-xyz", "ctx-remote")))
+    monkeypatch.setattr(runner, "wait_for_result",
+                        AsyncMock(return_value=("completed", "remote result text")))
+
+    parent = MagicMock(); parent.number = 0; parent.context.id = "P"
+    parent.context.log.log = MagicMock(); parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    resp = await tool.execute(tasks=[
+        {"label": "Researcher", "task": "do it", "endpoint": "rig"},
+    ])
+
+    a = SwarmRegistry.get().get_agent("SA1_1")
+    assert a.status == SwarmAgentStatus.DONE
+    assert a.is_remote
+    assert a.remote_label == "rig"
+    assert a.remote_base_url == "http://x:55000"
+    assert a.remote_task_id == "task-xyz"
+    assert a.context_id == "ctx-remote"
+    assert a.result == "remote result text"
+    assert "via rig" in resp.message

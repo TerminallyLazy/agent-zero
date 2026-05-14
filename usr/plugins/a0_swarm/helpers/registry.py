@@ -49,6 +49,16 @@ class SwarmAgent:
     result: str = ""
     messages: list[SwarmMessage] = field(default_factory=list)
     finished_at: str = ""
+    # Remote enlistment: when these are set, the agent runs on another
+    # A0 instance via FastA2A. context_id holds the remote A2A context;
+    # remote_task_id is the A2A task id for status polling / cancel.
+    remote_label: str = ""
+    remote_base_url: str = ""
+    remote_task_id: str = ""
+
+    @property
+    def is_remote(self) -> bool:
+        return bool(self.remote_base_url)
 
     def to_dict(self) -> dict:
         return {
@@ -64,6 +74,10 @@ class SwarmAgent:
             "messages": [m.__dict__ for m in self.messages],
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "remote_label": self.remote_label,
+            "remote_base_url": self.remote_base_url,
+            "remote_task_id": self.remote_task_id,
+            "is_remote": self.is_remote,
         }
 
 

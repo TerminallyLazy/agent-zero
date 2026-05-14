@@ -3,6 +3,8 @@ from helpers.api import ApiHandler, Request
 from usr.plugins.a0_swarm.helpers.registry import (
     SwarmRegistry, SwarmMessage, SwarmAgentStatus, utc_iso_now,
 )
+from usr.plugins.a0_swarm.helpers import a2a_runner
+from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
 
 
 class SwarmSendMessage(ApiHandler):
@@ -27,7 +29,13 @@ class SwarmSendMessage(ApiHandler):
         if unblock and entry.status == SwarmAgentStatus.BLOCKED:
             reg.update_status(agent_name, SwarmAgentStatus.WORKING, blocker="")
 
-        ctx = AgentContext.get(entry.context_id)
-        if ctx:
-            ctx.communicate(UserMessage(message=f"[Orchestrator]: {content}"))
+        if entry.is_remote:
+            remote = RemoteEndpoint(label=entry.remote_label, base_url=entry.remote_base_url)
+            await a2a_runner.send_intervention(
+                remote, f"[Orchestrator]: {content}", context_id=entry.context_id,
+            )
+        else:
+            ctx = AgentContext.get(entry.context_id)
+            if ctx:
+                ctx.communicate(UserMessage(message=f"[Orchestrator]: {content}"))
         return {"ok": True}

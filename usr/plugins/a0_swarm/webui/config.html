@@ -58,6 +58,47 @@
                             x-init="if (config.result_kb_cap === undefined || config.result_kb_cap === null) config.result_kb_cap = 64" />
                     </div>
                 </div>
+
+                <div class="section-title" style="margin-top:1.25rem;">Remote Agent Zero instances</div>
+                <div class="section-description">
+                    Other Agent Zero containers reachable over the network. Each entry can be
+                    used as <code>endpoint</code> on a <code>delegate_parallel</code> task
+                    (by <code>label</code> or by full URL) to route that task to the remote
+                    container via FastA2A. The auth token, if set, is sent as
+                    <code>Authorization: Bearer &lt;token&gt;</code> on every A2A call.
+                </div>
+
+                <template x-if="!Array.isArray(config.remotes)">
+                    <div x-init="config.remotes = []"></div>
+                </template>
+
+                <template x-for="(remote, idx) in config.remotes" :key="idx">
+                    <div class="field" style="display:flex; flex-direction:column; gap:0.4rem; border:1px solid var(--color-border); border-radius:0.4rem; padding:0.6rem 0.75rem; margin-bottom:0.5rem;">
+                        <div style="display:flex; gap:0.5rem; align-items:center;">
+                            <input type="text" x-model="remote.label" placeholder="label (e.g. research-rig)"
+                                   style="flex:1;" />
+                            <button type="button"
+                                    @click="config.remotes.splice(idx, 1)"
+                                    title="Remove this remote"
+                                    style="background:transparent; border:1px solid var(--color-border); color:var(--color-error-text); padding:0.2rem 0.6rem; border-radius:0.3rem; cursor:pointer;">
+                                Remove
+                            </button>
+                        </div>
+                        <input type="text" x-model="remote.base_url"
+                               placeholder="base_url (e.g. http://a0-research:55000)" />
+                        <input type="password" x-model="remote.auth_token"
+                               placeholder="auth_token (optional)"
+                               autocomplete="new-password" />
+                    </div>
+                </template>
+
+                <div style="margin-top:0.5rem;">
+                    <button type="button"
+                            @click="config.remotes.push({ label: '', base_url: '', auth_token: '' })"
+                            style="background:var(--color-highlight); color:#fff; border:none; padding:0.35rem 0.85rem; border-radius:0.3rem; cursor:pointer; font-weight:600;">
+                        Add remote
+                    </button>
+                </div>
             </div>
         </template>
     </div>

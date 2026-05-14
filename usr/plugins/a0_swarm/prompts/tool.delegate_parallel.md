@@ -8,6 +8,7 @@ Spawn multiple subagents to work on independent tasks in parallel. Each agent ru
   - `label` (string): Human-readable name for this agent shown in the UI (e.g. "Research Agent", "Code Writer")
   - `task` (string): Full task description for this agent
   - `profile` (string, optional): Agent profile name to use
+  - `endpoint` (string, optional): Route this task to a remote Agent Zero instance via FastA2A instead of spawning a local subagent. Accepts either the `label` of a remote configured in plugin settings, or a full `http(s)://host:port` URL. The remote container must have FastA2A enabled.
 
 **Example:**
 ```json

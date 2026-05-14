@@ -610,6 +610,26 @@
     .a0swarm-card__messages,
     .a0swarm-card__result { cursor: auto; }
 
+    /* ----- Remote-endpoint badge ----- */
+    .a0swarm-card__remote {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--color-highlight) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-highlight) 38%, transparent);
+        color: var(--color-text);
+        font-size: 0.6rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+    }
+    .a0swarm-card__remote .material-symbols-outlined {
+        font-size: 0.8rem !important;
+        color: var(--color-highlight);
+    }
+
     /* ----- Slot avatar: material icon + small slot-number badge ----- */
     .a0swarm-card__avatar {
         position: relative;
@@ -906,6 +926,12 @@
                             <span class="a0swarm-card__status" x-text="agent.status"></span>
                             <span class="a0swarm-card__label" x-text="agent.label" :title="agent.label"></span>
                             <span class="a0swarm-card__name" x-text="agent.agent_name" :title="agent.agent_name"></span>
+                            <span class="a0swarm-card__remote"
+                                  x-show="agent.is_remote"
+                                  :title="'Remote: ' + agent.remote_base_url">
+                                <span class="material-symbols-outlined" aria-hidden="true">cloud</span>
+                                <span x-text="agent.remote_label"></span>
+                            </span>
                             <span class="a0swarm-card__unread"
                                   x-show="$store.swarmStore.unreadCount(agent) > 0"
                                   x-text="$store.swarmStore.unreadCount(agent)"
@@ -1032,6 +1058,12 @@
                             <span class="a0swarm-card__status" x-text="agent.status"></span>
                             <span class="a0swarm-card__label" x-text="agent.label" :title="agent.label"></span>
                             <span class="a0swarm-card__name" x-text="agent.agent_name" :title="agent.agent_name"></span>
+                            <span class="a0swarm-card__remote"
+                                  x-show="agent.is_remote"
+                                  :title="'Remote: ' + agent.remote_base_url">
+                                <span class="material-symbols-outlined" aria-hidden="true">cloud</span>
+                                <span x-text="agent.remote_label"></span>
+                            </span>
                             <span class="material-symbols-outlined a0swarm-card__chevron"
                                   aria-hidden="true">expand_more</span>
                         </header>
