@@ -165,3 +165,41 @@ async def test_swarm_ws_disconnect_cleans_up():
     ext_dc = SwarmWsCleanup(agent=None)
     await ext_dc.execute(instance=instance, sid="sid-1")
     assert "sid-1" not in _subs
+
+
+@pytest.mark.asyncio
+async def test_swarm_ws_push_cb_evicts_when_instance_garbage_collected():
+    """If the WsWebui instance is GC'd, push_cb removes itself from the registry."""
+    from usr.plugins.a0_swarm.extensions.python.webui_ws_event._10_swarm_ws import (
+        SwarmWsEvent, _subs,
+    )
+    import gc
+
+    _subs.clear()
+    SwarmRegistry._instance = None
+
+    # Plain class so weakref works (MagicMock supports weakref but rebinding to
+    # None below is unambiguous when using a real object).
+    class _FakeWsInstance:
+        async def emit_to(self, sid, event, payload):
+            pass
+
+    instance = _FakeWsInstance()
+    ext = SwarmWsEvent(agent=None)
+    await ext.execute(instance=instance, sid="sid-1",
+                      event_type="swarm_subscribe",
+                      data={"parent_context_id": "P"}, response_data={})
+
+    assert "sid-1" in _subs
+    cb = _subs["sid-1"][2]
+    assert len(SwarmRegistry.get()._subscribers) == 1
+
+    # Drop the only strong reference to the WsWebui instance
+    del instance
+    gc.collect()
+
+    # Invoking the callback should now self-evict
+    await cb()
+
+    assert "sid-1" not in _subs
+    assert len(SwarmRegistry.get()._subscribers) == 0

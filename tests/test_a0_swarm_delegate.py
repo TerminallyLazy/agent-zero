@@ -183,3 +183,62 @@ async def test_delegate_parallel_pre_cancelled_is_absorbed(monkeypatch):
     await task
 
     assert SwarmRegistry.get().get_agent("SA1_1").status == SwarmAgentStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_truncates_large_result(monkeypatch):
+    """Result over MAX_RESULT_BYTES gets a [...truncated] marker."""
+    from usr.plugins.a0_swarm.helpers.registry import MAX_RESULT_BYTES
+    huge = "x" * (MAX_RESULT_BYTES + 1000)
+
+    def fake_context(*, config):
+        ctx = MagicMock()
+        ctx.id = "ctx-0"
+        sub = MagicMock()
+        sub.monologue = AsyncMock(return_value=huge)
+        sub.hist_add_user_message = MagicMock()
+        ctx.agent0 = sub
+        return ctx
+
+    AC = MagicMock(side_effect=fake_context); AC.remove = MagicMock()
+    monkeypatch.setattr(dp_mod, "AgentContext", AC)
+    monkeypatch.setattr(dp_mod, "initialize_agent", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(dp_mod, "UserMessage", lambda message: {"message": message})
+
+    parent = MagicMock(); parent.number = 0; parent.context.id = "P"
+    parent.context.log.log = MagicMock(); parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    await tool.execute(tasks=[{"label": "A", "task": "t"}])
+
+    a = SwarmRegistry.get().get_agent("SA1_1")
+    assert a.result.endswith("[...truncated]")
+    assert len(a.result.encode("utf-8")) <= MAX_RESULT_BYTES + len("\n[...truncated]")
+
+
+@pytest.mark.asyncio
+async def test_delegate_parallel_small_result_not_truncated(monkeypatch):
+    def fake_context(*, config):
+        ctx = MagicMock(); ctx.id = "ctx-0"
+        sub = MagicMock()
+        sub.monologue = AsyncMock(return_value="short result")
+        sub.hist_add_user_message = MagicMock()
+        ctx.agent0 = sub
+        return ctx
+
+    AC = MagicMock(side_effect=fake_context); AC.remove = MagicMock()
+    monkeypatch.setattr(dp_mod, "AgentContext", AC)
+    monkeypatch.setattr(dp_mod, "initialize_agent", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(dp_mod, "UserMessage", lambda message: {"message": message})
+
+    parent = MagicMock(); parent.number = 0; parent.context.id = "P"
+    parent.context.log.log = MagicMock(); parent.agent_name = "A0"
+    tool = dp_mod.DelegateParallel(
+        agent=parent, name="x", method=None, args={}, message="", loop_data=None,
+    )
+    await tool.execute(tasks=[{"label": "A", "task": "t"}])
+
+    a = SwarmRegistry.get().get_agent("SA1_1")
+    assert a.result == "short result"
+    assert "[...truncated]" not in a.result

@@ -67,7 +67,12 @@ class DelegateParallel(Tool):
         try:
             sub_agent.hist_add_user_message(UserMessage(message=task_text))
             result = await sub_agent.monologue()
-            stored = (result or "").encode("utf-8")[:MAX_RESULT_BYTES].decode("utf-8", errors="ignore")
+            raw = (result or "")
+            encoded = raw.encode("utf-8")
+            if len(encoded) > MAX_RESULT_BYTES:
+                stored = encoded[:MAX_RESULT_BYTES].decode("utf-8", errors="ignore") + "\n[...truncated]"
+            else:
+                stored = raw
             registry.update_status(
                 entry.agent_name, SwarmAgentStatus.DONE,
                 result=stored, current_activity="",
