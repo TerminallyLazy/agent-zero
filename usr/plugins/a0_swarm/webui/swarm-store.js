@@ -11,7 +11,7 @@ socket.addHandlers(["ws_webui"]);
 
 const proto = {
     agents: [],
-    panelOpen: false,
+    panelOpen: true,
     composingFor: null,
     composeText: "",
     _initialized: false,

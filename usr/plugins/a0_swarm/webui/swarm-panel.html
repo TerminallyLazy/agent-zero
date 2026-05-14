@@ -6,7 +6,6 @@
     x-init="$store.swarmStore.init()"
     class="a0swarm-panel"
     :class="{ 'a0swarm-panel--collapsed': !$store.swarmStore.panelOpen }"
-    x-show="$store.swarmStore.hasAgents"
     x-cloak
 >
     <div class="a0swarm-header" @click="$store.swarmStore.togglePanel()">
@@ -19,6 +18,10 @@
     </div>
 
     <div class="a0swarm-body" x-show="$store.swarmStore.panelOpen" x-transition>
+
+        <div class="a0swarm-empty" x-show="!$store.swarmStore.hasAgents">
+            No swarm agents. Call <code>delegate_parallel</code> to spawn some.
+        </div>
 
         <template x-if="$store.swarmStore.activeAgents.length > 0">
             <div class="a0swarm-section">
