@@ -110,6 +110,67 @@ class SwarmRegistry:
         with self._rlock:
             return self._agents.get(name)
 
+    def update_activity(self, name: str, text: str) -> None:
+        with self._rlock:
+            agent = self._agents.get(name)
+            if agent is None:
+                return
+            if agent.status in TERMINAL:
+                return
+            agent.current_activity = text
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def add_message(self, msg: SwarmMessage) -> None:
+        with self._rlock:
+            target_name = msg.recipient if msg.recipient != "orchestrator" else msg.sender
+            agent = self._agents.get(target_name)
+            if agent is None:
+                return
+            agent.messages.append(msg)
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def get_agent_by_context(self, ctx_id: str) -> SwarmAgent | None:
+        with self._rlock:
+            for a in self._agents.values():
+                if a.context_id == ctx_id:
+                    return a
+        return None
+
+    def snapshot(self, parent_ctx_id: str | None = None) -> list[dict]:
+        with self._rlock:
+            agents = self._agents.values()
+            if parent_ctx_id:
+                agents = [a for a in agents if a.parent_context_id == parent_ctx_id]
+            return [a.to_dict() for a in agents]
+
+    def remove(self, name: str) -> None:
+        with self._rlock:
+            self._agents.pop(name, None)
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def clear_completed(self, parent_ctx_id: str | None = None) -> None:
+        with self._rlock:
+            to_remove = [
+                n for n, a in self._agents.items()
+                if a.status in TERMINAL
+                and (parent_ctx_id is None or a.parent_context_id == parent_ctx_id)
+            ]
+            for n in to_remove:
+                del self._agents[n]
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def clear_for_parent(self, parent_ctx_id: str) -> None:
+        with self._rlock:
+            to_remove = [n for n, a in self._agents.items() if a.parent_context_id == parent_ctx_id]
+            for n in to_remove:
+                del self._agents[n]
+            subs = list(self._subscribers)
+        self._fire(subs)
+
     def _fire(self, subs: list[tuple[asyncio.AbstractEventLoop, Callable[[], Coroutine]]]) -> None:
         for loop, cb in subs:
             try:
