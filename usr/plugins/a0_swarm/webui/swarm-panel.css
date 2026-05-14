@@ -18,29 +18,72 @@
 .a0swarm-body {
     overflow-y: auto;
     flex: 1 1 auto;
-    padding: 0.6rem;
+    padding: 0.75rem 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
+    min-height: 0;
 }
 
 .a0swarm-empty {
-    padding: 0.75rem 0.5rem;
-    color: var(--color-text-muted);
-    font-style: italic;
-    font-size: 0.72rem;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    border: 1px dashed var(--color-border);
-    border-radius: 0.3rem;
+    padding: 2rem 1.5rem;
+    gap: 0.75rem;
+    color: var(--color-text-muted);
+    min-height: 18rem;
 }
 
-.a0swarm-empty code {
-    background-color: var(--color-background);
-    padding: 0 0.25rem;
-    border-radius: 0.2rem;
-    font-family: monospace;
-    font-style: normal;
+.a0swarm-empty__icon {
+    font-size: 3rem !important;
+    color: var(--color-text-muted);
+    opacity: 0.55;
+    margin-bottom: 0.25rem;
+}
+
+.a0swarm-empty__title {
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--color-text);
+    letter-spacing: 0.01em;
+}
+
+.a0swarm-empty__desc {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+    max-width: 28rem;
+}
+
+.a0swarm-empty__hint {
+    margin-top: 0.75rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-text-muted);
+    opacity: 0.7;
+}
+
+.a0swarm-empty__code {
+    width: 100%;
+    max-width: 30rem;
+    margin: 0;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: 0.4rem;
+    padding: 0.75rem 1rem;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--color-text);
+    text-align: left;
+    white-space: pre;
+    overflow-x: auto;
 }
 
 .a0swarm-section__label {

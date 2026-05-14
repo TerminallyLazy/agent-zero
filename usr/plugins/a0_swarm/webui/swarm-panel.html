@@ -10,7 +10,23 @@
     <div class="a0swarm-body">
 
         <div class="a0swarm-empty" x-show="!$store.swarmStore.hasAgents">
-            No swarm agents. Call <code>delegate_parallel</code> from the orchestrator to spawn some.
+            <span class="material-symbols-outlined a0swarm-empty__icon">group_work</span>
+            <div class="a0swarm-empty__title">No subagents running</div>
+            <div class="a0swarm-empty__desc">
+                The orchestrator can spawn parallel subagents that each work an
+                independent task in their own isolated context. Cards for each
+                subagent will appear here.
+            </div>
+            <div class="a0swarm-empty__hint">Example tool call</div>
+            <pre class="a0swarm-empty__code"><code>{
+  "tool_name": "delegate_parallel",
+  "tool_args": {
+    "tasks": [
+      { "label": "Researcher",  "task": "Survey..." },
+      { "label": "Implementer", "task": "Write..."  }
+    ]
+  }
+}</code></pre>
         </div>
 
         <template x-if="$store.swarmStore.activeAgents.length > 0">
