@@ -686,6 +686,107 @@
         0%   { left: -45%; }
         100% { left: 105%; }
     }
+
+    /* ----- Markdown rendering inside results / messages ----- */
+    .a0swarm-md {
+        font-family: inherit;
+        font-size: 0.78rem;
+        line-height: 1.55;
+        color: var(--color-text);
+        word-break: break-word;
+    }
+    .a0swarm-md > *:first-child { margin-top: 0; }
+    .a0swarm-md > *:last-child  { margin-bottom: 0; }
+    .a0swarm-md p          { margin: 0.4em 0; }
+    .a0swarm-md h1,
+    .a0swarm-md h2,
+    .a0swarm-md h3,
+    .a0swarm-md h4,
+    .a0swarm-md h5,
+    .a0swarm-md h6 {
+        margin: 0.85em 0 0.35em;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--color-text);
+    }
+    .a0swarm-md h1 { font-size: 1.05rem; }
+    .a0swarm-md h2 { font-size: 0.95rem; }
+    .a0swarm-md h3 { font-size: 0.88rem; }
+    .a0swarm-md h4,
+    .a0swarm-md h5,
+    .a0swarm-md h6 { font-size: 0.82rem; }
+    .a0swarm-md ul,
+    .a0swarm-md ol { margin: 0.4em 0; padding-left: 1.3rem; }
+    .a0swarm-md li { margin: 0.15em 0; }
+    .a0swarm-md li > p { margin: 0.15em 0; }
+    .a0swarm-md a {
+        color: var(--color-highlight);
+        text-decoration: underline;
+        text-underline-offset: 0.15em;
+    }
+    .a0swarm-md a:hover { filter: brightness(1.15); }
+    .a0swarm-md strong { font-weight: 700; color: var(--color-text); }
+    .a0swarm-md em     { font-style: italic; }
+    .a0swarm-md hr {
+        border: 0;
+        border-top: 1px solid var(--a0swarm-chrome-border);
+        margin: 0.75em 0;
+    }
+    .a0swarm-md blockquote {
+        margin: 0.5em 0;
+        padding: 0.25em 0.65em;
+        border-left: 3px solid color-mix(in srgb, var(--color-highlight) 50%, transparent);
+        background: color-mix(in srgb, var(--color-highlight) 6%, transparent);
+        color: var(--color-text-muted);
+        border-radius: 0 0.3rem 0.3rem 0;
+    }
+    .a0swarm-md code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.86em;
+        padding: 0.05em 0.32em;
+        border-radius: 0.25rem;
+        background: color-mix(in srgb, var(--color-background) 85%, transparent);
+        border: 1px solid var(--a0swarm-chrome-border);
+        color: var(--color-text);
+    }
+    .a0swarm-md pre {
+        margin: 0.5em 0;
+        padding: 0.6rem 0.75rem;
+        border-radius: 0.4rem;
+        background: color-mix(in srgb, var(--color-background) 75%, #000 8%);
+        border: 1px solid var(--a0swarm-chrome-border);
+        overflow-x: auto;
+        white-space: pre;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.72rem;
+        line-height: 1.5;
+    }
+    .a0swarm-md pre code {
+        padding: 0;
+        background: transparent;
+        border: 0;
+        font-size: inherit;
+    }
+    .a0swarm-md table {
+        border-collapse: collapse;
+        margin: 0.5em 0;
+        font-size: 0.75rem;
+    }
+    .a0swarm-md th,
+    .a0swarm-md td {
+        border: 1px solid var(--a0swarm-chrome-border);
+        padding: 0.25rem 0.5rem;
+        text-align: left;
+    }
+    .a0swarm-md th { background: color-mix(in srgb, var(--color-background) 70%, transparent); }
+
+    /* Result markdown — keep the framed/scrollable look from the
+       container, but let the markdown set its own typography. */
+    .a0swarm-card__result.a0swarm-md {
+        font-family: inherit;
+        font-size: 0.78rem;
+        color: var(--color-text);
+    }
 </style>
 
 <div
@@ -799,7 +900,8 @@
                                     <div class="a0swarm-msg"
                                          :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
                                         <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
-                                        <span class="a0swarm-msg__content" x-text="msg.content"></span>
+                                        <span class="a0swarm-msg__content a0swarm-md"
+                                              x-html="$store.swarmStore.renderMd(msg.content)"></span>
                                     </div>
                                 </template>
                             </div>
@@ -893,16 +995,17 @@
 
                         <div class="a0swarm-card__collapsible">
                             <div class="a0swarm-card__task" x-text="agent.task"></div>
-                            <div class="a0swarm-card__result"
+                            <div class="a0swarm-card__result a0swarm-md"
                                  x-show="agent.result"
-                                 x-text="agent.result"></div>
+                                 x-html="$store.swarmStore.renderMd(agent.result)"></div>
                             <div class="a0swarm-card__messages"
                                  x-show="agent.messages && agent.messages.length > 0">
                                 <template x-for="msg in agent.messages" :key="msg.timestamp">
                                     <div class="a0swarm-msg"
                                          :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
                                         <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
-                                        <span class="a0swarm-msg__content" x-text="msg.content"></span>
+                                        <span class="a0swarm-msg__content a0swarm-md"
+                                              x-html="$store.swarmStore.renderMd(msg.content)"></span>
                                     </div>
                                 </template>
                             </div>

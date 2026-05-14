@@ -1,6 +1,7 @@
 import { createStore } from "/js/AlpineStore.js";
 import { getNamespacedClient } from "/js/websocket.js";
 import { callJsonApi } from "/js/api.js";
+import { renderSafeMarkdown } from "/js/safe-markdown.js";
 
 const EVT_SUB   = "swarm_subscribe";
 const EVT_UNSUB = "swarm_unsubscribe";
@@ -159,6 +160,18 @@ const proto = {
             });
         } catch (_) {}
         this._poll();
+    },
+
+    /**
+     * Render markdown to sanitized HTML for use with x-html.
+     * Returns "" for empty input so the x-show / x-if guards still work.
+     */
+    renderMd(text) {
+        try {
+            return renderSafeMarkdown(text || "");
+        } catch (_) {
+            return "";
+        }
     },
 
     relativeTime(iso) {
