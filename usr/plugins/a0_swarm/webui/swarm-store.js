@@ -164,13 +164,33 @@ const proto = {
 
     /**
      * Render markdown to sanitized HTML for use with x-html.
-     * Returns "" for empty input so the x-show / x-if guards still work.
+     *
+     * Post-processing: marked treats lists with blank lines between
+     * items as "loose" and wraps each <li> body in a <p>, which
+     * inflates vertical spacing past anything CSS can fix without
+     * fighting the cascade. We unwrap those single-<p>-only list
+     * items in the parsed DOM before returning the HTML, so the
+     * output behaves like a tight list.
      */
     renderMd(text) {
+        if (!text) return "";
         try {
-            return renderSafeMarkdown(text || "");
+            const html = renderSafeMarkdown(text);
+            const tmpl = document.createElement("template");
+            tmpl.innerHTML = html;
+            for (const li of tmpl.content.querySelectorAll("li")) {
+                // If the <li>'s element children are exactly one <p> (text
+                // nodes around it OK), promote the <p>'s children up.
+                const elementChildren = Array.from(li.children);
+                if (elementChildren.length === 1 && elementChildren[0].tagName === "P") {
+                    const p = elementChildren[0];
+                    while (p.firstChild) p.parentNode.insertBefore(p.firstChild, p);
+                    p.remove();
+                }
+            }
+            return tmpl.innerHTML;
         } catch (_) {
-            return "";
+            try { return renderSafeMarkdown(text); } catch (_) { return ""; }
         }
     },
 
