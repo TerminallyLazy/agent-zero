@@ -90,6 +90,22 @@ class SwarmRegistry:
             subs = list(self._subscribers)
         self._fire(subs)
 
+    def update_status(self, name: str, status: SwarmAgentStatus, **fields) -> None:
+        with self._rlock:
+            agent = self._agents.get(name)
+            if agent is None:
+                return
+            if agent.status in TERMINAL and status != agent.status:
+                return  # absorbing: ignore further writes
+            agent.status = status
+            for k, v in fields.items():
+                if hasattr(agent, k):
+                    setattr(agent, k, v)
+            if status in TERMINAL and not agent.finished_at:
+                agent.finished_at = utc_iso_now()
+            subs = list(self._subscribers)
+        self._fire(subs)
+
     def get_agent(self, name: str) -> SwarmAgent | None:
         with self._rlock:
             return self._agents.get(name)
