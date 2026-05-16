@@ -86,6 +86,14 @@ def test_add_message_attaches_to_recipient():
     assert len(msgs) == 1 and msgs[0].content == "hi"
 
 
+def test_swarm_message_preserves_old_positional_constructor_shape():
+    m = SwarmMessage("s", "r", "c", "old-ts", True)
+    assert m.timestamp == "old-ts"
+    assert m.read is True
+    assert m.message_id.startswith("msg-")
+    assert m.run_id == ""
+
+
 def test_add_message_from_swarm_to_orchestrator_attaches_to_sender():
     reg = SwarmRegistry.get()
     reg.register(_new_agent("SA1_1"))
@@ -109,6 +117,9 @@ def test_snapshot_filters_by_parent():
     snap = reg.snapshot(parent_ctx_id="P1")
     assert len(snap["agents"]) == 1 and snap["agents"][0]["agent_name"] == "SA1_1"
     assert len(reg.snapshot()["agents"]) == 2  # no filter → all
+    assert len(snap) == 1
+    assert snap[0]["agent_name"] == "SA1_1"
+    assert [a["agent_name"] for a in snap] == ["SA1_1"]
 
 
 def test_clear_completed_removes_terminal_only_for_parent():

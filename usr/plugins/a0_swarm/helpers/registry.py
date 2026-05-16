@@ -80,22 +80,35 @@ class SwarmTimelineEvent:
         }
 
 
-@dataclass
 class SwarmMessage:
-    sender: str
-    recipient: str
-    content: str
-    message_id: str = field(default_factory=lambda: f"msg-{uuid.uuid4().hex}")
-    run_id: str = ""
-    delivery_state: str = "queued"
-    timestamp: str = field(default_factory=utc_iso_now)
-    created_at: str = ""
-    read: bool = False
-    delivered_at: str = ""
-    failed_at: str = ""
-    failure_reason: str = ""
-
-    def __post_init__(self) -> None:
+    def __init__(
+        self,
+        sender: str,
+        recipient: str,
+        content: str,
+        timestamp: str | None = None,
+        read: bool = False,
+        *,
+        message_id: str = "",
+        run_id: str = "",
+        delivery_state: str = "queued",
+        created_at: str = "",
+        delivered_at: str = "",
+        failed_at: str = "",
+        failure_reason: str = "",
+    ) -> None:
+        self.sender = sender
+        self.recipient = recipient
+        self.content = content
+        self.message_id = message_id or f"msg-{uuid.uuid4().hex}"
+        self.run_id = run_id
+        self.delivery_state = delivery_state
+        self.timestamp = timestamp or utc_iso_now()
+        self.created_at = created_at
+        self.read = read
+        self.delivered_at = delivered_at
+        self.failed_at = failed_at
+        self.failure_reason = failure_reason
         if not self.created_at:
             self.created_at = self.timestamp
 
@@ -114,6 +127,24 @@ class SwarmMessage:
             "failed_at": self.failed_at,
             "failure_reason": self.failure_reason,
         }
+
+
+class SnapshotResult(dict):
+    def __iter__(self):
+        return iter(self["agents"])
+
+    def __len__(self) -> int:
+        return len(self["agents"])
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return dict.__getitem__(self, "agents")[key]
+        return dict.__getitem__(self, key)
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, list):
+            return self["agents"] == other
+        return dict.__eq__(self, other)
 
 
 @dataclass
@@ -411,7 +442,7 @@ class SwarmRegistry:
                 entry["messages"] = [copy.deepcopy(m).to_dict() for m in run_messages]
                 entry["timeline"] = [copy.deepcopy(e).to_dict() for e in run_events]
                 grouped_runs.append(entry)
-            return {"runs": grouped_runs, "agents": flat_agents}
+            return SnapshotResult({"runs": grouped_runs, "agents": flat_agents})
 
     def remove(self, name: str) -> None:
         with self._rlock:
