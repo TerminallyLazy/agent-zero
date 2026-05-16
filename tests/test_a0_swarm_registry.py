@@ -94,6 +94,14 @@ def test_swarm_message_preserves_old_positional_constructor_shape():
     assert m.run_id == ""
 
 
+def test_swarm_message_preserves_ledger_positional_constructor_shape():
+    m = SwarmMessage("s", "r", "c", "msg-id", "run-id")
+    assert m.message_id == "msg-id"
+    assert m.run_id == "run-id"
+    assert m.timestamp != "msg-id"
+    assert m.read is False
+
+
 def test_add_message_from_swarm_to_orchestrator_attaches_to_sender():
     reg = SwarmRegistry.get()
     reg.register(_new_agent("SA1_1"))

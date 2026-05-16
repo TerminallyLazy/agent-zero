@@ -1,3 +1,4 @@
+import json
 import sys, types, asyncio
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
@@ -122,9 +123,20 @@ async def test_swarm_subscribe_returns_snapshot_and_registers_subscriber():
         response_data=response_data,
     )
 
+    assert isinstance(response_data["agents"], list)
+    assert isinstance(json.loads(json.dumps(response_data))["agents"], list)
     assert len(response_data["agents"]) == 1
     assert response_data["agents"][0]["agent_name"] == "SA1_1"
+    assert "runs" in response_data
     assert "sid-1" in _subs
+
+    SwarmRegistry.get().update_activity("SA1_1", "Pushing...")
+    await asyncio.sleep(0.05)
+    instance.emit_to.assert_awaited()
+    payload = instance.emit_to.await_args.args[2]
+    assert isinstance(payload["agents"], list)
+    assert isinstance(json.loads(json.dumps(payload))["agents"], list)
+    assert "runs" in payload
 
 
 @pytest.mark.asyncio

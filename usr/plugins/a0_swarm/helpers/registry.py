@@ -86,9 +86,9 @@ class SwarmMessage:
         sender: str,
         recipient: str,
         content: str,
+        *args,
         timestamp: str | None = None,
         read: bool = False,
-        *,
         message_id: str = "",
         run_id: str = "",
         delivery_state: str = "queued",
@@ -97,6 +97,18 @@ class SwarmMessage:
         failed_at: str = "",
         failure_reason: str = "",
     ) -> None:
+        if len(args) > 2:
+            raise TypeError("SwarmMessage accepts at most two positional compatibility fields")
+        if args:
+            if len(args) == 2 and isinstance(args[1], bool):
+                timestamp = args[0]
+                read = args[1]
+            elif len(args) == 2:
+                message_id = args[0]
+                run_id = args[1]
+            else:
+                timestamp = args[0]
+
         self.sender = sender
         self.recipient = recipient
         self.content = content

@@ -1,3 +1,4 @@
+import json
 import sys, types
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -59,9 +60,13 @@ async def test_swarm_status_filters_by_parent():
 
     handler = SwarmStatus(app=MagicMock(), thread_lock=MagicMock())
     out = await handler.process({"parent_context_id": "P1"}, MagicMock())
+    assert isinstance(out["agents"], list)
+    assert isinstance(json.loads(json.dumps(out))["agents"], list)
     assert len(out["agents"]) == 1 and out["agents"][0]["agent_name"] == "SA1_1"
+    assert "runs" in out
 
     out_all = await handler.process({}, MagicMock())
+    assert isinstance(out_all["agents"], list)
     assert len(out_all["agents"]) == 2
 
 

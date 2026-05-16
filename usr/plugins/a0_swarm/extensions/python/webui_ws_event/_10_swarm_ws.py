@@ -8,6 +8,11 @@ from usr.plugins.a0_swarm.helpers.registry import SwarmRegistry
 _subs: dict[str, tuple] = {}
 
 
+def _snapshot_payload(parent: str | None = None) -> dict:
+    snap = SwarmRegistry.get().snapshot(parent_ctx_id=parent or None)
+    return {"runs": snap["runs"], "agents": snap["agents"]}
+
+
 def _make_push_cb(instance, sid: str, parent: str):
     """Build push_cb that uses a weakref to the WsWebui instance, so the
     callback self-evicts from the registry if the instance is garbage-collected
@@ -22,9 +27,8 @@ def _make_push_cb(instance, sid: str, parent: str):
             SwarmRegistry.get().remove_subscriber(push_cb)
             _subs.pop(sid, None)
             return
-        snap = SwarmRegistry.get().snapshot(parent_ctx_id=parent or None)
         try:
-            await inst.emit_to(sid, "swarm_push", {"agents": snap})
+            await inst.emit_to(sid, "swarm_push", _snapshot_payload(parent))
         except Exception:
             pass
 
@@ -51,7 +55,7 @@ class SwarmWsEvent(Extension):
             push_cb = _make_push_cb(instance, sid, parent)
             _subs[sid] = (loop, parent, push_cb)
             SwarmRegistry.get().add_subscriber(loop, push_cb)
-            response_data["agents"] = SwarmRegistry.get().snapshot(parent_ctx_id=parent or None)
+            response_data.update(_snapshot_payload(parent))
 
         elif event_type == "swarm_unsubscribe":
             entry = _subs.pop(sid, None)
