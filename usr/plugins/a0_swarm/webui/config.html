@@ -11,20 +11,22 @@
               context.remoteTestResult = null;
               context.discoverDocker = async () => {
                 context.dockerDiscoveryError = '';
-                const r = await fetch('/plugins/a0_swarm/swarm_discover_docker', {
+                const resp = await globalThis.fetchApi('/plugins/a0_swarm/swarm_discover_docker', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({})
-                }).then(r => r.json());
+                });
+                const r = await resp.json();
                 context.dockerCandidates = r.candidates || [];
                 context.dockerDiscoveryError = r.ok ? '' : (r.error || 'Docker discovery failed');
               };
               context.testRemote = async (remote) => {
-                context.remoteTestResult = await fetch('/plugins/a0_swarm/swarm_test_remote', {
+                const resp = await globalThis.fetchApi('/plugins/a0_swarm/swarm_test_remote', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(remote || {})
-                }).then(r => r.json());
+                });
+                context.remoteTestResult = await resp.json();
               };
             ">
                 <div class="section-title">A0 Swarm</div>
