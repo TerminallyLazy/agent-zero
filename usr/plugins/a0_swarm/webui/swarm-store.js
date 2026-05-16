@@ -14,6 +14,9 @@ socket.addHandlers(["ws_webui"]);
 
 const proto = {
     agents: [],
+    runs: [],
+    selectedRunId: "",
+    retryingMessageId: "",
     panelOpen: true,
     composingFor: null,
     composeText: "",
@@ -33,7 +36,9 @@ const proto = {
             this._wsBound = true;
             try {
                 socket.on(EVT_PUSH, (data) => {
+                    if (data && Array.isArray(data.runs)) this.runs = data.runs;
                     if (data && Array.isArray(data.agents)) this.agents = data.agents;
+                    this._ensureSelectedRun();
                 });
                 socket.on("connect", () => { this._subscribe(); });
             } catch (_) {}
@@ -72,8 +77,61 @@ const proto = {
             const r = await callJsonApi("/plugins/a0_swarm/swarm_status", {
                 parent_context_id: this._parentCtxId,
             });
+            if (r && Array.isArray(r.runs)) this.runs = r.runs;
             if (r && Array.isArray(r.agents)) this.agents = r.agents;
+            this._ensureSelectedRun();
         } catch (_) {}
+    },
+
+    _ensureSelectedRun() {
+        if (!this.runs.length) {
+            this.selectedRunId = "";
+            return;
+        }
+        if (!this.selectedRunId || !this.runs.some(r => r.run_id === this.selectedRunId)) {
+            this.selectedRunId = this.runs[0].run_id;
+        }
+    },
+
+    get selectedRun() {
+        return this.runs.find(r => r.run_id === this.selectedRunId) || this.runs[0] || null;
+    },
+
+    runAgents(run) {
+        return (run && Array.isArray(run.agents)) ? run.agents : [];
+    },
+
+    runMessages(run) {
+        return (run && Array.isArray(run.messages)) ? run.messages : [];
+    },
+
+    runTimeline(run) {
+        return (run && Array.isArray(run.timeline)) ? run.timeline : [];
+    },
+
+    deliveryClass(state) {
+        return "delivery-" + (state || "queued");
+    },
+
+    agentOrigin(agent) {
+        if (agent && agent.is_remote) return agent.remote_label || agent.remote_base_url || "remote";
+        return "local";
+    },
+
+    messageFailure(message) {
+        return (message && message.failure_reason) || "";
+    },
+
+    async retryMessage(messageId) {
+        if (!messageId) return;
+        this.retryingMessageId = messageId;
+        try {
+            await callJsonApi("/plugins/a0_swarm/swarm_retry_message", { message_id: messageId });
+        } catch (_) {
+        } finally {
+            this.retryingMessageId = "";
+            this._poll();
+        }
     },
 
     get activeAgents() {
