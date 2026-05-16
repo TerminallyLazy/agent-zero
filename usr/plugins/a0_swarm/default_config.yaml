@@ -2,3 +2,7 @@ max_parallel: 0
 default_profile: ""
 result_kb_cap: 64
 remotes: []
+
+remote_diagnostics:
+  docker_discovery_enabled: true
+  test_timeout_s: 10
