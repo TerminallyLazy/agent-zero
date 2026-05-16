@@ -7,4 +7,7 @@ class SwarmToolTrack(Extension):
         reg = SwarmRegistry.get()
         entry = reg.get_agent_by_context(self.agent.context.id)
         if entry:
-            reg.update_activity(entry.agent_name, f"Using tool: {tool_name}")
+            text = f"Using tool: {tool_name}"
+            reg.update_activity(entry.agent_name, text)
+            if entry.run_id:
+                reg.add_event(entry.run_id, entry.agent_name, "activity", text)

@@ -188,3 +188,29 @@ async def test_swarm_clear_completed():
     assert out == {"ok": True}
     assert reg.get_agent("SA1_1") is None
     assert reg.get_agent("SA1_2") is not None
+
+
+@pytest.mark.asyncio
+async def test_swarm_retry_message_retries_failed_message(monkeypatch):
+    from usr.plugins.a0_swarm.api import swarm_retry_message as retry
+
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    agent = _new("SA1_1", ctx="ctx-1")
+    agent.run_id = run.run_id
+    reg.register(agent)
+    msg = reg.create_message(run.run_id, "orchestrator", "SA1_1", "again")
+    reg.mark_message_failed(msg.message_id, "context not found")
+
+    async def fake_deliver(message_id):
+        reg.get_message(message_id).delivery_state = "queued"
+        reg.mark_message_delivered(message_id)
+        return MagicMock(ok=True, state="delivered", reason="", message_id=message_id)
+
+    monkeypatch.setattr(retry.delivery, "deliver_message", fake_deliver)
+
+    handler = retry.SwarmRetryMessage(app=MagicMock(), thread_lock=MagicMock())
+    out = await handler.process({"message_id": msg.message_id}, MagicMock())
+
+    assert out["ok"] is True
+    assert out["delivery_state"] == "delivered"

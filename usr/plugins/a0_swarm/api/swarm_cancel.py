@@ -21,6 +21,8 @@ class SwarmCancel(ApiHandler):
         # Order matters: terminal status FIRST so the subagent's later
         # DONE/FAILED write is absorbed by terminal-state in update_status.
         reg.update_status(agent_name, SwarmAgentStatus.CANCELLED, current_activity="")
+        if entry.run_id:
+            reg.add_event(entry.run_id, agent_name, "status", "Cancelled by orchestrator")
 
         if entry.is_remote:
             remote = RemoteEndpoint(label=entry.remote_label, base_url=entry.remote_base_url)

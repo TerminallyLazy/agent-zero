@@ -7,6 +7,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+if "agent" not in sys.modules:
+    _agent_stub = types.ModuleType("agent")
+    _agent_stub.AgentContext = MagicMock()
+    _agent_stub.UserMessage = lambda message=None, **kw: {"message": message}
+    sys.modules["agent"] = _agent_stub
+
 # Stub helpers.extension before importing the plugin extensions
 if "helpers.extension" not in sys.modules:
     _ext_stub = types.ModuleType("helpers.extension")
@@ -215,3 +221,33 @@ async def test_swarm_ws_push_cb_evicts_when_instance_garbage_collected():
 
     assert "sid-1" not in _subs
     assert len(SwarmRegistry.get()._subscribers) == 0
+
+
+@pytest.mark.asyncio
+async def test_message_loop_start_flushes_queued_messages(monkeypatch):
+    from usr.plugins.a0_swarm.extensions.python.message_loop_start import _10_swarm_unblock as ext_mod
+
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    agent_entry = SwarmAgent(
+        agent_name="SA1_1", label="x", task="t", context_id="ctx-1",
+        parent_context_id="P", status=SwarmAgentStatus.BLOCKED,
+        started_at="t", run_id=run.run_id,
+    )
+    reg.register(agent_entry)
+    reg.create_message(run.run_id, "orchestrator", "SA1_1", "resume")
+
+    called = []
+
+    async def fake_flush(agent_name):
+        called.append(agent_name)
+        return []
+
+    monkeypatch.setattr(ext_mod.delivery, "deliver_queued_for_agent", fake_flush)
+
+    instance = ext_mod.SwarmUnblockOnResume(agent=MagicMock())
+    instance.agent.context.id = "ctx-1"
+    await instance.execute()
+
+    assert called == ["SA1_1"]
+    assert reg.get_agent("SA1_1").status == SwarmAgentStatus.WORKING
