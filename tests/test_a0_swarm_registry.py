@@ -107,8 +107,8 @@ def test_snapshot_filters_by_parent():
     a = _new_agent("SA1_1"); a.parent_context_id = "P1"; reg.register(a)
     b = _new_agent("SA2_1"); b.parent_context_id = "P2"; reg.register(b)
     snap = reg.snapshot(parent_ctx_id="P1")
-    assert len(snap) == 1 and snap[0]["agent_name"] == "SA1_1"
-    assert len(reg.snapshot()) == 2  # no filter → all
+    assert len(snap["agents"]) == 1 and snap["agents"][0]["agent_name"] == "SA1_1"
+    assert len(reg.snapshot()["agents"]) == 2  # no filter → all
 
 
 def test_clear_completed_removes_terminal_only_for_parent():
@@ -180,7 +180,78 @@ def test_registry_thread_safety_under_contention():
     [t.join() for t in threads]
 
     snap = reg.snapshot()
-    assert len(snap) == 20
-    for entry in snap:
+    assert len(snap["agents"]) == 20
+    for entry in snap["agents"]:
         assert entry["status"] == "working"
         assert len(entry["messages"]) == 200
+
+
+def test_create_run_and_register_agent_under_run_snapshot_grouping():
+    reg = SwarmRegistry.get()
+    run = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator", title="run one")
+    agent = _new_agent("SA1_1")
+    agent.run_id = run.run_id
+    reg.register(agent)
+
+    snap = reg.snapshot(parent_ctx_id="P")
+    assert set(snap.keys()) == {"runs", "agents"}
+    assert len(snap["runs"]) == 1
+    assert snap["runs"][0]["run_id"] == run.run_id
+    assert snap["runs"][0]["parent_context_id"] == "P"
+    assert snap["runs"][0]["agents"][0]["agent_name"] == "SA1_1"
+    assert snap["agents"][0]["run_id"] == run.run_id
+
+
+def test_create_message_rejects_cross_run_peer_messages():
+    reg = SwarmRegistry.get()
+    run1 = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator")
+    run2 = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator")
+    a = _new_agent("SA1_1"); a.run_id = run1.run_id; reg.register(a)
+    b = _new_agent("SA1_2"); b.run_id = run2.run_id; reg.register(b)
+
+    with pytest.raises(ValueError, match="recipient is not in this swarm run"):
+        reg.create_message(run_id=run1.run_id, sender="SA1_1", recipient="SA1_2", content="hi")
+
+
+def test_create_message_lifecycle_and_grouped_snapshot_timeline():
+    reg = SwarmRegistry.get()
+    run = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator")
+    a = _new_agent("SA1_1"); a.run_id = run.run_id; reg.register(a)
+
+    msg = reg.create_message(run_id=run.run_id, sender="orchestrator", recipient="SA1_1", content="hi")
+    assert msg.delivery_state == "queued"
+    reg.mark_message_delivered(msg.message_id)
+    assert reg.get_message(msg.message_id).delivery_state == "delivered"
+
+    snap = reg.snapshot(parent_ctx_id="P")
+    grouped = snap["runs"][0]
+    assert grouped["messages"][0]["message_id"] == msg.message_id
+    assert grouped["messages"][0]["delivery_state"] == "delivered"
+    assert [event["kind"] for event in grouped["timeline"]] == ["message", "delivery"]
+    assert grouped["timeline"][0]["ref_id"] == msg.message_id
+    assert grouped["timeline"][1]["ref_id"] == msg.message_id
+
+
+def test_mark_message_failed_records_failure_details():
+    reg = SwarmRegistry.get()
+    run = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator")
+    a = _new_agent("SA1_1"); a.run_id = run.run_id; reg.register(a)
+
+    msg = reg.create_message(run_id=run.run_id, sender="orchestrator", recipient="SA1_1", content="hi")
+    reg.mark_message_failed(msg.message_id, "network down")
+    failed = reg.get_message(msg.message_id)
+    assert failed.delivery_state == "failed"
+    assert failed.failure_reason == "network down"
+    assert failed.failed_at != ""
+
+
+def test_idle_status_is_non_terminal_but_done_absorbs():
+    reg = SwarmRegistry.get()
+    reg.register(_new_agent())
+    reg.update_status("SA1_1", SwarmAgentStatus.IDLE)
+    assert reg.get_agent("SA1_1").status == SwarmAgentStatus.IDLE
+    assert reg.get_agent("SA1_1").finished_at == ""
+
+    reg.update_status("SA1_1", SwarmAgentStatus.DONE)
+    reg.update_status("SA1_1", SwarmAgentStatus.IDLE)
+    assert reg.get_agent("SA1_1").status == SwarmAgentStatus.DONE
