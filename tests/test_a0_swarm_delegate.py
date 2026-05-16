@@ -106,8 +106,10 @@ async def test_delegate_parallel_runs_two_tasks(monkeypatch):
     ])
 
     snap = SwarmRegistry.get().snapshot()
-    assert len(snap) == 2
-    assert all(a["status"] == "done" for a in snap)
+    assert len(snap["runs"]) == 1
+    assert len(snap["agents"]) == 2
+    assert all(a["run_id"] == snap["runs"][0]["run_id"] for a in snap["agents"])
+    assert all(a["status"] == "done" for a in snap["agents"])
     assert "result-ctx-0" in resp.message
     assert "result-ctx-1" in resp.message
     assert AC.remove.call_count == 2
@@ -145,7 +147,7 @@ async def test_delegate_parallel_one_fails_others_succeed(monkeypatch):
     )
     resp = await tool.execute(tasks=[{"label": "A", "task": "t"}, {"label": "B", "task": "t"}])
 
-    snap = sorted(SwarmRegistry.get().snapshot(), key=lambda a: a["agent_name"])
+    snap = sorted(SwarmRegistry.get().snapshot()["agents"], key=lambda a: a["agent_name"])
     assert snap[0]["status"] == "done"
     assert snap[1]["status"] == "failed"
     assert "boom" in snap[1]["blocker"]
@@ -273,7 +275,7 @@ async def test_delegate_parallel_max_parallel_cap_rejects(monkeypatch):
     ])
     assert "rejected" in resp.message
     assert "max_parallel=2" in resp.message
-    assert SwarmRegistry.get().snapshot() == []
+    assert SwarmRegistry.get().snapshot()["agents"] == []
 
     _plugins_stub.get_plugin_config = MagicMock(return_value={})
 

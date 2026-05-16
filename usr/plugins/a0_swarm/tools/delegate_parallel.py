@@ -62,6 +62,11 @@ class DelegateParallel(Tool):
 
         registry = SwarmRegistry.get()
         parent_ctx_id = self.agent.context.id
+        run = registry.create_run(
+            parent_context_id=parent_ctx_id,
+            parent_agent_name=getattr(self.agent, "agent_name", "orchestrator"),
+            title=f"delegate_parallel: {len(tasks)} task(s)",
+        )
         entries: list[SwarmAgent] = []
         coros = []
 
@@ -83,6 +88,8 @@ class DelegateParallel(Tool):
                         started_at=utc_iso_now(),
                         blocker=f"Unknown remote endpoint: {endpoint}",
                         remote_label=endpoint,
+                        run_id=run.run_id,
+                        delivery_mode="remote_a2a",
                     )
                     registry.register(entry)
                     entries.append(entry)
@@ -96,6 +103,8 @@ class DelegateParallel(Tool):
                     started_at=utc_iso_now(),
                     remote_label=remote.label,
                     remote_base_url=remote.base_url,
+                    run_id=run.run_id,
+                    delivery_mode="remote_a2a",
                 )
                 registry.register(entry)
                 entries.append(entry)
@@ -115,6 +124,8 @@ class DelegateParallel(Tool):
                 context_id=sub_ctx.id, parent_context_id=parent_ctx_id,
                 status=SwarmAgentStatus.PENDING,
                 started_at=utc_iso_now(),
+                run_id=run.run_id,
+                delivery_mode="local",
             )
             registry.register(entry)
             entries.append(entry)
@@ -171,16 +182,12 @@ class DelegateParallel(Tool):
 
         # Persist task_id + remote context so cancel/intervene can target it.
         registry.update_status(
-            entry.agent_name, SwarmAgentStatus.WORKING,
+            entry.agent_name,
+            SwarmAgentStatus.WORKING,
             current_activity=f"Running on {remote.label}",
+            remote_task_id=task_id,
+            context_id=remote_ctx_id,
         )
-        # Direct mutation (under lock) to set remote_task_id without
-        # tripping the absorbing-terminal guard.
-        with registry._rlock:  # noqa: SLF001
-            live = registry._agents.get(entry.agent_name)  # noqa: SLF001
-            if live is not None:
-                live.remote_task_id = task_id
-                live.context_id = remote_ctx_id
 
         try:
             state, result_text = await a2a_runner.wait_for_result(conn, task_id)

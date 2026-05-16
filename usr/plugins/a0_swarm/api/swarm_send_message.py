@@ -1,10 +1,8 @@
-from agent import AgentContext, UserMessage
 from helpers.api import ApiHandler, Request
 from usr.plugins.a0_swarm.helpers.registry import (
-    SwarmRegistry, SwarmMessage, SwarmAgentStatus, utc_iso_now,
+    SwarmRegistry, SwarmAgentStatus,
 )
-from usr.plugins.a0_swarm.helpers import a2a_runner
-from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
+from usr.plugins.a0_swarm.helpers import delivery
 
 
 class SwarmSendMessage(ApiHandler):
@@ -22,20 +20,18 @@ class SwarmSendMessage(ApiHandler):
         if not entry:
             return {"ok": False, "error": f"Agent {agent_name} not found"}
 
-        reg.add_message(SwarmMessage(
-            sender="orchestrator", recipient=agent_name,
-            content=content, timestamp=utc_iso_now(),
-        ))
+        try:
+            msg = reg.create_message(entry.run_id, "orchestrator", agent_name, content)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
         if unblock and entry.status == SwarmAgentStatus.BLOCKED:
             reg.update_status(agent_name, SwarmAgentStatus.WORKING, blocker="")
 
-        if entry.is_remote:
-            remote = RemoteEndpoint(label=entry.remote_label, base_url=entry.remote_base_url)
-            await a2a_runner.send_intervention(
-                remote, f"[Orchestrator]: {content}", context_id=entry.context_id,
-            )
-        else:
-            ctx = AgentContext.get(entry.context_id)
-            if ctx:
-                ctx.communicate(UserMessage(message=f"[Orchestrator]: {content}"))
-        return {"ok": True}
+        result = await delivery.deliver_message(msg.message_id)
+        return {
+            "ok": result.ok,
+            "message_id": msg.message_id,
+            "delivery_state": result.state,
+            "error": result.reason,
+        }

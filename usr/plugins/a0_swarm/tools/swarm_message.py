@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from agent import AgentContext, UserMessage
 from helpers.tool import Tool, Response
 from usr.plugins.a0_swarm.helpers.registry import (
-    SwarmRegistry, SwarmMessage, SwarmAgentStatus, utc_iso_now,
+    SwarmRegistry, SwarmAgentStatus,
 )
+from usr.plugins.a0_swarm.helpers import delivery
 
 
 class SwarmMessageTool(Tool):
@@ -19,24 +19,32 @@ class SwarmMessageTool(Tool):
         sender_entry = reg.get_agent_by_context(self.agent.context.id)
         sender_name = sender_entry.agent_name if sender_entry else self.agent.agent_name
 
-        reg.add_message(SwarmMessage(
-            sender=sender_name, recipient=recipient,
-            content=content, timestamp=utc_iso_now(),
-        ))
+        if not sender_entry:
+            return Response(message="swarm_message failed: sender is not registered in a swarm run.", break_loop=False)
 
-        if is_blocker and sender_entry:
+        try:
+            msg = reg.create_message(
+                sender_entry.run_id,
+                sender_name,
+                recipient,
+                content,
+            )
+        except ValueError as exc:
+            return Response(message=f"swarm_message failed: {exc}", break_loop=False)
+
+        if is_blocker:
             reg.update_status(sender_name, SwarmAgentStatus.BLOCKED, blocker=content)
 
-        if recipient != "orchestrator":
-            target = reg.get_agent(recipient)
-            if target:
-                ctx = AgentContext.get(target.context_id)
-                if ctx:
-                    ctx.communicate(UserMessage(
-                        message=f"[Message from {sender_name}]: {content}"
-                    ))
+        result = await delivery.deliver_message(msg.message_id)
+        if result.ok:
+            state_text = result.state
+        else:
+            state_text = f"{result.state}: {result.reason}"
 
-        return Response(message=f"Message sent to {recipient}.", break_loop=False)
+        return Response(
+            message=f"Message {msg.message_id} accepted for {recipient}; delivery_state={state_text}.",
+            break_loop=False,
+        )
 
     def get_log_object(self):
         return self.agent.context.log.log(

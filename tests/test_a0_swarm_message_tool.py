@@ -55,18 +55,16 @@ def fresh_registry():
 @pytest.mark.asyncio
 async def test_swarm_message_to_orchestrator_records_message(monkeypatch):
     reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
     reg.register(SwarmAgent(
         agent_name="SA1_1", label="x", task="t",
         context_id="ctx-1", parent_context_id="P",
-        status=SwarmAgentStatus.WORKING, started_at="t",
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run.run_id,
     ))
 
     sender_ctx = MagicMock(); sender_ctx.id = "ctx-1"
     agent = MagicMock(); agent.context = sender_ctx; agent.agent_name = "SA1_1"
     agent.context.log.log = MagicMock()
-
-    monkeypatch.setattr(sm_mod, "UserMessage", lambda message: {"message": message})
-    monkeypatch.setattr(sm_mod, "AgentContext", MagicMock())
 
     tool = sm_mod.SwarmMessageTool(
         agent=agent, name="x", method=None, args={}, message="", loop_data=None,
@@ -82,18 +80,19 @@ async def test_swarm_message_to_orchestrator_records_message(monkeypatch):
 @pytest.mark.asyncio
 async def test_swarm_message_to_peer_injects_via_communicate(monkeypatch):
     reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
     reg.register(SwarmAgent(agent_name="SA1_1", label="x", task="t",
         context_id="ctx-1", parent_context_id="P",
-        status=SwarmAgentStatus.WORKING, started_at="t"))
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run.run_id))
     reg.register(SwarmAgent(agent_name="SA1_2", label="x", task="t",
         context_id="ctx-2", parent_context_id="P",
-        status=SwarmAgentStatus.WORKING, started_at="t"))
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run.run_id))
 
     target_ctx = MagicMock()
-    monkeypatch.setattr(sm_mod, "UserMessage", lambda message: {"message": message})
+    monkeypatch.setattr(sm_mod.delivery, "UserMessage", lambda message: {"message": message})
     AgentContext_mock = MagicMock()
     AgentContext_mock.get.return_value = target_ctx
-    monkeypatch.setattr(sm_mod, "AgentContext", AgentContext_mock)
+    monkeypatch.setattr(sm_mod.delivery, "AgentContext", AgentContext_mock)
 
     sender_ctx = MagicMock(); sender_ctx.id = "ctx-1"
     agent = MagicMock(); agent.context = sender_ctx; agent.agent_name = "SA1_1"
@@ -102,8 +101,65 @@ async def test_swarm_message_to_peer_injects_via_communicate(monkeypatch):
     tool = sm_mod.SwarmMessageTool(
         agent=agent, name="x", method=None, args={}, message="", loop_data=None,
     )
-    await tool.execute(recipient="SA1_2", content="hand-off")
+    resp = await tool.execute(recipient="SA1_2", content="hand-off")
 
     target_ctx.communicate.assert_called_once()
     payload = target_ctx.communicate.call_args[0][0]
     assert payload["message"].startswith("[Message from SA1_1]:")
+    assert "delivered" in resp.message
+
+
+@pytest.mark.asyncio
+async def test_swarm_message_rejects_cross_run_peer(monkeypatch):
+    reg = SwarmRegistry.get()
+    run_a = reg.create_run("P", "A0")
+    run_b = reg.create_run("P", "A0")
+    reg.register(SwarmAgent(agent_name="SA1_1", label="x", task="t",
+        context_id="ctx-1", parent_context_id="P",
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run_a.run_id))
+    reg.register(SwarmAgent(agent_name="SA1_2", label="x", task="t",
+        context_id="ctx-2", parent_context_id="P",
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run_b.run_id))
+
+    sender_ctx = MagicMock()
+    sender_ctx.id = "ctx-1"
+    agent = MagicMock()
+    agent.context = sender_ctx
+    agent.agent_name = "SA1_1"
+    agent.context.log.log = MagicMock()
+
+    tool = sm_mod.SwarmMessageTool(agent=agent, name="x", method=None, args={}, message="", loop_data=None)
+    resp = await tool.execute(recipient="SA1_2", content="bad handoff")
+
+    assert "recipient is not in this swarm run" in resp.message
+
+
+@pytest.mark.asyncio
+async def test_swarm_message_response_includes_delivery_state(monkeypatch):
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    reg.register(SwarmAgent(agent_name="SA1_1", label="x", task="t",
+        context_id="ctx-1", parent_context_id="P",
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run.run_id))
+    reg.register(SwarmAgent(agent_name="SA1_2", label="x", task="t",
+        context_id="ctx-2", parent_context_id="P",
+        status=SwarmAgentStatus.WORKING, started_at="t", run_id=run.run_id))
+
+    async def fake_deliver(message_id):
+        reg.mark_message_delivered(message_id)
+        return MagicMock(ok=True, state="delivered", reason="", message_id=message_id)
+
+    monkeypatch.setattr(sm_mod.delivery, "deliver_message", fake_deliver)
+
+    sender_ctx = MagicMock()
+    sender_ctx.id = "ctx-1"
+    agent = MagicMock()
+    agent.context = sender_ctx
+    agent.agent_name = "SA1_1"
+    agent.context.log.log = MagicMock()
+
+    tool = sm_mod.SwarmMessageTool(agent=agent, name="x", method=None, args={}, message="", loop_data=None)
+    resp = await tool.execute(recipient="SA1_2", content="handoff")
+
+    assert "delivered" in resp.message
+    assert "msg-" in resp.message

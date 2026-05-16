@@ -55,8 +55,12 @@ def _new(name, status=SwarmAgentStatus.WORKING, parent="P", **kw):
 async def test_swarm_status_filters_by_parent():
     from usr.plugins.a0_swarm.api.swarm_status import SwarmStatus
     reg = SwarmRegistry.get()
-    reg.register(_new("SA1_1", parent="P1"))
-    reg.register(_new("SA2_1", parent="P2"))
+    run1 = reg.create_run("P1", "A0")
+    run2 = reg.create_run("P2", "A0")
+    a1 = _new("SA1_1", parent="P1"); a1.run_id = run1.run_id
+    a2 = _new("SA2_1", parent="P2"); a2.run_id = run2.run_id
+    reg.register(a1)
+    reg.register(a2)
 
     handler = SwarmStatus(app=MagicMock(), thread_lock=MagicMock())
     out = await handler.process({"parent_context_id": "P1"}, MagicMock())
@@ -64,6 +68,7 @@ async def test_swarm_status_filters_by_parent():
     assert isinstance(json.loads(json.dumps(out))["agents"], list)
     assert len(out["agents"]) == 1 and out["agents"][0]["agent_name"] == "SA1_1"
     assert "runs" in out
+    assert len(out["runs"]) == 1
 
     out_all = await handler.process({}, MagicMock())
     assert isinstance(out_all["agents"], list)
@@ -86,24 +91,52 @@ async def test_swarm_send_message_records_and_communicates(monkeypatch):
     from usr.plugins.a0_swarm.api import swarm_send_message as sm
 
     reg = SwarmRegistry.get()
-    reg.register(_new("SA1_1", status=SwarmAgentStatus.BLOCKED, ctx="ctx-1", blocker="stuck"))
+    run = reg.create_run("P", "A0")
+    agent = _new("SA1_1", status=SwarmAgentStatus.BLOCKED, ctx="ctx-1", blocker="stuck")
+    agent.run_id = run.run_id
+    reg.register(agent)
 
     target_ctx = MagicMock()
     AC = MagicMock(); AC.get.return_value = target_ctx
-    monkeypatch.setattr(sm, "AgentContext", AC)
-    monkeypatch.setattr(sm, "UserMessage", lambda message: {"message": message})
+    monkeypatch.setattr(sm.delivery, "AgentContext", AC)
+    monkeypatch.setattr(sm.delivery, "UserMessage", lambda message: {"message": message})
 
     handler = sm.SwarmSendMessage(app=MagicMock(), thread_lock=MagicMock())
     out = await handler.process(
         {"agent_name": "SA1_1", "content": "use this key", "unblock": True},
         MagicMock(),
     )
-    assert out == {"ok": True}
+    assert out["ok"] is True
+    assert out["delivery_state"] == "delivered"
     a = reg.get_agent("SA1_1")
     assert a.status == SwarmAgentStatus.WORKING
     assert a.blocker == ""
     assert any(m.content == "use this key" for m in a.messages)
     target_ctx.communicate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_swarm_send_message_returns_delivery_state(monkeypatch):
+    from usr.plugins.a0_swarm.api import swarm_send_message as sm
+
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    agent = _new("SA1_1", status=SwarmAgentStatus.WORKING, ctx="ctx-1")
+    agent.run_id = run.run_id
+    reg.register(agent)
+
+    async def fake_deliver(message_id):
+        reg.mark_message_delivered(message_id)
+        return MagicMock(ok=True, state="delivered", reason="", message_id=message_id)
+
+    monkeypatch.setattr(sm.delivery, "deliver_message", fake_deliver)
+
+    handler = sm.SwarmSendMessage(app=MagicMock(), thread_lock=MagicMock())
+    out = await handler.process({"agent_name": "SA1_1", "content": "use this"}, MagicMock())
+
+    assert out["ok"] is True
+    assert out["delivery_state"] == "delivered"
+    assert out["message_id"].startswith("msg-")
 
 
 # ---- swarm_cancel ----------------------------------------------------------
