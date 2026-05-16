@@ -53,15 +53,80 @@ async def test_swarm_test_remote_connect_failure(monkeypatch):
     assert "401 Unauthorized" in out["checks"]["agent_card"]["error"]
 
 
+class _DockerException(Exception):
+    pass
+
+
+def _install_fake_docker(monkeypatch, from_env):
+    """Register a fake `docker` SDK so the handler imports it inside process()."""
+    docker_mod = types.ModuleType("docker")
+    errors_mod = types.ModuleType("docker.errors")
+    errors_mod.DockerException = _DockerException
+    docker_mod.errors = errors_mod
+    docker_mod.from_env = from_env
+    monkeypatch.setitem(sys.modules, "docker", docker_mod)
+    monkeypatch.setitem(sys.modules, "docker.errors", errors_mod)
+
+
 @pytest.mark.asyncio
-async def test_swarm_discover_docker_handles_missing_docker(monkeypatch):
+async def test_swarm_discover_docker_socket_unreachable(monkeypatch):
     from usr.plugins.a0_swarm.api import swarm_discover_docker as mod
 
-    monkeypatch.setattr(mod.subprocess, "run", MagicMock(side_effect=FileNotFoundError("docker")))
+    def from_env(**kw):
+        raise _DockerException("cannot connect to unix:///var/run/docker.sock")
+
+    _install_fake_docker(monkeypatch, from_env)
 
     handler = mod.SwarmDiscoverDocker(app=MagicMock(), thread_lock=MagicMock())
     out = await handler.process({}, MagicMock())
 
     assert out["ok"] is False
     assert out["candidates"] == []
-    assert "docker command not found" in out["error"]
+    assert "docker.sock" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_swarm_discover_docker_lists_a0_siblings(monkeypatch):
+    from usr.plugins.a0_swarm.api import swarm_discover_docker as mod
+
+    a0 = MagicMock()
+    a0.name = "agent-zero-research"
+    a0.image.tags = ["agent0ai/agent-zero:latest"]
+    a0.attrs = {
+        "Config": {"Image": "agent0ai/agent-zero:latest"},
+        "NetworkSettings": {"Ports": {"55000/tcp": [{"HostPort": "55001"}]}},
+    }
+    other = MagicMock()
+    other.name = "postgres"
+    other.image.tags = ["postgres:16"]
+    other.attrs = {"Config": {"Image": "postgres:16"}, "NetworkSettings": {"Ports": {}}}
+
+    client = MagicMock()
+    client.containers.list.return_value = [a0, other]
+    client.close = MagicMock()
+
+    _install_fake_docker(monkeypatch, lambda **kw: client)
+
+    handler = mod.SwarmDiscoverDocker(app=MagicMock(), thread_lock=MagicMock())
+    out = await handler.process({}, MagicMock())
+
+    assert out["ok"] is True
+    assert len(out["candidates"]) == 1
+    cand = out["candidates"][0]
+    assert cand["container"] == "agent-zero-research"
+    assert cand["base_url"] == "http://agent-zero-research:55000"
+    assert "55000/tcp" in cand["ports"]
+
+
+@pytest.mark.asyncio
+async def test_swarm_discover_docker_handles_missing_sdk(monkeypatch):
+    from usr.plugins.a0_swarm.api import swarm_discover_docker as mod
+
+    monkeypatch.setitem(sys.modules, "docker", None)  # forces ImportError
+
+    handler = mod.SwarmDiscoverDocker(app=MagicMock(), thread_lock=MagicMock())
+    out = await handler.process({}, MagicMock())
+
+    assert out["ok"] is False
+    assert out["candidates"] == []
+    assert "Docker SDK not available" in out["error"]
