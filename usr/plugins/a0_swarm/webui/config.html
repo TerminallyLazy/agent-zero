@@ -5,7 +5,7 @@
 <body>
     <div x-data>
         <template x-if="config">
-            <div x-data="{ context: {} }" x-init="
+            <div x-init="
               context.dockerCandidates = [];
               context.dockerDiscoveryError = '';
               context.remoteTestResult = null;
