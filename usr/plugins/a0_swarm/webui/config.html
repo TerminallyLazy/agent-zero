@@ -5,7 +5,28 @@
 <body>
     <div x-data>
         <template x-if="config">
-            <div>
+            <div x-data="{ context: {} }" x-init="
+              context.dockerCandidates = [];
+              context.dockerDiscoveryError = '';
+              context.remoteTestResult = null;
+              context.discoverDocker = async () => {
+                context.dockerDiscoveryError = '';
+                const r = await fetch('/plugins/a0_swarm/swarm_discover_docker', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({})
+                }).then(r => r.json());
+                context.dockerCandidates = r.candidates || [];
+                context.dockerDiscoveryError = r.ok ? '' : (r.error || 'Docker discovery failed');
+              };
+              context.testRemote = async (remote) => {
+                context.remoteTestResult = await fetch('/plugins/a0_swarm/swarm_test_remote', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(remote || {})
+                }).then(r => r.json());
+              };
+            ">
                 <div class="section-title">A0 Swarm</div>
                 <div class="section-description">
                     Settings for the parallel subagent swarm.
@@ -99,6 +120,58 @@
                         Add remote
                     </button>
                 </div>
+
+                <div class="section-title" style="margin-top:1.25rem;">Remote diagnostics</div>
+                <div class="section-description">
+                    Test configured A2A remotes and discover same-host Docker Agent Zero containers.
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Discover local Docker A0 containers</div>
+                        <div class="field-description">
+                            Lists likely same-host Agent Zero containers. Discovery only reads Docker metadata.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <button type="button"
+                                @click="context.discoverDocker && context.discoverDocker()"
+                                style="background:var(--color-highlight); color:#fff; border:none; padding:0.35rem 0.85rem; border-radius:0.3rem; cursor:pointer; font-weight:600;">
+                            Discover
+                        </button>
+                    </div>
+                </div>
+
+                <template x-if="context.dockerDiscoveryError">
+                    <div class="field-description" style="color:var(--color-error-text);" x-text="context.dockerDiscoveryError"></div>
+                </template>
+
+                <template x-if="Array.isArray(context.dockerCandidates) && context.dockerCandidates.length">
+                    <div style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
+                        <template x-for="candidate in context.dockerCandidates" :key="candidate.container || candidate.label">
+                            <div style="border:1px solid var(--color-border); border-radius:0.4rem; padding:0.5rem 0.65rem;">
+                                <div style="font-weight:700;" x-text="candidate.label"></div>
+                                <div class="field-description" x-text="candidate.image"></div>
+                                <div class="field-description" x-text="candidate.ports"></div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <template x-for="(remote, idx) in config.remotes" :key="'test-' + idx">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin:0.35rem 0;">
+                        <span x-text="remote.label || remote.base_url || 'Unnamed remote'"></span>
+                        <button type="button"
+                                @click="context.testRemote && context.testRemote(remote)"
+                                style="background:transparent; border:1px solid var(--color-border); color:var(--color-text); padding:0.2rem 0.6rem; border-radius:0.3rem; cursor:pointer;">
+                            Test
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="context.remoteTestResult">
+                    <pre style="white-space:pre-wrap; overflow:auto; border:1px solid var(--color-border); border-radius:0.4rem; padding:0.5rem;" x-text="JSON.stringify(context.remoteTestResult, null, 2)"></pre>
+                </template>
             </div>
         </template>
     </div>
