@@ -1,20 +1,16 @@
-### swarm_message
-Send a message to another swarm agent or to the orchestrator. Use this to report blockers, ask questions, share intermediate results, or coordinate with peers.
+# swarm_message
 
-**Args:**
-- `recipient` (string): Target agent name (e.g. "SA1_2") or "orchestrator"
-- `content` (string): The message content
-- `is_blocker` (bool, optional): Set true if you are blocked and need help before continuing
+Use `swarm_message` when you are an `a0_swarm` subagent and need to communicate with the orchestrator or a peer in the same swarm run.
 
-**Example — reporting a blocker:**
-```json
-{
-  "thoughts": ["I need the API key from the orchestrator before I can continue."],
-  "tool_name": "swarm_message",
-  "tool_args": {
-    "recipient": "orchestrator",
-    "content": "I need the OpenAI API key to proceed with the embedding step.",
-    "is_blocker": true
-  }
-}
-```
+Arguments:
+
+- `recipient`: `"orchestrator"` or a peer agent name such as `"SA1_2"`.
+- `content`: the message to send.
+- `is_blocker`: set to `true` only when you cannot continue without help.
+
+Rules:
+
+- Peer messages are only allowed inside the same swarm run.
+- A successful tool call means the message was accepted into the swarm ledger.
+- The tool response includes delivery state. `queued` means accepted but not yet delivered. `delivered` means the target received the message. `failed` includes the delivery reason.
+- Use `recipient="orchestrator"` for blockers, status updates, and decisions that need parent-agent input.

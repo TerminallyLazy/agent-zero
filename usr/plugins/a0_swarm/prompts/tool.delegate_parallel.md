@@ -1,27 +1,17 @@
-### delegate_parallel
-Spawn multiple subagents to work on independent tasks in parallel. Each agent runs concurrently and returns its result when done. Use this when a task can be decomposed into independent subtasks that do not need to wait for each other.
+# delegate_parallel
 
-**When to use:** The task has clearly separable subtasks with no sequential dependency between them.
+Use `delegate_parallel` to split independent work across multiple swarm agents.
 
-**Args:**
-- `tasks` (list, required): Array of task objects. Each object:
-  - `label` (string): Human-readable name for this agent shown in the UI (e.g. "Research Agent", "Code Writer")
-  - `task` (string): Full task description for this agent
-  - `profile` (string, optional): Agent profile name to use
-  - `endpoint` (string, optional): Route this task to a remote Agent Zero instance via FastA2A instead of spawning a local subagent. Accepts either the `label` of a remote configured in plugin settings, or a full `http(s)://host:port` URL. The remote container must have FastA2A enabled.
+Arguments:
 
-**Example:**
-```json
-{
-  "thoughts": ["I'll split this into research and implementation tasks."],
-  "tool_name": "delegate_parallel",
-  "tool_args": {
-    "tasks": [
-      {"label": "Researcher", "task": "Research the top 5 Python async frameworks and summarize their tradeoffs."},
-      {"label": "Implementer", "task": "Write a working FastAPI hello-world server with JWT auth."}
-    ]
-  }
-}
-```
+- `tasks`: list of task objects.
+- Each task needs `label` and `task`.
+- Optional `profile` selects an Agent Zero profile for a local subagent.
+- Optional `endpoint` routes the task to a configured remote A2A Agent Zero endpoint by label or URL.
 
-**Returns:** A structured markdown summary of all agent results once all agents complete.
+Guidance:
+
+- Use meaningful labels. The swarm panel uses labels for operator observability.
+- Tasks in one `delegate_parallel` call share a swarm run and can message each other with `swarm_message`.
+- Subagents can message the orchestrator with `recipient="orchestrator"`.
+- Remote endpoints must be tested in Plugin Settings before relying on them for long-running work.

@@ -7,11 +7,22 @@ and `docs/superpowers/plans/2026-05-14-a0-swarm.md` for the implementation plan.
 
 ## Tools
 
-- `delegate_parallel(tasks=[{label, task, profile?}, ...])` — runs subagents
-  concurrently, each in its own isolated `AgentContext`. Returns a markdown
-  summary once all complete.
-- `swarm_message(recipient, content, is_blocker?)` — message a peer swarm
-  agent or the orchestrator; optionally mark sender as BLOCKED.
+- `delegate_parallel(tasks=[{label, task, profile?, endpoint?}, ...])` — runs local or remote subagents concurrently under one swarm run.
+- `swarm_message(recipient, content, is_blocker?)` — records a run-scoped ledger message and attempts delivery to the orchestrator or a peer in the same swarm run.
+
+## Delivery states
+
+- `queued` — accepted into the ledger and visible in the panel.
+- `delivered` — injected into the target local context or accepted by the remote A2A endpoint.
+- `failed` — delivery was attempted and rejected; the panel shows the reason.
+
+`sent` in the UI means the ledger accepted the message. It does not imply delivery until the state changes to `delivered`.
+
+## Remote setup
+
+Configure remotes in Plugin Settings. Same-host Docker discovery can list likely Agent Zero containers when Docker is available. Explicit A2A URLs remain the portable fallback across hosts.
+
+Use the Test action before assigning work to a remote endpoint. The test checks agent-card reachability and authentication, then reports whether continuation and cancellation are available.
 
 ## UI
 
