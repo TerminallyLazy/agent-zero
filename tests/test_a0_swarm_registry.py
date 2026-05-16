@@ -274,3 +274,47 @@ def test_idle_status_is_non_terminal_but_done_absorbs():
     reg.update_status("SA1_1", SwarmAgentStatus.DONE)
     reg.update_status("SA1_1", SwarmAgentStatus.IDLE)
     assert reg.get_agent("SA1_1").status == SwarmAgentStatus.DONE
+
+
+def test_reregistering_agent_name_under_new_run_prunes_orphan_run():
+    """Repeat delegate_parallel reuses SA1_1.. names; the prior run must not
+    linger member-less and perpetually 'active' with a stale timeline."""
+    reg = SwarmRegistry.get()
+    run1 = reg.create_run("WuJiyBCa", "A0", title="delegate_parallel: 4 task(s)")
+    a1 = _new_agent("SA1_1", SwarmAgentStatus.WORKING); a1.run_id = run1.run_id
+    reg.register(a1)
+    reg.add_event(run1.run_id, "SA1_1", "activity", "Using tool: code_execution_tool")
+    assert reg.get_run(run1.run_id) is not None
+
+    # Second delegate_parallel: new run, same agent name.
+    run2 = reg.create_run("WuJiyBCa", "A0", title="delegate_parallel: 4 task(s)")
+    a1b = _new_agent("SA1_1", SwarmAgentStatus.WORKING); a1b.run_id = run2.run_id
+    reg.register(a1b)
+
+    snap = reg.snapshot()
+    run_ids = {r["run_id"] for r in snap["runs"]}
+    assert run1.run_id not in run_ids          # orphan pruned
+    assert run2.run_id in run_ids
+    assert reg.get_run(run1.run_id) is None
+    assert reg.events_for_run(run1.run_id) == []
+    assert reg.get_agent("SA1_1").run_id == run2.run_id
+
+
+def test_run_status_derived_from_member_agents():
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    a1 = _new_agent("SA1_1", SwarmAgentStatus.WORKING); a1.run_id = run.run_id
+    a2 = _new_agent("SA1_2", SwarmAgentStatus.WORKING); a2.run_id = run.run_id
+    reg.register(a1); reg.register(a2)
+
+    def run_status():
+        return next(r["status"] for r in reg.snapshot()["runs"] if r["run_id"] == run.run_id)
+
+    assert run_status() == "active"            # members working
+    reg.update_status("SA1_1", SwarmAgentStatus.DONE, result="ok")
+    assert run_status() == "active"            # one still working
+    reg.update_status("SA1_2", SwarmAgentStatus.DONE, result="ok")
+    assert run_status() == "done"              # all terminal -> done
+    a3 = _new_agent("SA1_3", SwarmAgentStatus.FAILED); a3.run_id = run.run_id
+    reg.register(a3)
+    assert run_status() == "failed"            # any failed -> failed

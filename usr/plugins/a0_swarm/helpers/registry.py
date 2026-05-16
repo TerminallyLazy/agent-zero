@@ -245,9 +245,34 @@ class SwarmRegistry:
                     status=SwarmRunStatus.ACTIVE,
                     started_at=agent.started_at or utc_iso_now(),
                 )
+            prev = self._agents.get(agent.agent_name)
             self._agents[agent.agent_name] = agent
+            # An agent name reused for a NEW run (repeat delegate_parallel from
+            # the same orchestrator) replaces the prior entry. Release the old
+            # run if nothing else references it, so it does not linger as a
+            # member-less, perpetually-"active" ghost with a stale timeline.
+            if prev is not None and prev.run_id and prev.run_id != agent.run_id:
+                self._remove_orphaned_run_state(prev.run_id)
             subs = list(self._subscribers)
         self._fire(subs)
+
+    @staticmethod
+    def _derive_run_status(stored: "SwarmRunStatus", run_agents: list) -> "SwarmRunStatus":
+        # Explicit cancellation is absorbing.
+        if stored == SwarmRunStatus.CANCELLED:
+            return SwarmRunStatus.CANCELLED
+        if not run_agents:
+            # Freshly created run before agents register, or transient state:
+            # keep the stored status rather than falsely reporting "done".
+            return stored
+        statuses = {a.status for a in run_agents}
+        if statuses <= TERMINAL:
+            if SwarmAgentStatus.FAILED in statuses:
+                return SwarmRunStatus.FAILED
+            if SwarmAgentStatus.CANCELLED in statuses:
+                return SwarmRunStatus.CANCELLED
+            return SwarmRunStatus.DONE
+        return SwarmRunStatus.ACTIVE
 
     def create_run(self, parent_context_id: str, parent_agent_name: str = "", title: str = "") -> SwarmRun:
         with self._rlock:
@@ -450,6 +475,7 @@ class SwarmRegistry:
                     )
                 ]
                 entry = copy.deepcopy(run).to_dict()
+                entry["status"] = self._derive_run_status(run.status, run_agents).value
                 entry["agents"] = [copy.deepcopy(a).to_dict() for a in run_agents]
                 entry["messages"] = [copy.deepcopy(m).to_dict() for m in run_messages]
                 entry["timeline"] = [copy.deepcopy(e).to_dict() for e in run_events]
