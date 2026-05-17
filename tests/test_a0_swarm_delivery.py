@@ -43,6 +43,7 @@ def _agent(name="SA1_1", run_id="run-a", status=SwarmAgentStatus.WORKING, **kw):
         remote_label=kw.get("remote_label", ""),
         remote_base_url=kw.get("remote_base_url", ""),
         remote_task_id=kw.get("remote_task_id", ""),
+        remote_auth_token=kw.get("remote_auth_token", ""),
     )
 
 
@@ -120,6 +121,7 @@ async def test_remote_delivery_uses_a2a_intervention(monkeypatch):
         delivery_mode="remote_a2a",
         remote_label="rig",
         remote_base_url="http://rig:55000/a2a/t-token",
+        remote_auth_token="secret-token",
         context_id="remote-ctx",
     )
     reg.register(target)
@@ -132,6 +134,8 @@ async def test_remote_delivery_uses_a2a_intervention(monkeypatch):
     assert result.ok is True
     assert result.state == "delivered"
     delivery.a2a_runner.send_intervention.assert_awaited_once()
+    remote_arg = delivery.a2a_runner.send_intervention.await_args.args[0]
+    assert remote_arg.auth_token == "secret-token"
 
 
 @pytest.mark.asyncio

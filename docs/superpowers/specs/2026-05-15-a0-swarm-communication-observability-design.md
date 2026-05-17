@@ -349,7 +349,7 @@ APIs return structured errors with `ok: false`, `error`, and when relevant
 
 ## 10. Tool Prompt Changes
 
-`tool.swarm_message.md` must explain:
+`agent.system.tool.swarm_message.md` must explain:
 
 1. Use `recipient="orchestrator"` for status, blockers, and questions for the
    parent agent.
@@ -358,7 +358,7 @@ APIs return structured errors with `ok: false`, `error`, and when relevant
    response includes delivery state.
 4. Use `is_blocker=true` only when the sender cannot proceed without help.
 
-`tool.delegate_parallel.md` must explain:
+`agent.system.tool.delegate_parallel.md` must explain:
 
 1. Optional `endpoint` routes a task to a configured remote.
 2. Local and remote agents can message peers and the orchestrator during the

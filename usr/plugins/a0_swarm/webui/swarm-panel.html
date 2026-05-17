@@ -441,6 +441,75 @@
         margin-bottom: 0.15rem;
     }
 
+    .a0swarm-msg__topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.45rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .a0swarm-msg__topline .a0swarm-msg__sender {
+        margin-bottom: 0;
+    }
+
+    .a0swarm-msg__delivery {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        min-height: 1rem;
+        padding: 0 0.35rem;
+        border-radius: 999px;
+        border: 1px solid var(--a0swarm-chrome-border);
+        background: color-mix(in srgb, var(--color-background) 64%, transparent);
+        color: var(--color-text-muted);
+        font-size: 0.55rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        line-height: 1;
+    }
+
+    .a0swarm-msg__delivery.delivery-delivered {
+        border-color: color-mix(in srgb, #22c55e 36%, transparent);
+        color: #22c55e;
+    }
+
+    .a0swarm-msg__delivery.delivery-failed {
+        border-color: color-mix(in srgb, var(--color-error-text) 45%, transparent);
+        color: var(--color-error-text);
+    }
+
+    .a0swarm-msg__failure {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.45rem;
+        margin-top: 0.35rem;
+        padding-top: 0.35rem;
+        border-top: 1px dashed color-mix(in srgb, var(--color-error-text) 35%, transparent);
+        color: var(--color-error-text);
+        font-size: 0.68rem;
+    }
+
+    .a0swarm-msg__retry {
+        flex: 0 0 auto;
+        height: 1.35rem;
+        padding: 0 0.45rem;
+        border-radius: 0.35rem;
+        border: 1px solid color-mix(in srgb, var(--color-error-text) 50%, transparent);
+        background: transparent;
+        color: var(--color-error-text);
+        font-size: 0.62rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .a0swarm-msg__retry:disabled {
+        opacity: 0.5;
+        cursor: wait;
+    }
+
     .a0swarm-msg__content {
         display: block;
         white-space: pre-wrap;
@@ -965,12 +1034,28 @@
                             <div class="a0swarm-card__messages"
                                  x-show="agent.messages && agent.messages.length > 0"
                                  @click="$store.swarmStore.markRead(agent.agent_name)">
-                                <template x-for="msg in agent.messages" :key="msg.timestamp">
+                                <template x-for="msg in agent.messages" :key="msg.message_id || msg.timestamp">
                                     <div class="a0swarm-msg"
                                          :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
-                                        <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                        <span class="a0swarm-msg__topline">
+                                            <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                            <span class="a0swarm-msg__delivery"
+                                                  :class="$store.swarmStore.deliveryClass(msg.delivery_state)"
+                                                  x-text="msg.delivery_state || 'queued'"></span>
+                                        </span>
                                         <span class="a0swarm-msg__content a0swarm-md"
                                               x-html="$store.swarmStore.renderMd(msg.content)"></span>
+                                        <template x-if="msg.delivery_state === 'failed' || msg.failure_reason">
+                                            <span class="a0swarm-msg__failure">
+                                                <span x-text="msg.failure_reason || 'Delivery failed'"></span>
+                                                <button type="button"
+                                                        class="a0swarm-msg__retry"
+                                                        @click.stop="$store.swarmStore.retryMessage(msg.message_id)"
+                                                        :disabled="$store.swarmStore.retryingMessageId === msg.message_id">
+                                                    Retry
+                                                </button>
+                                            </span>
+                                        </template>
                                     </div>
                                 </template>
                             </div>
@@ -1076,12 +1161,28 @@
                                  x-html="$store.swarmStore.renderMd(agent.result)"></div>
                             <div class="a0swarm-card__messages"
                                  x-show="agent.messages && agent.messages.length > 0">
-                                <template x-for="msg in agent.messages" :key="msg.timestamp">
+                                <template x-for="msg in agent.messages" :key="msg.message_id || msg.timestamp">
                                     <div class="a0swarm-msg"
                                          :class="msg.sender === 'orchestrator' ? 'a0swarm-msg--out' : 'a0swarm-msg--in'">
-                                        <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                        <span class="a0swarm-msg__topline">
+                                            <span class="a0swarm-msg__sender" x-text="msg.sender"></span>
+                                            <span class="a0swarm-msg__delivery"
+                                                  :class="$store.swarmStore.deliveryClass(msg.delivery_state)"
+                                                  x-text="msg.delivery_state || 'queued'"></span>
+                                        </span>
                                         <span class="a0swarm-msg__content a0swarm-md"
                                               x-html="$store.swarmStore.renderMd(msg.content)"></span>
+                                        <template x-if="msg.delivery_state === 'failed' || msg.failure_reason">
+                                            <span class="a0swarm-msg__failure">
+                                                <span x-text="msg.failure_reason || 'Delivery failed'"></span>
+                                                <button type="button"
+                                                        class="a0swarm-msg__retry"
+                                                        @click.stop="$store.swarmStore.retryMessage(msg.message_id)"
+                                                        :disabled="$store.swarmStore.retryingMessageId === msg.message_id">
+                                                    Retry
+                                                </button>
+                                            </span>
+                                        </template>
                                     </div>
                                 </template>
                             </div>

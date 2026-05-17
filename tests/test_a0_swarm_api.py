@@ -1,7 +1,7 @@
 import json
 import sys, types
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -171,6 +171,34 @@ async def test_swarm_cancel_sets_status_then_kills(monkeypatch):
     # Verify ordering: status was CANCELLED before kill_process was called
     assert call_order[0][1] == SwarmAgentStatus.CANCELLED
     assert call_order[1] == "kill"
+
+
+@pytest.mark.asyncio
+async def test_swarm_cancel_remote_uses_auth_token(monkeypatch):
+    from usr.plugins.a0_swarm.api import swarm_cancel as sc
+
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    agent = _new("SA1_1", ctx="remote-ctx")
+    agent.run_id = run.run_id
+    agent.delivery_mode = "remote_a2a"
+    agent.remote_label = "rig"
+    agent.remote_base_url = "http://rig:55000"
+    agent.remote_task_id = "task-xyz"
+    agent.remote_auth_token = "secret-token"
+    reg.register(agent)
+
+    cancel_task = AsyncMock(return_value=True)
+    monkeypatch.setattr(sc.a2a_runner, "cancel_task", cancel_task)
+
+    handler = sc.SwarmCancel(app=MagicMock(), thread_lock=MagicMock())
+    out = await handler.process({"agent_name": "SA1_1"}, MagicMock())
+
+    assert out == {"ok": True}
+    cancel_task.assert_awaited_once()
+    remote_arg = cancel_task.await_args.args[0]
+    assert remote_arg.auth_token == "secret-token"
+    assert cancel_task.await_args.args[1] == "task-xyz"
 
 
 # ---- swarm_clear_completed -------------------------------------------------

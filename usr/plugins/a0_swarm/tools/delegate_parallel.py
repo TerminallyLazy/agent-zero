@@ -103,6 +103,7 @@ class DelegateParallel(Tool):
                     started_at=utc_iso_now(),
                     remote_label=remote.label,
                     remote_base_url=remote.base_url,
+                    remote_auth_token=remote.auth_token,
                     run_id=run.run_id,
                     delivery_mode="remote_a2a",
                 )

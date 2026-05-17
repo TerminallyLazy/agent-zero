@@ -25,7 +25,11 @@ class SwarmCancel(ApiHandler):
             reg.add_event(entry.run_id, agent_name, "status", "Cancelled by orchestrator")
 
         if entry.is_remote:
-            remote = RemoteEndpoint(label=entry.remote_label, base_url=entry.remote_base_url)
+            remote = RemoteEndpoint(
+                label=entry.remote_label,
+                base_url=entry.remote_base_url,
+                auth_token=getattr(entry, "remote_auth_token", ""),
+            )
             await a2a_runner.cancel_task(remote, entry.remote_task_id)
         else:
             ctx = AgentContext.get(entry.context_id)

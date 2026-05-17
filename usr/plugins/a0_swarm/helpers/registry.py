@@ -179,6 +179,7 @@ class SwarmAgent:
     remote_label: str = ""
     remote_base_url: str = ""
     remote_task_id: str = ""
+    remote_auth_token: str = ""
     run_id: str = ""
     delivery_mode: str = "local"
     last_seen_at: str = ""

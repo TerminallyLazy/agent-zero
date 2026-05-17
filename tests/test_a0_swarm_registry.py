@@ -251,6 +251,22 @@ def test_create_message_lifecycle_and_grouped_snapshot_timeline():
     assert grouped["timeline"][1]["ref_id"] == msg.message_id
 
 
+def test_snapshot_does_not_expose_remote_auth_token():
+    reg = SwarmRegistry.get()
+    run = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator")
+    a = _new_agent("SA1_1")
+    a.run_id = run.run_id
+    a.remote_label = "rig"
+    a.remote_base_url = "http://rig:55000"
+    a.remote_auth_token = "secret-token"
+    reg.register(a)
+
+    snap = reg.snapshot(parent_ctx_id="P")
+
+    assert "remote_auth_token" not in snap["agents"][0]
+    assert "remote_auth_token" not in snap["runs"][0]["agents"][0]
+
+
 def test_mark_message_failed_records_failure_details():
     reg = SwarmRegistry.get()
     run = reg.create_run(parent_context_id="P", parent_agent_name="orchestrator")

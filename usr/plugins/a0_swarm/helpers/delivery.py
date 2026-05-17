@@ -66,7 +66,11 @@ async def _deliver_remote(reg: SwarmRegistry, msg, target) -> DeliveryResult:
         reg.mark_message_failed(msg.message_id, reason)
         return DeliveryResult(False, "failed", reason, msg.message_id)
 
-    remote = RemoteEndpoint(label=target.remote_label or target.agent_name, base_url=target.remote_base_url)
+    remote = RemoteEndpoint(
+        label=target.remote_label or target.agent_name,
+        base_url=target.remote_base_url,
+        auth_token=getattr(target, "remote_auth_token", ""),
+    )
     ok = await a2a_runner.send_intervention(
         remote,
         _format_payload(msg.sender, msg.content),

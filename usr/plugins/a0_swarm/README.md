@@ -2,8 +2,9 @@
 
 Spawn parallel subagents and monitor / message them from a sidebar panel.
 
-See `docs/superpowers/specs/2026-05-14-a0-swarm-design.md` for the design spec
-and `docs/superpowers/plans/2026-05-14-a0-swarm.md` for the implementation plan.
+See `docs/superpowers/specs/2026-05-14-a0-swarm-design.md` for the original
+design and `docs/superpowers/specs/2026-05-15-a0-swarm-communication-observability-design.md`
+for the communication, observability, and remote-container enhancement spec.
 
 ## Tools
 
@@ -14,7 +15,7 @@ and `docs/superpowers/plans/2026-05-14-a0-swarm.md` for the implementation plan.
 
 - `queued` — accepted into the ledger and visible in the panel.
 - `delivered` — injected into the target local context or accepted by the remote A2A endpoint.
-- `failed` — delivery was attempted and rejected; the panel shows the reason.
+- `failed` — delivery was attempted and rejected; the panel shows the reason and retry action.
 
 `sent` in the UI means the ledger accepted the message. It does not imply delivery until the state changes to `delivered`.
 
@@ -22,7 +23,7 @@ and `docs/superpowers/plans/2026-05-14-a0-swarm.md` for the implementation plan.
 
 Configure remotes in Plugin Settings. Same-host Docker discovery can list likely Agent Zero containers when Docker is available. Explicit A2A URLs remain the portable fallback across hosts.
 
-Use the Test action before assigning work to a remote endpoint. The test checks agent-card reachability and authentication, then reports whether continuation and cancellation are available.
+Use the Test action before assigning work to a remote endpoint. The test checks agent-card reachability and authentication, then reports whether continuation and cancellation are available. Stored remote auth tokens are used for follow-up messages and cancellation, but are not exposed in status snapshots.
 
 ## UI
 
@@ -35,17 +36,21 @@ Completed button.
 
 | Endpoint | Method | Body | Returns |
 |---|---|---|---|
-| `/api/swarm_status` | POST | `{parent_context_id?}` | `{agents: SwarmAgent[]}` |
-| `/api/swarm_send_message` | POST | `{agent_name, content, unblock?}` | `{ok}` |
-| `/api/swarm_cancel` | POST | `{agent_name}` | `{ok}` |
-| `/api/swarm_clear_completed` | POST | `{parent_context_id?}` | `{ok}` |
+| `/api/plugins/a0_swarm/swarm_status` | POST | `{parent_context_id?}` | `{runs: SwarmRun[], agents: SwarmAgent[]}` |
+| `/api/plugins/a0_swarm/swarm_send_message` | POST | `{agent_name, content, unblock?}` | `{ok, message_id, delivery_state}` |
+| `/api/plugins/a0_swarm/swarm_retry_message` | POST | `{message_id}` | `{ok, message_id, delivery_state}` |
+| `/api/plugins/a0_swarm/swarm_cancel` | POST | `{agent_name}` | `{ok}` |
+| `/api/plugins/a0_swarm/swarm_clear_completed` | POST | `{parent_context_id?}` | `{ok}` |
+| `/api/plugins/a0_swarm/swarm_test_remote` | POST | `{label?, url?, auth_token?}` | `{ok, ...diagnostics}` |
+| `/api/plugins/a0_swarm/swarm_discover_docker` | POST | `{}` | `{ok, candidates}` |
 
 ## Tests
 
 ```bash
 pytest tests/test_a0_swarm_registry.py tests/test_a0_swarm_delegate.py \
        tests/test_a0_swarm_message_tool.py tests/test_a0_swarm_api.py \
-       tests/test_a0_swarm_extensions.py -v
+       tests/test_a0_swarm_extensions.py tests/test_a0_swarm_delivery.py \
+       tests/test_a0_swarm_remote_setup.py -v
 ```
 
 ## Source location

@@ -338,6 +338,7 @@ async def test_delegate_parallel_remote_happy_path(monkeypatch):
     assert a.is_remote
     assert a.remote_label == "rig"
     assert a.remote_base_url == "http://x:55000"
+    assert a.remote_auth_token == "tok"
     assert a.remote_task_id == "task-xyz"
     assert a.context_id == "ctx-remote"
     assert a.result == "remote result text"
