@@ -83,6 +83,20 @@ async def test_swarm_discover_docker_socket_unreachable(monkeypatch):
     assert out["ok"] is False
     assert out["candidates"] == []
     assert "docker.sock" in out["error"]
+    assert out["setup"]["title"] == "Docker Access Setup"
+    assert "/var/run/docker.sock:/var/run/docker.sock" in out["setup"]["compose_snippet"]
+    assert "-v /var/run/docker.sock:/var/run/docker.sock" in out["setup"]["docker_run_flag"]
+    assert any("Docker Desktop" in step for step in out["setup"]["mac_steps"])
+
+
+def test_plugin_settings_has_docker_access_setup_card():
+    config_html = PROJECT_ROOT / "usr" / "plugins" / "a0_swarm" / "webui" / "config.html"
+    text = config_html.read_text()
+
+    assert "Docker Access Setup" in text
+    assert "context.dockerSetup" in text
+    assert "copyDockerSetup" in text
+    assert "Recheck Docker access" in text
 
 
 @pytest.mark.asyncio

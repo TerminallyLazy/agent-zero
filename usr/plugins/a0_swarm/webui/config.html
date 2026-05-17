@@ -8,9 +8,27 @@
             <div x-init="
               context.dockerCandidates = [];
               context.dockerDiscoveryError = '';
+              context.dockerSetup = null;
               context.remoteTestResult = null;
+              context.notifySwarm = (level, message) => {
+                try {
+                  const store = $store.notificationStore;
+                  const fn = store && store[level];
+                  if (typeof fn === 'function') fn.call(store, message, 'A0 Swarm');
+                } catch (_) {}
+              };
+              context.copyDockerSetup = async (text, label = 'setup command') => {
+                if (!text) return;
+                try {
+                  await navigator.clipboard.writeText(text);
+                  context.notifySwarm('frontendSuccess', label + ' copied.');
+                } catch (e) {
+                  context.notifySwarm('frontendError', 'Could not copy to clipboard. Select the text manually.');
+                }
+              };
               context.discoverDocker = async () => {
                 context.dockerDiscoveryError = '';
+                context.dockerSetup = null;
                 const resp = await globalThis.fetchApi('/plugins/a0_swarm/swarm_discover_docker', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -19,6 +37,12 @@
                 const r = await resp.json();
                 context.dockerCandidates = r.candidates || [];
                 context.dockerDiscoveryError = r.ok ? '' : (r.error || 'Docker discovery failed');
+                context.dockerSetup = r.setup || null;
+                if (r.ok) {
+                  context.notifySwarm('frontendSuccess', 'Docker discovery completed.');
+                } else {
+                  context.notifySwarm('frontendWarning', context.dockerDiscoveryError);
+                }
               };
               context.testRemote = async (remote) => {
                 const resp = await globalThis.fetchApi('/plugins/a0_swarm/swarm_test_remote', {
@@ -145,7 +169,64 @@
                 </div>
 
                 <template x-if="context.dockerDiscoveryError">
-                    <div class="field-description" style="color:var(--color-error-text);" x-text="context.dockerDiscoveryError"></div>
+                    <div class="field-description" x-text="context.dockerDiscoveryError"></div>
+                </template>
+
+                <template x-if="context.dockerSetup">
+                    <div style="border:1px solid var(--color-border); border-radius:0.5rem; padding:0.75rem; margin:0.5rem 0 0.85rem; display:flex; flex-direction:column; gap:0.65rem;">
+                        <div>
+                            <div class="field-title" x-text="context.dockerSetup.title || 'Docker Access Setup'"></div>
+                            <div class="field-description" x-text="context.dockerSetup.summary"></div>
+                        </div>
+
+                        <div>
+                            <div class="field-title" style="font-size:0.82rem;">macOS Docker Desktop</div>
+                            <ol style="margin:0.35rem 0 0; padding-left:1.25rem;">
+                                <template x-for="step in (context.dockerSetup.mac_steps || [])" :key="step">
+                                    <li class="field-description" x-text="step"></li>
+                                </template>
+                            </ol>
+                        </div>
+
+                        <div>
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+                                <div class="field-title" style="font-size:0.82rem;">Docker Compose</div>
+                                <button type="button"
+                                        @click="context.copyDockerSetup(context.dockerSetup.compose_snippet, 'Docker Compose snippet')"
+                                        style="background:transparent; border:1px solid var(--color-border); color:var(--color-text); padding:0.2rem 0.6rem; border-radius:0.3rem; cursor:pointer;">
+                                    Copy
+                                </button>
+                            </div>
+                            <pre style="white-space:pre-wrap; overflow:auto; border:1px solid var(--color-border); border-radius:0.4rem; padding:0.5rem; margin:0.35rem 0 0;" x-text="context.dockerSetup.compose_snippet"></pre>
+                        </div>
+
+                        <div>
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+                                <div class="field-title" style="font-size:0.82rem;">docker run flag</div>
+                                <button type="button"
+                                        @click="context.copyDockerSetup(context.dockerSetup.docker_run_flag, 'docker run flag')"
+                                        style="background:transparent; border:1px solid var(--color-border); color:var(--color-text); padding:0.2rem 0.6rem; border-radius:0.3rem; cursor:pointer;">
+                                    Copy
+                                </button>
+                            </div>
+                            <pre style="white-space:pre-wrap; overflow:auto; border:1px solid var(--color-border); border-radius:0.4rem; padding:0.5rem; margin:0.35rem 0 0;" x-text="context.dockerSetup.docker_run_flag"></pre>
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                            <button type="button"
+                                    @click="context.copyDockerSetup(context.dockerSetup.compose_restart, 'restart command')"
+                                    style="background:transparent; border:1px solid var(--color-border); color:var(--color-text); padding:0.25rem 0.7rem; border-radius:0.3rem; cursor:pointer;">
+                                Copy restart command
+                            </button>
+                            <button type="button"
+                                    @click="context.discoverDocker && context.discoverDocker()"
+                                    style="background:var(--color-highlight); color:#fff; border:none; padding:0.25rem 0.7rem; border-radius:0.3rem; cursor:pointer; font-weight:600;">
+                                Recheck Docker access
+                            </button>
+                        </div>
+
+                        <div class="field-description" x-text="context.dockerSetup.manual_fallback"></div>
+                    </div>
                 </template>
 
                 <template x-if="Array.isArray(context.dockerCandidates) && context.dockerCandidates.length">

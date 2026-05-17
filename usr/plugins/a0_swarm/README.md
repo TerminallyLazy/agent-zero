@@ -21,7 +21,7 @@ for the communication, observability, and remote-container enhancement spec.
 
 ## Remote setup
 
-Configure remotes in Plugin Settings. Same-host Docker discovery can list likely Agent Zero containers when Docker is available. Explicit A2A URLs remain the portable fallback across hosts.
+Configure remotes in Plugin Settings. Same-host Docker discovery can list likely Agent Zero containers when Docker is available. If Docker access is missing, Remote Diagnostics shows a Docker Access Setup card with copy-ready Compose, `docker run`, and restart snippets plus macOS Docker Desktop steps. Explicit A2A URLs remain the portable fallback across hosts.
 
 Use the Test action before assigning work to a remote endpoint. The test checks agent-card reachability and authentication, then reports whether continuation and cancellation are available. Stored remote auth tokens are used for follow-up messages and cancellation, but are not exposed in status snapshots.
 

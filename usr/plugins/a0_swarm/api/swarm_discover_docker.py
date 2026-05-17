@@ -13,6 +13,43 @@ _SOCKET_HINT = (
 )
 
 
+def _docker_access_setup() -> dict:
+    return {
+        "title": "Docker Access Setup",
+        "summary": (
+            "A0 can discover sibling Agent Zero containers after the host Docker "
+            "socket is mounted into this container."
+        ),
+        "mac_steps": [
+            "Open Docker Desktop.",
+            "Go to Settings > Advanced.",
+            "Enable Allow the default Docker socket to be used.",
+            "Restart Docker Desktop if prompted, then restart the Agent Zero container.",
+        ],
+        "compose_snippet": (
+            "services:\n"
+            "  agent-zero:\n"
+            "    volumes:\n"
+            "      - /var/run/docker.sock:/var/run/docker.sock\n"
+        ),
+        "docker_run_flag": "-v /var/run/docker.sock:/var/run/docker.sock",
+        "compose_restart": "docker compose down && docker compose up -d",
+        "manual_fallback": (
+            "If Docker access is not available, add each remote A0 instance "
+            "manually with its A2A base URL and auth token."
+        ),
+    }
+
+
+def _socket_error_response() -> dict:
+    return {
+        "ok": False,
+        "error": _SOCKET_HINT,
+        "setup": _docker_access_setup(),
+        "candidates": [],
+    }
+
+
 def _match_a0(image: str, name: str) -> bool:
     hay = f"{image} {name}".lower()
     return "agent-zero" in hay or "agent0" in hay or "a0" in hay
@@ -42,13 +79,13 @@ class SwarmDiscoverDocker(ApiHandler):
         try:
             client = docker.from_env(timeout=5)
         except DockerException:
-            return {"ok": False, "error": _SOCKET_HINT, "candidates": []}
+            return _socket_error_response()
 
         try:
             try:
                 containers = client.containers.list()
             except DockerException:
-                return {"ok": False, "error": _SOCKET_HINT, "candidates": []}
+                return _socket_error_response()
 
             candidates = []
             for c in containers:
