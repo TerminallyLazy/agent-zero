@@ -27,7 +27,17 @@ async def test_swarm_test_remote_success(monkeypatch):
     from usr.plugins.a0_swarm.api import swarm_test_remote as mod
 
     fake_conn = MagicMock()
-    fake_conn.get_agent_card = AsyncMock(return_value={"name": "Agent Zero"})
+    fake_conn.get_agent_card = AsyncMock(return_value={
+        "name": "Agent Zero",
+        "description": "Remote A0 worker",
+        "version": "1.0.0",
+        "capabilities": {"streaming": False},
+        "defaultInputModes": ["text/plain"],
+        "defaultOutputModes": ["text/plain", "application/json"],
+        "skills": [
+            {"id": "general_assistance", "name": "General AI Assistant", "tags": ["code", "files"]},
+        ],
+    })
     fake_conn.close = AsyncMock()
     monkeypatch.setattr(mod.a2a_runner, "open_connection", AsyncMock(return_value=fake_conn))
 
@@ -36,7 +46,14 @@ async def test_swarm_test_remote_success(monkeypatch):
 
     assert out["ok"] is True
     assert out["checks"]["agent_card"]["ok"] is True
+    assert out["checks"]["submit"]["ok"] is True
+    assert out["checks"]["continuation"]["ok"] is True
+    assert out["checks"]["cancel"]["ok"] is True
     assert out["endpoint"] == "rig"
+    assert out["remote"]["base_url"] == "http://rig:55000/a2a/t-token"
+    assert out["discovery"]["name"] == "Agent Zero"
+    assert out["discovery"]["skills"][0]["id"] == "general_assistance"
+    assert out["discovery"]["communication"]["context_continuation"] == "available_via_context_id"
 
 
 @pytest.mark.asyncio
@@ -97,6 +114,16 @@ def test_plugin_settings_has_docker_access_setup_card():
     assert "context.dockerSetup" in text
     assert "copyDockerSetup" in text
     assert "Recheck Docker access" in text
+
+
+def test_plugin_settings_has_a2a_discovery_card():
+    config_html = PROJECT_ROOT / "usr" / "plugins" / "a0_swarm" / "webui" / "config.html"
+    text = config_html.read_text()
+
+    assert "A2A Discovery" in text
+    assert "context.discoverA2A" in text
+    assert "context.addDiscoveredA2A" in text
+    assert "Agent Card" in text
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,8 @@
               context.dockerDiscoveryError = '';
               context.dockerSetup = null;
               context.remoteTestResult = null;
+              context.a2aDiscovery = { label: '', base_url: '', auth_token: '' };
+              context.a2aDiscoveryResult = null;
               context.notifySwarm = (level, message) => {
                 try {
                   const store = $store.notificationStore;
@@ -51,6 +53,41 @@
                   body: JSON.stringify(remote || {})
                 });
                 context.remoteTestResult = await resp.json();
+              };
+              context.discoverA2A = async () => {
+                const remote = context.a2aDiscovery || {};
+                if (!remote.base_url) {
+                  context.notifySwarm('frontendWarning', 'Enter an A2A URL first.');
+                  return;
+                }
+                const resp = await globalThis.fetchApi('/plugins/a0_swarm/swarm_test_remote', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(remote)
+                });
+                context.a2aDiscoveryResult = await resp.json();
+                if (context.a2aDiscoveryResult.ok) {
+                  context.notifySwarm('frontendSuccess', 'A2A Agent Card discovered.');
+                } else {
+                  context.notifySwarm('frontendWarning', context.a2aDiscoveryResult.error || 'A2A discovery failed.');
+                }
+              };
+              context.addDiscoveredA2A = () => {
+                const result = context.a2aDiscoveryResult || {};
+                if (!result.ok || !result.remote) return;
+                if (!Array.isArray(config.remotes)) config.remotes = [];
+                const label = (context.a2aDiscovery.label || result.remote.label || result.discovery?.name || result.remote.base_url || '').trim();
+                const baseUrl = (result.remote.base_url || context.a2aDiscovery.base_url || '').trim();
+                const token = (context.a2aDiscovery.auth_token || '').trim();
+                const existing = config.remotes.find(r => r && (r.label === label || r.base_url === baseUrl));
+                if (existing) {
+                  existing.label = label;
+                  existing.base_url = baseUrl;
+                  existing.auth_token = token;
+                } else {
+                  config.remotes.push({ label, base_url: baseUrl, auth_token: token });
+                }
+                context.notifySwarm('frontendSuccess', 'A2A remote added. Save plugin settings to keep it.');
               };
             ">
                 <div class="section-title">A0 Swarm</div>
@@ -149,7 +186,53 @@
 
                 <div class="section-title" style="margin-top:1.25rem;">Remote diagnostics</div>
                 <div class="section-description">
-                    Test configured A2A remotes and discover same-host Docker Agent Zero containers.
+                    Discover A2A Agent Cards, test configured remotes, and optionally discover same-host Docker Agent Zero containers.
+                </div>
+
+                <div class="field" style="display:flex; flex-direction:column; gap:0.5rem; border:1px solid var(--color-border); border-radius:0.5rem; padding:0.75rem; margin-bottom:0.85rem;">
+                    <div>
+                        <div class="field-title">A2A Discovery</div>
+                        <div class="field-description">
+                            Use the A2A Agent Card to verify a known remote URL and read its advertised skills and communication modes. Docker access is not required.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <input type="text" x-model="context.a2aDiscovery.label"
+                               placeholder="label (e.g. research-rig)" style="flex:0.8;" />
+                        <input type="text" x-model="context.a2aDiscovery.base_url"
+                               placeholder="A2A URL (e.g. http://host:50080/a2a/t-token)" style="flex:1.4;" />
+                    </div>
+                    <input type="password" x-model="context.a2aDiscovery.auth_token"
+                           placeholder="auth token (optional)" autocomplete="new-password" />
+                    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                        <button type="button"
+                                @click="context.discoverA2A && context.discoverA2A()"
+                                style="background:var(--color-highlight); color:#fff; border:none; padding:0.35rem 0.85rem; border-radius:0.3rem; cursor:pointer; font-weight:600;">
+                            Discover A2A
+                        </button>
+                        <button type="button"
+                                x-show="context.a2aDiscoveryResult && context.a2aDiscoveryResult.ok"
+                                @click="context.addDiscoveredA2A && context.addDiscoveredA2A()"
+                                style="background:transparent; border:1px solid var(--color-border); color:var(--color-text); padding:0.35rem 0.85rem; border-radius:0.3rem; cursor:pointer;">
+                            Add as remote
+                        </button>
+                    </div>
+                    <template x-if="context.a2aDiscoveryResult">
+                        <div style="border:1px solid var(--color-border); border-radius:0.4rem; padding:0.55rem 0.65rem;">
+                            <div class="field-title">Agent Card</div>
+                            <div class="field-description" x-text="context.a2aDiscoveryResult.ok ? 'Reachable over A2A' : (context.a2aDiscoveryResult.error || 'A2A discovery failed')"></div>
+                            <template x-if="context.a2aDiscoveryResult.discovery">
+                                <div style="margin-top:0.45rem;">
+                                    <div style="font-weight:700;" x-text="context.a2aDiscoveryResult.discovery.name"></div>
+                                    <div class="field-description" x-text="context.a2aDiscoveryResult.discovery.description"></div>
+                                    <div class="field-description" x-show="context.a2aDiscoveryResult.discovery.skills && context.a2aDiscoveryResult.discovery.skills.length"
+                                         x-text="'Skills: ' + context.a2aDiscoveryResult.discovery.skills.map(s => s.name || s.id).join(', ')"></div>
+                                    <div class="field-description"
+                                         x-text="'Communication: task submission, context continuation, and cancel are available through A2A.'"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </div>
 
                 <div class="field">

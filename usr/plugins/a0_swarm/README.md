@@ -21,7 +21,7 @@ for the communication, observability, and remote-container enhancement spec.
 
 ## Remote setup
 
-Configure remotes in Plugin Settings. Same-host Docker discovery can list likely Agent Zero containers when Docker is available. If Docker access is missing, Remote Diagnostics shows a Docker Access Setup card with copy-ready Compose, `docker run`, and restart snippets plus macOS Docker Desktop steps. Explicit A2A URLs remain the portable fallback across hosts.
+Configure remotes in Plugin Settings. The primary path is A2A Discovery: paste a remote A2A URL, test its Agent Card, review advertised skills / communication support, then add it as a remote. Same-host Docker discovery remains optional and can list likely Agent Zero containers when Docker is available. If Docker access is missing, Remote Diagnostics shows a Docker Access Setup card with copy-ready Compose, `docker run`, and restart snippets plus macOS Docker Desktop steps.
 
 Use the Test action before assigning work to a remote endpoint. The test checks agent-card reachability and authentication, then reports whether continuation and cancellation are available. Stored remote auth tokens are used for follow-up messages and cancellation, but are not exposed in status snapshots.
 
@@ -41,7 +41,7 @@ Completed button.
 | `/api/plugins/a0_swarm/swarm_retry_message` | POST | `{message_id}` | `{ok, message_id, delivery_state}` |
 | `/api/plugins/a0_swarm/swarm_cancel` | POST | `{agent_name}` | `{ok}` |
 | `/api/plugins/a0_swarm/swarm_clear_completed` | POST | `{parent_context_id?}` | `{ok}` |
-| `/api/plugins/a0_swarm/swarm_test_remote` | POST | `{label?, url?, auth_token?}` | `{ok, ...diagnostics}` |
+| `/api/plugins/a0_swarm/swarm_test_remote` | POST | `{label?, url?, auth_token?}` | `{ok, checks, discovery, remote}` |
 | `/api/plugins/a0_swarm/swarm_discover_docker` | POST | `{}` | `{ok, candidates}` |
 
 ## Tests
