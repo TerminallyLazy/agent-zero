@@ -1,5 +1,6 @@
 import sys
 import types
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +21,32 @@ if "helpers.api" not in sys.modules:
     sys.modules["helpers.api"] = _api_stub
 
 import pytest
+
+
+@pytest.mark.asyncio
+async def test_a2a_runner_accepts_current_framework_client_availability_name(monkeypatch):
+    from usr.plugins.a0_swarm.helpers import a2a_runner
+
+    fake_conn = MagicMock()
+    calls = []
+
+    def agent_connection(**kwargs):
+        calls.append(kwargs)
+        return fake_conn
+
+    fake_client_module = SimpleNamespace(
+        is_client_available=lambda: True,
+        AgentConnection=agent_connection,
+    )
+    monkeypatch.setattr(a2a_runner, "_client_module", lambda: fake_client_module)
+
+    from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
+
+    remote = RemoteEndpoint(label="rig", base_url="http://rig:55000/a2a/t-token", auth_token="tok")
+
+    assert a2a_runner.is_available() is True
+    assert await a2a_runner.open_connection(remote) is fake_conn
+    assert calls == [{"agent_url": "http://rig:55000/a2a/t-token", "token": "tok"}]
 
 
 @pytest.mark.asyncio

@@ -20,20 +20,30 @@ def _client_module():
     from helpers import fasta2a_client as _m
     return _m
 
+
+def _is_client_available(mod) -> bool:
+    checker = getattr(mod, "is_client_available", None)
+    if checker is None:
+        checker = getattr(mod, "is_a2a_available", None)
+    if checker is not None:
+        return bool(checker())
+    return bool(getattr(mod, "FASTA2A_CLIENT_AVAILABLE", False))
+
+
 DEFAULT_POLL_INTERVAL_S = 2
 DEFAULT_MAX_WAIT_S = 60 * 30   # 30 minutes per remote task
 
 
 def is_available() -> bool:
     try:
-        return bool(_client_module().is_a2a_available())
+        return _is_client_available(_client_module())
     except Exception:
         return False
 
 
 async def open_connection(remote: RemoteEndpoint) -> "AgentConnection":
     mod = _client_module()
-    if not mod.is_a2a_available():
+    if not _is_client_available(mod):
         raise RuntimeError("FastA2A client not available in this Agent Zero build.")
     return mod.AgentConnection(
         agent_url=remote.base_url,
