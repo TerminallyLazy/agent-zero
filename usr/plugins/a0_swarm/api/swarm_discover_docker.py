@@ -56,11 +56,35 @@ def _match_a0(image: str, name: str) -> bool:
 
 
 def _guess_base_url(name: str, ports: dict) -> str:
-    # Sibling A0 containers on the same Docker network are reachable by
-    # container name. If the container exposes A0's default 55000, propose it.
+    # A0 Docker images commonly publish container port 80 to a host port such
+    # as 55001. From inside another A0 container, a browser-copied
+    # localhost:55001 URL points at the wrong container, so prefer Docker
+    # Desktop's host gateway when a host port is published.
+    for container_port, bindings in (ports or {}).items():
+        port_text = str(container_port)
+        if not port_text.endswith("/tcp"):
+            continue
+        if not (
+            port_text.startswith("80/")
+            or port_text.startswith("50001/")
+            or port_text.startswith("55000/")
+        ):
+            continue
+        for binding in bindings or []:
+            host_port = str((binding or {}).get("HostPort") or "").strip()
+            if host_port:
+                return f"http://host.docker.internal:{host_port}/a2a"
+
+    # If there is no host-published port, fall back to a same-network container
+    # URL. This works when the A0 containers share a user-defined Docker network.
     for container_port in (ports or {}):
-        if str(container_port).startswith("55000"):
-            return f"http://{name}:55000"
+        port_text = str(container_port)
+        if port_text.startswith("80/"):
+            return f"http://{name}:80/a2a"
+        if port_text.startswith("50001/"):
+            return f"http://{name}:50001/a2a"
+        if port_text.startswith("55000/"):
+            return f"http://{name}:55000/a2a"
     return ""
 
 

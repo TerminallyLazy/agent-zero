@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from agent import AgentContext, UserMessage
-from usr.plugins.a0_swarm.helpers.registry import SwarmRegistry
+from usr.plugins.a0_swarm.helpers.registry import SwarmMessage, SwarmRegistry
 from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
 from usr.plugins.a0_swarm.helpers import a2a_runner
+
+
+PENDING_REPLY_KEY = "_a0_swarm_pending_reply_messages"
 
 
 @dataclass
@@ -18,8 +22,82 @@ class DeliveryResult:
 
 def _format_payload(sender: str, content: str) -> str:
     if sender == "orchestrator":
-        return f"[Orchestrator]: {content}"
+        return (
+            "[Orchestrator message]\n"
+            f"{content}\n\n"
+            "Reply directly if this asks a question or changes your task, then continue your assigned work."
+        )
     return f"[Message from {sender}]: {content}"
+
+
+def _pending_replies(agent: Any) -> list[dict]:
+    try:
+        value = agent.get_data(PENDING_REPLY_KEY)
+    except Exception:
+        value = None
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _set_pending_replies(agent: Any, pending: list[dict]) -> None:
+    try:
+        agent.set_data(PENDING_REPLY_KEY, pending)
+    except Exception:
+        try:
+            agent.data[PENDING_REPLY_KEY] = pending
+        except Exception:
+            pass
+
+
+def _queue_reply_capture(agent: Any, msg: SwarmMessage, target_agent_name: str) -> None:
+    if msg.sender != "orchestrator":
+        return
+    pending = _pending_replies(agent)
+    pending.append({
+        "message_id": msg.message_id,
+        "run_id": msg.run_id,
+        "agent_name": target_agent_name,
+    })
+    _set_pending_replies(agent, pending)
+
+
+def capture_pending_reply(agent: Any, content: str) -> SwarmMessage | None:
+    """Record a normal agent response as a swarm reply when it answers a panel message."""
+    content = (content or "").strip()
+    if not agent or not content:
+        return None
+
+    reg = SwarmRegistry.get()
+    entry = reg.get_agent_by_context(agent.context.id)
+    if entry is None:
+        return None
+
+    pending = _pending_replies(agent)
+    if not pending:
+        return None
+
+    selected_index = -1
+    selected = None
+    for idx, item in enumerate(pending):
+        if item.get("agent_name") == entry.agent_name:
+            selected_index = idx
+            selected = item
+            break
+    if selected is None:
+        return None
+
+    source_id = str(selected.get("message_id") or "")
+    source = reg.get_message(source_id) if source_id else None
+    if source is None or source.delivery_state != "delivered":
+        return None
+
+    pending.pop(selected_index)
+    _set_pending_replies(agent, pending)
+
+    reply = reg.create_message(entry.run_id, entry.agent_name, "orchestrator", content)
+    reg.mark_message_delivered(reply.message_id)
+    return reg.get_message(reply.message_id) or reply
 
 
 async def deliver_message(message_id: str) -> DeliveryResult:
@@ -51,8 +129,10 @@ async def _deliver_local(reg: SwarmRegistry, msg, target) -> DeliveryResult:
         reg.mark_message_failed(msg.message_id, reason)
         return DeliveryResult(False, "failed", reason, msg.message_id)
 
-    ctx.communicate(UserMessage(message=_format_payload(msg.sender, msg.content)))
+    runtime_agent = ctx.get_agent()
     reg.mark_message_delivered(msg.message_id)
+    _queue_reply_capture(runtime_agent, msg, target.agent_name)
+    ctx.communicate(UserMessage(message=_format_payload(msg.sender, msg.content)))
     return DeliveryResult(True, "delivered", "", msg.message_id)
 
 

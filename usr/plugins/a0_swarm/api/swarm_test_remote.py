@@ -58,6 +58,7 @@ class SwarmTestRemote(ApiHandler):
             return {"ok": False, "error": "base_url is required", "checks": {}, "endpoint": label}
 
         remote = RemoteEndpoint(label=label or base_url, base_url=base_url, auth_token=auth_token)
+        runtime_remote = a2a_runner.runtime_remote(remote)
         checks = {
             "agent_card": {"ok": False, "error": ""},
             "submit": {"ok": False, "error": "agent card must pass first"},
@@ -90,13 +91,23 @@ class SwarmTestRemote(ApiHandler):
             finally:
                 await conn.close()
         except Exception as exc:
-            checks["agent_card"] = {"ok": False, "error": str(exc)}
+            error = str(exc)
+            if runtime_remote.base_url != remote.base_url:
+                error = (
+                    f"{error} Tested as {runtime_remote.base_url} because localhost "
+                    "inside Docker points at the current Agent Zero container."
+                )
+            checks["agent_card"] = {"ok": False, "error": error}
             return {
                 "ok": False,
-                "error": str(exc),
+                "error": error,
                 "checks": checks,
                 "endpoint": remote.label,
-                "remote": {"label": remote.label, "base_url": remote.base_url},
+                "remote": {
+                    "label": remote.label,
+                    "base_url": runtime_remote.base_url,
+                    "input_base_url": remote.base_url if runtime_remote.base_url != remote.base_url else "",
+                },
                 "discovery": discovery,
             }
 
@@ -105,6 +116,10 @@ class SwarmTestRemote(ApiHandler):
             "error": "",
             "checks": checks,
             "endpoint": remote.label,
-            "remote": {"label": remote.label, "base_url": remote.base_url},
+            "remote": {
+                "label": remote.label,
+                "base_url": runtime_remote.base_url,
+                "input_base_url": remote.base_url if runtime_remote.base_url != remote.base_url else "",
+            },
             "discovery": discovery,
         }

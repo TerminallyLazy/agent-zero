@@ -78,6 +78,29 @@ def test_update_activity():
     assert reg.get_agent("SA1_1").current_activity == "Thinking..."
 
 
+def test_observability_metrics_are_in_snapshot():
+    reg = SwarmRegistry.get()
+    reg.register(_new_agent())
+    reg.increment_tool_call("SA1_1", "code_execution_tool")
+    reg.add_token_usage("SA1_1", input_tokens=120, output_tokens=34)
+    reg.update_live_state(
+        "SA1_1",
+        activity="Responding...",
+        live_output="partial response",
+        live_reasoning="partial reasoning",
+    )
+
+    agent = reg.snapshot()["agents"][0]
+
+    assert agent["tool_call_count"] == 1
+    assert agent["last_tool_name"] == "code_execution_tool"
+    assert agent["input_tokens"] == 120
+    assert agent["output_tokens"] == 34
+    assert agent["current_activity"] == "Responding..."
+    assert agent["live_output"] == "partial response"
+    assert agent["live_reasoning"] == "partial reasoning"
+
+
 def test_add_message_attaches_to_recipient():
     reg = SwarmRegistry.get()
     reg.register(_new_agent("SA1_1"))

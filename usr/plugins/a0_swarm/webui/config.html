@@ -54,6 +54,19 @@
                 });
                 context.remoteTestResult = await resp.json();
               };
+              context.useDockerCandidate = (candidate) => {
+                if (!candidate || !candidate.base_url) {
+                  context.notifySwarm('frontendWarning', 'No A2A URL was discovered for that container.');
+                  return;
+                }
+                context.a2aDiscovery = {
+                  label: candidate.label || candidate.container || '',
+                  base_url: candidate.base_url || '',
+                  auth_token: context.a2aDiscovery?.auth_token || ''
+                };
+                context.a2aDiscoveryResult = null;
+                context.notifySwarm('frontendSuccess', 'Docker candidate copied to A2A Discovery.');
+              };
               context.discoverA2A = async () => {
                 const remote = context.a2aDiscovery || {};
                 if (!remote.base_url) {
@@ -221,6 +234,9 @@
                         <div style="border:1px solid var(--color-border); border-radius:0.4rem; padding:0.55rem 0.65rem;">
                             <div class="field-title">Agent Card</div>
                             <div class="field-description" x-text="context.a2aDiscoveryResult.ok ? 'Reachable over A2A' : (context.a2aDiscoveryResult.error || 'A2A discovery failed')"></div>
+                            <div class="field-description"
+                                 x-show="context.a2aDiscoveryResult.remote && context.a2aDiscoveryResult.remote.input_base_url"
+                                 x-text="'Tested URL: ' + context.a2aDiscoveryResult.remote.base_url"></div>
                             <template x-if="context.a2aDiscoveryResult.discovery">
                                 <div style="margin-top:0.45rem;">
                                     <div style="font-weight:700;" x-text="context.a2aDiscoveryResult.discovery.name"></div>
@@ -319,6 +335,15 @@
                                 <div style="font-weight:700;" x-text="candidate.label"></div>
                                 <div class="field-description" x-text="candidate.image"></div>
                                 <div class="field-description" x-text="candidate.ports"></div>
+                                <div class="field-description" x-show="candidate.base_url" x-text="candidate.base_url"></div>
+                                <div style="margin-top:0.4rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                    <button type="button"
+                                            x-show="candidate.base_url"
+                                            @click="context.useDockerCandidate && context.useDockerCandidate(candidate)"
+                                            style="background:transparent; border:1px solid var(--color-border); color:var(--color-text); padding:0.2rem 0.6rem; border-radius:0.3rem; cursor:pointer;">
+                                        Use in A2A Discovery
+                                    </button>
+                                </div>
                             </div>
                         </template>
                     </div>

@@ -82,7 +82,67 @@ async def test_tool_execute_before_updates_activity():
     agent = MagicMock(); agent.context.id = "ctx-1"
     ext = SwarmToolTrack(agent=agent)
     await ext.execute(tool_name="web_search", tool_args={})
-    assert SwarmRegistry.get().get_agent("SA1_1").current_activity == "Using tool: web_search"
+    entry = SwarmRegistry.get().get_agent("SA1_1")
+    assert entry.current_activity == "Using tool: web_search"
+    assert entry.tool_call_count == 1
+    assert entry.last_tool_name == "web_search"
+
+
+@pytest.mark.asyncio
+async def test_chat_model_call_after_tracks_token_usage():
+    from usr.plugins.a0_swarm.extensions.python.chat_model_call_after._10_swarm_token_usage import (
+        SwarmTokenUsage,
+    )
+
+    _register_swarm_agent()
+    agent = MagicMock()
+    agent.context.id = "ctx-1"
+    agent.get_data.return_value = {"tokens": 250}
+
+    ext = SwarmTokenUsage(agent=agent)
+    await ext.execute(call_data={}, response="final answer", reasoning="hidden reasoning")
+
+    entry = SwarmRegistry.get().get_agent("SA1_1")
+    assert entry.input_tokens == 250
+    assert entry.output_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_response_stream_updates_live_output(monkeypatch):
+    from usr.plugins.a0_swarm.extensions.python.response_stream_chunk._10_swarm_live_output import (
+        SwarmLiveOutput,
+    )
+
+    _register_swarm_agent()
+    agent = MagicMock()
+    agent.context.id = "ctx-1"
+    agent.get_data.return_value = {}
+
+    ext = SwarmLiveOutput(agent=agent)
+    await ext.execute(stream_data={"chunk": "hello", "full": "hello live response"})
+
+    entry = SwarmRegistry.get().get_agent("SA1_1")
+    assert entry.current_activity == "Responding..."
+    assert entry.live_output == "hello live response"
+
+
+@pytest.mark.asyncio
+async def test_reasoning_stream_updates_live_reasoning(monkeypatch):
+    from usr.plugins.a0_swarm.extensions.python.reasoning_stream_chunk._10_swarm_live_reasoning import (
+        SwarmLiveReasoning,
+    )
+
+    _register_swarm_agent()
+    agent = MagicMock()
+    agent.context.id = "ctx-1"
+    agent.get_data.return_value = {}
+
+    ext = SwarmLiveReasoning(agent=agent)
+    await ext.execute(stream_data={"chunk": "why", "full": "reasoning details"})
+
+    entry = SwarmRegistry.get().get_agent("SA1_1")
+    assert entry.current_activity == "Reasoning..."
+    assert entry.live_reasoning == "reasoning details"
 
 
 # ---- message_loop_start ---------------------------------------------------
@@ -251,3 +311,23 @@ async def test_message_loop_start_flushes_queued_messages(monkeypatch):
 
     assert called == ["SA1_1"]
     assert reg.get_agent("SA1_1").status == SwarmAgentStatus.WORKING
+
+
+@pytest.mark.asyncio
+async def test_tool_execute_after_captures_swarm_reply(monkeypatch):
+    from usr.plugins.a0_swarm.extensions.python.tool_execute_after import _20_swarm_capture_reply as ext_mod
+
+    calls = []
+
+    def fake_capture(agent, content):
+        calls.append((agent.agent_name, content))
+
+    monkeypatch.setattr(ext_mod.delivery, "capture_pending_reply", fake_capture)
+
+    agent = MagicMock()
+    agent.agent_name = "SA1_1"
+    ext = ext_mod.SwarmCaptureReply(agent=agent)
+
+    await ext.execute(tool_name="response", response=types.SimpleNamespace(message="I can clarify."))
+
+    assert calls == [("SA1_1", "I can clarify.")]

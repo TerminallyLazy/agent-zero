@@ -184,6 +184,12 @@ class SwarmAgent:
     delivery_mode: str = "local"
     last_seen_at: str = ""
     last_error: str = ""
+    tool_call_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    live_output: str = ""
+    live_reasoning: str = ""
+    last_tool_name: str = ""
 
     @property
     def is_remote(self) -> bool:
@@ -211,6 +217,12 @@ class SwarmAgent:
             "delivery_mode": self.delivery_mode,
             "last_seen_at": self.last_seen_at,
             "last_error": self.last_error,
+            "tool_call_count": self.tool_call_count,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "live_output": self.live_output,
+            "live_reasoning": self.live_reasoning,
+            "last_tool_name": self.last_tool_name,
         }
 
 
@@ -411,6 +423,50 @@ class SwarmRegistry:
             if agent.status in TERMINAL:
                 return
             agent.current_activity = text
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def increment_tool_call(self, name: str, tool_name: str = "") -> None:
+        with self._rlock:
+            agent = self._agents.get(name)
+            if agent is None or agent.status in TERMINAL:
+                return
+            agent.tool_call_count += 1
+            agent.last_tool_name = tool_name or agent.last_tool_name
+            agent.last_seen_at = utc_iso_now()
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def add_token_usage(self, name: str, input_tokens: int = 0, output_tokens: int = 0) -> None:
+        with self._rlock:
+            agent = self._agents.get(name)
+            if agent is None:
+                return
+            agent.input_tokens += max(0, int(input_tokens or 0))
+            agent.output_tokens += max(0, int(output_tokens or 0))
+            agent.last_seen_at = utc_iso_now()
+            subs = list(self._subscribers)
+        self._fire(subs)
+
+    def update_live_state(
+        self,
+        name: str,
+        *,
+        activity: str | None = None,
+        live_output: str | None = None,
+        live_reasoning: str | None = None,
+    ) -> None:
+        with self._rlock:
+            agent = self._agents.get(name)
+            if agent is None or agent.status in TERMINAL:
+                return
+            if activity is not None:
+                agent.current_activity = activity
+            if live_output is not None:
+                agent.live_output = live_output
+            if live_reasoning is not None:
+                agent.live_reasoning = live_reasoning
+            agent.last_seen_at = utc_iso_now()
             subs = list(self._subscribers)
         self._fire(subs)
 

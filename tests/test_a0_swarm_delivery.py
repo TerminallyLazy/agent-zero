@@ -47,6 +47,19 @@ def _agent(name="SA1_1", run_id="run-a", status=SwarmAgentStatus.WORKING, **kw):
     )
 
 
+class _RuntimeAgent:
+    def __init__(self, ctx_id="ctx-SA1_1"):
+        self.data = {}
+        self.context = MagicMock()
+        self.context.id = ctx_id
+
+    def get_data(self, key):
+        return self.data.get(key)
+
+    def set_data(self, key, value):
+        self.data[key] = value
+
+
 @pytest.mark.asyncio
 async def test_deliver_local_message_marks_delivered(monkeypatch):
     from usr.plugins.a0_swarm.helpers import delivery
@@ -69,6 +82,38 @@ async def test_deliver_local_message_marks_delivered(monkeypatch):
     assert result.state == "delivered"
     ctx.communicate.assert_called_once()
     assert reg.get_message(msg.message_id).delivery_state == "delivered"
+
+
+@pytest.mark.asyncio
+async def test_deliver_local_message_captures_next_agent_response(monkeypatch):
+    from usr.plugins.a0_swarm.helpers import delivery
+
+    reg = SwarmRegistry.get()
+    run = reg.create_run("P", "A0")
+    target = _agent(run_id=run.run_id)
+    reg.register(target)
+    msg = reg.create_message(run.run_id, "orchestrator", target.agent_name, "what the?")
+
+    runtime_agent = _RuntimeAgent(ctx_id=target.context_id)
+    ctx = MagicMock()
+    ctx.get_agent.return_value = runtime_agent
+    ac = MagicMock()
+    ac.get.return_value = ctx
+    monkeypatch.setattr(delivery, "AgentContext", ac)
+    monkeypatch.setattr(delivery, "UserMessage", lambda message: {"message": message})
+
+    result = await delivery.deliver_message(msg.message_id)
+    reply = delivery.capture_pending_reply(runtime_agent, "I am checking the ZIP creation now.")
+
+    assert result.ok is True
+    assert reply is not None
+    assert reply.sender == target.agent_name
+    assert reply.recipient == "orchestrator"
+    assert reply.delivery_state == "delivered"
+    agent_messages = reg.get_agent(target.agent_name).messages
+    assert [m.sender for m in agent_messages] == ["orchestrator", target.agent_name]
+    assert agent_messages[1].content == "I am checking the ZIP creation now."
+    assert runtime_agent.get_data(delivery.PENDING_REPLY_KEY) == []
 
 
 @pytest.mark.asyncio

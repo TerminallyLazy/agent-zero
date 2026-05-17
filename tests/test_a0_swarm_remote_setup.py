@@ -49,6 +49,18 @@ async def test_a2a_runner_accepts_current_framework_client_availability_name(mon
     assert calls == [{"agent_url": "http://rig:55000/a2a/t-token", "token": "tok"}]
 
 
+def test_a2a_runner_rewrites_localhost_from_container(monkeypatch):
+    from usr.plugins.a0_swarm.helpers import a2a_runner
+    from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
+
+    monkeypatch.setattr(a2a_runner, "_running_in_container", lambda: True)
+
+    remote = RemoteEndpoint(label="rig", base_url="http://localhost:55001/a2a/t-token", auth_token="")
+    out = a2a_runner.runtime_remote(remote)
+
+    assert out.base_url == "http://host.docker.internal:55001/a2a/t-token"
+
+
 @pytest.mark.asyncio
 async def test_swarm_test_remote_success(monkeypatch):
     from usr.plugins.a0_swarm.api import swarm_test_remote as mod
@@ -150,6 +162,7 @@ def test_plugin_settings_has_a2a_discovery_card():
     assert "A2A Discovery" in text
     assert "context.discoverA2A" in text
     assert "context.addDiscoveredA2A" in text
+    assert "context.useDockerCandidate" in text
     assert "Agent Card" in text
 
 
@@ -162,7 +175,7 @@ async def test_swarm_discover_docker_lists_a0_siblings(monkeypatch):
     a0.image.tags = ["agent0ai/agent-zero:latest"]
     a0.attrs = {
         "Config": {"Image": "agent0ai/agent-zero:latest"},
-        "NetworkSettings": {"Ports": {"55000/tcp": [{"HostPort": "55001"}]}},
+        "NetworkSettings": {"Ports": {"80/tcp": [{"HostPort": "55001"}]}},
     }
     other = MagicMock()
     other.name = "postgres"
@@ -182,8 +195,8 @@ async def test_swarm_discover_docker_lists_a0_siblings(monkeypatch):
     assert len(out["candidates"]) == 1
     cand = out["candidates"][0]
     assert cand["container"] == "agent-zero-research"
-    assert cand["base_url"] == "http://agent-zero-research:55000"
-    assert "55000/tcp" in cand["ports"]
+    assert cand["base_url"] == "http://host.docker.internal:55001/a2a"
+    assert "80/tcp" in cand["ports"]
 
 
 @pytest.mark.asyncio

@@ -371,6 +371,80 @@
         50%      { opacity: 0.55; transform: scale(0.85); }
     }
 
+    .a0swarm-card__metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.35rem;
+    }
+
+    .a0swarm-metric {
+        min-width: 0;
+        padding: 0.35rem 0.45rem;
+        border: 1px solid var(--a0swarm-chrome-border);
+        border-radius: 0.35rem;
+        background: color-mix(in srgb, var(--color-background) 42%, transparent);
+    }
+
+    .a0swarm-metric__label {
+        display: block;
+        color: var(--color-text-muted);
+        font-size: 0.56rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .a0swarm-metric__value {
+        display: block;
+        margin-top: 0.18rem;
+        color: var(--color-text);
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.72rem;
+        line-height: 1.15;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .a0swarm-live {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        padding: 0.5rem 0.6rem;
+        border: 1px solid color-mix(in srgb, var(--color-highlight) 34%, var(--a0swarm-chrome-border));
+        border-radius: 0.4rem;
+        background: color-mix(in srgb, var(--color-highlight) 7%, transparent);
+    }
+
+    .a0swarm-live__title {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: var(--color-text-muted);
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .a0swarm-live__title .material-symbols-outlined {
+        font-size: 0.95rem;
+        color: var(--color-highlight);
+    }
+
+    .a0swarm-live__body {
+        max-height: 8rem;
+        overflow-y: auto;
+        color: var(--color-text);
+        font-size: 0.74rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+        scrollbar-width: thin;
+    }
+
     .a0swarm-card__blocker {
         display: flex;
         align-items: flex-start;
@@ -677,7 +751,8 @@
     .a0swarm-card__collapsible textarea,
     .a0swarm-card__collapsible input,
     .a0swarm-card__messages,
-    .a0swarm-card__result { cursor: auto; }
+    .a0swarm-card__result,
+    .a0swarm-live { cursor: auto; }
 
     /* ----- Remote-endpoint badge ----- */
     .a0swarm-card__remote {
@@ -1014,6 +1089,25 @@
                              x-show="agent.current_activity"
                              x-text="agent.current_activity"></div>
 
+                        <div class="a0swarm-card__metrics">
+                            <div class="a0swarm-metric">
+                                <span class="a0swarm-metric__label">Elapsed</span>
+                                <span class="a0swarm-metric__value" x-text="$store.swarmStore.elapsed(agent) || '-'"></span>
+                            </div>
+                            <div class="a0swarm-metric">
+                                <span class="a0swarm-metric__label">Tools</span>
+                                <span class="a0swarm-metric__value" x-text="$store.swarmStore.formatNumber(agent.tool_call_count)"></span>
+                            </div>
+                            <div class="a0swarm-metric">
+                                <span class="a0swarm-metric__label">Tokens in</span>
+                                <span class="a0swarm-metric__value" x-text="$store.swarmStore.formatNumber(agent.input_tokens)"></span>
+                            </div>
+                            <div class="a0swarm-metric">
+                                <span class="a0swarm-metric__label">Tokens out</span>
+                                <span class="a0swarm-metric__value" x-text="$store.swarmStore.formatNumber(agent.output_tokens)"></span>
+                            </div>
+                        </div>
+
                         <div class="a0swarm-card__progress"
                              x-show="agent.status === 'working'"
                              aria-hidden="true"></div>
@@ -1030,6 +1124,23 @@
                         <div class="a0swarm-card__collapsible">
                             <div class="a0swarm-card__task a0swarm-md"
                                  x-html="$store.swarmStore.renderMd(agent.task)"></div>
+
+                            <div class="a0swarm-live" x-show="agent.live_reasoning || agent.live_output">
+                                <div x-show="agent.live_reasoning">
+                                    <div class="a0swarm-live__title">
+                                        <span class="material-symbols-outlined" aria-hidden="true">psychology</span>
+                                        <span>Reasoning stream</span>
+                                    </div>
+                                    <div class="a0swarm-live__body" x-text="agent.live_reasoning"></div>
+                                </div>
+                                <div x-show="agent.live_output">
+                                    <div class="a0swarm-live__title">
+                                        <span class="material-symbols-outlined" aria-hidden="true">notes</span>
+                                        <span>Response stream</span>
+                                    </div>
+                                    <div class="a0swarm-live__body" x-text="agent.live_output"></div>
+                                </div>
+                            </div>
 
                             <div class="a0swarm-card__messages"
                                  x-show="agent.messages && agent.messages.length > 0"
@@ -1154,6 +1265,24 @@
                         </header>
 
                         <div class="a0swarm-card__collapsible">
+                            <div class="a0swarm-card__metrics">
+                                <div class="a0swarm-metric">
+                                    <span class="a0swarm-metric__label">Elapsed</span>
+                                    <span class="a0swarm-metric__value" x-text="$store.swarmStore.elapsed(agent) || '-'"></span>
+                                </div>
+                                <div class="a0swarm-metric">
+                                    <span class="a0swarm-metric__label">Tools</span>
+                                    <span class="a0swarm-metric__value" x-text="$store.swarmStore.formatNumber(agent.tool_call_count)"></span>
+                                </div>
+                                <div class="a0swarm-metric">
+                                    <span class="a0swarm-metric__label">Tokens in</span>
+                                    <span class="a0swarm-metric__value" x-text="$store.swarmStore.formatNumber(agent.input_tokens)"></span>
+                                </div>
+                                <div class="a0swarm-metric">
+                                    <span class="a0swarm-metric__label">Tokens out</span>
+                                    <span class="a0swarm-metric__value" x-text="$store.swarmStore.formatNumber(agent.output_tokens)"></span>
+                                </div>
+                            </div>
                             <div class="a0swarm-card__task a0swarm-md"
                                  x-html="$store.swarmStore.renderMd(agent.task)"></div>
                             <div class="a0swarm-card__result a0swarm-md"

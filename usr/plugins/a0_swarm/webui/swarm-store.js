@@ -113,6 +113,10 @@ const proto = {
         return "delivery-" + (state || "queued");
     },
 
+    totalTokens(agent) {
+        return (Number(agent?.input_tokens) || 0) + (Number(agent?.output_tokens) || 0);
+    },
+
     agentOrigin(agent) {
         if (agent && agent.is_remote) return agent.remote_label || agent.remote_base_url || "remote";
         return "local";
@@ -258,6 +262,22 @@ const proto = {
         if (d < 60)   return `${d}s ago`;
         if (d < 3600) return `${Math.floor(d/60)}m ago`;
         return `${Math.floor(d/3600)}h ago`;
+    },
+
+    elapsed(agent) {
+        if (!agent || !agent.started_at) return "";
+        const end = agent.finished_at ? new Date(agent.finished_at).getTime() : Date.now();
+        const start = new Date(agent.started_at).getTime();
+        const seconds = Math.max(0, Math.floor((end - start) / 1000));
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+        const hours = Math.floor(minutes / 60);
+        return `${hours}h ${minutes % 60}m`;
+    },
+
+    formatNumber(value) {
+        return new Intl.NumberFormat().format(Number(value) || 0);
     },
 };
 

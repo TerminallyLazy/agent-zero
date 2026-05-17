@@ -4,7 +4,9 @@ Run a delegate_parallel task on a remote A0 instance via FastA2A.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Tuple, TYPE_CHECKING
+from urllib.parse import urlsplit, urlunsplit
 
 from usr.plugins.a0_swarm.helpers.remotes import RemoteEndpoint
 
@@ -32,6 +34,8 @@ def _is_client_available(mod) -> bool:
 
 DEFAULT_POLL_INTERVAL_S = 2
 DEFAULT_MAX_WAIT_S = 60 * 30   # 30 minutes per remote task
+_DOCKER_HOST_GATEWAY = "host.docker.internal"
+_LOCALHOST_NAMES = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
 
 def is_available() -> bool:
@@ -41,10 +45,63 @@ def is_available() -> bool:
         return False
 
 
+def _running_in_container() -> bool:
+    if Path("/.dockerenv").exists():
+        return True
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text(errors="ignore")
+    except Exception:
+        return False
+    markers = ("docker", "containerd", "kubepods", "podman")
+    return any(marker in cgroup for marker in markers)
+
+
+def _with_scheme(url: str) -> str:
+    url = (url or "").strip()
+    if url.startswith(("http://", "https://")):
+        return url
+    return f"http://{url}"
+
+
+def _replace_url_host(url: str, host: str) -> str:
+    parsed = urlsplit(_with_scheme(url))
+    netloc = host
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo = f"{userinfo}:{parsed.password}"
+        netloc = f"{userinfo}@{netloc}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def runtime_remote(remote: RemoteEndpoint) -> RemoteEndpoint:
+    """Return the URL this Agent Zero process should use for the remote.
+
+    A2A connection URLs copied from a browser often use localhost plus a host
+    published Docker port. From inside the Agent Zero container, localhost is
+    the current container, so same-host remotes must go through Docker Desktop's
+    host gateway instead.
+    """
+    base_url = _with_scheme(remote.base_url)
+    try:
+        parsed = urlsplit(base_url)
+    except Exception:
+        return remote
+    host = (parsed.hostname or "").lower()
+    if _running_in_container() and host in _LOCALHOST_NAMES:
+        base_url = _replace_url_host(base_url, _DOCKER_HOST_GATEWAY)
+    if base_url == remote.base_url:
+        return remote
+    return RemoteEndpoint(label=remote.label, base_url=base_url, auth_token=remote.auth_token)
+
+
 async def open_connection(remote: RemoteEndpoint) -> "AgentConnection":
     mod = _client_module()
     if not _is_client_available(mod):
         raise RuntimeError("FastA2A client not available in this Agent Zero build.")
+    remote = runtime_remote(remote)
     return mod.AgentConnection(
         agent_url=remote.base_url,
         token=remote.auth_token or None,
