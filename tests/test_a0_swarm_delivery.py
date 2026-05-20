@@ -60,6 +60,16 @@ class _RuntimeAgent:
         self.data[key] = value
 
 
+def test_orchestrator_payload_tells_subagent_to_reply_with_swarm_message():
+    from usr.plugins.a0_swarm.helpers import delivery
+
+    payload = delivery._format_payload("orchestrator", "Can you confirm the file path?")
+
+    assert "swarm_message" in payload
+    assert 'recipient="orchestrator"' in payload
+    assert "continue your assigned work" in payload
+
+
 @pytest.mark.asyncio
 async def test_deliver_local_message_marks_delivered(monkeypatch):
     from usr.plugins.a0_swarm.helpers import delivery

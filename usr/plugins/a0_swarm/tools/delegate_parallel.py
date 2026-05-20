@@ -3,6 +3,11 @@ import asyncio
 import logging
 
 from agent import AgentContext, UserMessage
+try:
+    from agent import AgentContextType
+except ImportError:
+    class AgentContextType:
+        BACKGROUND = "background"
 from helpers import plugins
 from helpers.tool import Tool, Response
 from initialize import initialize_agent
@@ -116,7 +121,11 @@ class DelegateParallel(Tool):
             config = initialize_agent()
             if profile:
                 config.profile = profile
-            sub_ctx = AgentContext(config=config)
+            sub_ctx = AgentContext(
+                config=config,
+                type=AgentContextType.BACKGROUND,
+                name=f"Swarm: {label}",
+            )
             sub_agent = sub_ctx.agent0
             sub_agent.agent_name = agent_name
 
@@ -156,6 +165,11 @@ class DelegateParallel(Tool):
         finally:
             try:
                 AgentContext.remove(sub_ctx.id)
+            except Exception:
+                pass
+            try:
+                from helpers import persist_chat
+                persist_chat.remove_chat(sub_ctx.id)
             except Exception:
                 pass
 

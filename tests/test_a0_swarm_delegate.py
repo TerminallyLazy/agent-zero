@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 if "agent" not in sys.modules:
     _agent_stub = types.ModuleType("agent")
     _agent_stub.AgentContext = MagicMock()
+    _agent_stub.AgentContextType = types.SimpleNamespace(BACKGROUND="background")
     _agent_stub.UserMessage = lambda message=None, **kw: {"message": message}
     _agent_stub.Agent = MagicMock()
     _agent_stub.LoopData = MagicMock()
@@ -74,9 +75,11 @@ def fresh_registry():
 @pytest.mark.asyncio
 async def test_delegate_parallel_runs_two_tasks(monkeypatch):
     sub_contexts = []
-    def fake_context(*, config):
+    def fake_context(*, config, type=None, name=None):
         ctx = MagicMock()
         ctx.id = f"ctx-{len(sub_contexts)}"
+        ctx.type = type
+        ctx.name = name
         sub_agent = MagicMock()
         sub_agent.monologue = AsyncMock(return_value=f"result-{ctx.id}")
         sub_agent.hist_add_user_message = MagicMock()
@@ -116,9 +119,48 @@ async def test_delegate_parallel_runs_two_tasks(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_delegate_parallel_creates_background_subagent_contexts(monkeypatch):
+    sub_contexts = []
+
+    def fake_context(*, config, type=None, name=None):
+        ctx = MagicMock()
+        ctx.id = f"ctx-{len(sub_contexts)}"
+        ctx.type = type
+        ctx.name = name
+        sub_agent = MagicMock()
+        sub_agent.monologue = AsyncMock(return_value="ok")
+        sub_agent.hist_add_user_message = MagicMock()
+        ctx.agent0 = sub_agent
+        sub_contexts.append(ctx)
+        return ctx
+
+    AC = MagicMock(side_effect=fake_context)
+    AC.remove = MagicMock()
+    monkeypatch.setattr(dp_mod, "AgentContext", AC)
+    monkeypatch.setattr(dp_mod, "initialize_agent", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(dp_mod, "UserMessage", lambda message: {"message": message})
+
+    parent_agent = MagicMock()
+    parent_agent.number = 0
+    parent_agent.context.id = "PARENT"
+    parent_agent.context.log.log = MagicMock()
+    parent_agent.agent_name = "A0"
+
+    tool = dp_mod.DelegateParallel(
+        agent=parent_agent, name="delegate_parallel",
+        method=None, args={}, message="", loop_data=None,
+    )
+    await tool.execute(tasks=[{"label": "A", "task": "do A"}])
+
+    assert AC.call_args.kwargs["type"] == dp_mod.AgentContextType.BACKGROUND
+    assert sub_contexts[0].type == dp_mod.AgentContextType.BACKGROUND
+    assert sub_contexts[0].name == "Swarm: A"
+
+
+@pytest.mark.asyncio
 async def test_delegate_parallel_one_fails_others_succeed(monkeypatch):
     counter = {"i": 0}
-    def fake_context(*, config):
+    def fake_context(*, config, type=None, name=None):
         ctx = MagicMock()
         ctx.id = f"ctx-{counter['i']}"
         sub = MagicMock()
@@ -165,7 +207,7 @@ async def test_delegate_parallel_pre_cancelled_is_absorbed(monkeypatch):
         await proceed.wait()
         return "late"
 
-    def fake_context(*, config):
+    def fake_context(*, config, type=None, name=None):
         ctx = MagicMock()
         ctx.id = "ctx-0"
         sub = MagicMock()
@@ -204,7 +246,7 @@ async def test_delegate_parallel_truncates_large_result(monkeypatch):
     from usr.plugins.a0_swarm.helpers.registry import MAX_RESULT_BYTES
     huge = "x" * (MAX_RESULT_BYTES + 1000)
 
-    def fake_context(*, config):
+    def fake_context(*, config, type=None, name=None):
         ctx = MagicMock()
         ctx.id = "ctx-0"
         sub = MagicMock()
@@ -232,7 +274,7 @@ async def test_delegate_parallel_truncates_large_result(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delegate_parallel_small_result_not_truncated(monkeypatch):
-    def fake_context(*, config):
+    def fake_context(*, config, type=None, name=None):
         ctx = MagicMock(); ctx.id = "ctx-0"
         sub = MagicMock()
         sub.monologue = AsyncMock(return_value="short result")

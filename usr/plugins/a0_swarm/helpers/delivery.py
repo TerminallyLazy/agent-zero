@@ -25,7 +25,10 @@ def _format_payload(sender: str, content: str) -> str:
         return (
             "[Orchestrator message]\n"
             f"{content}\n\n"
-            "Reply directly if this asks a question or changes your task, then continue your assigned work."
+            "If this asks a question, changes your task, or needs acknowledgement, "
+            "reply immediately with the swarm_message tool using recipient=\"orchestrator\". "
+            "Do not use the final response tool just to answer this message; after the "
+            "swarm_message reply, continue your assigned work."
         )
     return f"[Message from {sender}]: {content}"
 
