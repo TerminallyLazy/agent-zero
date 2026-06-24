@@ -86,6 +86,15 @@ async def test_tiny_local_profile_prompt_is_action_first_json_contract():
     repeat_prompt = (
         PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "fw.msg_repeat.md"
     ).read_text(encoding="utf-8")
+    misformat_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "fw.msg_misformat.md"
+    ).read_text(encoding="utf-8")
+    call_sub_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.tool.call_sub.md"
+    ).read_text(encoding="utf-8")
+    parallel_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.tool.parallel.md"
+    ).read_text(encoding="utf-8")
     text_editor_prompt = (
         PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.tool.text_editor.md"
     ).read_text(encoding="utf-8")
@@ -94,6 +103,7 @@ async def test_tiny_local_profile_prompt_is_action_first_json_contract():
     ).read_text(encoding="utf-8")
 
     assert "You are Agent Zero. Act on the user's behalf." in system_text
+    assert "/no_think" in system_text
     assert "Your visible assistant message must be exactly one valid JSON object." in system_text
     assert 'Use exactly these top-level fields: `"tool_name"` and `"tool_args"`.' in system_text
     assert 'For a final user-facing answer, use the `response` tool.' in system_text
@@ -102,6 +112,7 @@ async def test_tiny_local_profile_prompt_is_action_first_json_contract():
     assert "Do not explain what command the user could run manually." in system_text
     assert "output a corrected JSON tool request immediately" in system_text
     assert "do not resend the same JSON" in system_text
+    assert 'include `"profile":"tiny-local"`' in system_text
     assert "## Tiny Local Output Rule" in system_text
     assert "~~~json" not in communication_prompt
     assert "~~~json" not in code_prompt
@@ -114,8 +125,21 @@ async def test_tiny_local_profile_prompt_is_action_first_json_contract():
     assert "Continuation words" in solving_prompt
     assert "Do not respond by saying you will begin, continue, start, proceed, or investigate." in solving_prompt
     assert "Do not use this tool for \"proceed\", \"continue\", \"go ahead\"" in response_prompt
-    assert "Your repeated JSON was recorded, but it did not execute another tool." in repeat_prompt
+    assert "/no_think" in repeat_prompt
+    assert "It was recorded, but no tool executed." in repeat_prompt
+    assert "The first character of your reply must be `{`" in repeat_prompt
+    assert "Valid fallback if unsure" in repeat_prompt
+    assert "convert it to the matching tool call" in repeat_prompt
     assert "replace it with the next real tool call" in repeat_prompt
+    assert "/no_think" in misformat_prompt
+    assert "Your last message was not valid JSON for a tool request." in misformat_prompt
+    assert "Reply now with exactly one JSON object and nothing else." in misformat_prompt
+    assert "Valid fallback if unsure" in misformat_prompt
+    assert "convert it to the matching tool call" in misformat_prompt
+    assert 'Use only `tool_name` and `tool_args` as top-level fields.' in misformat_prompt
+    assert 'include `"profile":"tiny-local"`' in call_sub_prompt
+    assert 'default, researcher, developer, hacker' in call_sub_prompt
+    assert '"profile":"tiny-local"' in parallel_prompt
     assert "do not repeat the same status response or exact tool request" in solving_prompt
     assert "do not repeat the same exact tool call" in solving_prompt
     assert '"open_in_canvas":true' in text_editor_prompt

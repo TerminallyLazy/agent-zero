@@ -11,16 +11,20 @@
 - `prompts/agent.system.main.communication.md` owns the local-model communication contract.
 - `prompts/agent.system.main.solving.md` owns the local-model problem-solving contract and suppresses inherited visible reasoning requirements.
 - `prompts/fw.msg_repeat.md` owns Tiny Local's profile-specific recovery instructions when the framework rejects a duplicate assistant message.
+- `prompts/fw.msg_misformat.md` owns Tiny Local's profile-specific recovery instructions when the framework cannot parse a valid tool request.
 - `prompts/agent.system.tools.md` owns the Tiny Local tools wrapper and final output-shape reminder after tool listing.
-- `prompts/agent.system.tool.*.md` files own Tiny Local-specific tool examples that avoid inherited reasoning fields and repeated writes.
+- `prompts/agent.system.tool.*.md` files own Tiny Local-specific tool examples that avoid inherited reasoning fields, long subordinate profiles, and repeated writes.
 
 ## Local Contracts
 
 - Preserve the normal Agent Zero tool-call shape: `tool_name` plus `tool_args`.
 - Do not add parser repair, duplicate suppression runtime, model transport, memory, or text-editor runtime behavior here.
+- Suppress Qwen-style thinking output with prompt text only; do not add provider-specific transport switches here.
 - Duplicate-message handling may be tightened through profile prompts only.
+- Misformat recovery may be tightened through profile prompts only.
 - Keep prompt text short enough for small local models to follow.
 - Treat continuation requests such as `proceed` or `continue` as commands to execute the next unfinished step, not as prompts for another status response.
+- Subordinate examples must keep child agents on `profile:"tiny-local"` unless a user explicitly requests another profile.
 - Do not include user-specific provider names, API keys, local paths, or secrets.
 
 ## Work Guidance
