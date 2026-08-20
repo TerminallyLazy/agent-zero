@@ -1,0 +1,147 @@
+{
+  "config_version": 2,
+  "enabled": false,
+  "instrumentation_enabled": false,
+  "auto_enqueue": false,
+  "status_refresh_seconds": 8,
+  "trace_capture": {
+    "max_events_per_context": 1800,
+    "max_events_per_loop": 160,
+    "max_event_payload_chars": 1400,
+    "min_tool_calls_for_sample": 1,
+    "event_ttl_seconds": 604800
+  },
+  "optimization": {
+    "enabled": false,
+    "auto_optimize": false,
+    "auto_optimize_interval_messages": 12,
+    "auto_optimize_interval_minutes": 180,
+    "min_samples_for_promotion": 10,
+    "confidence_floor": 0.7,
+    "global_score_threshold": 0.8,
+    "max_samples_per_objective": 40,
+    "max_active_objectives_per_context": 8,
+    "objective_signature_lookback": 25,
+    "retain_samples_per_context": 3000,
+    "max_sample_size_chars": 2400,
+    "cooldown_hours": 6,
+    "enable_dspy_optimizer": false,
+    "dry_run_mode": false,
+    "dry_run_promote_only": false,
+    "replay_set_size": 6,
+    "replay_tolerable_regression": 0.1,
+    "ge_pa_steps": 3,
+    "ge_pa_threads": 1,
+    "max_evaluation_batch": 10,
+    "optimization_preview_limit": 20,
+    "enable_replay_audit": false,
+    "replay_audit_sample_size": 6,
+    "max_concurrent_candidates": 1
+  },
+  "engine": "heuristic",
+  "worker": {
+    "backend": "sqlite_local",
+    "max_workers": 1
+  },
+  "scheduler": {
+    "mode": "single",
+    "max_workers": 1,
+    "poll_interval_seconds": 3,
+    "job_lease_seconds": 45,
+    "max_retries": 2,
+    "heartbeat_seconds": 8,
+    "stale_worker_seconds": 180,
+    "scheduler_lock_ttl_seconds": 30,
+    "enforce_single_tenant_per_context": true,
+    "backoff_base_seconds": 2
+  },
+  "dependencies": {
+    "install_mode": "manual",
+    "dependency_file": "requirements.txt",
+    "fallback_to_pip": false,
+    "ensure_at_startup": false,
+    "install_timeout_seconds": 0
+  },
+  "prompt": {
+    "inject_guidance": false,
+    "inject_even_without_guidance": false,
+    "max_injected_chars": 1800,
+    "fallback_guidance": ""
+  },
+  "evaluator": {
+    "enable_semantic_judge": false,
+    "preferred_dspy_model": "",
+    "semantic_loop_batch_size": 8,
+    "policy_breach_keywords": [
+      "forbidden",
+      "delete production",
+      "drop table",
+      "rm -rf /",
+      "exfiltrate",
+      "secret",
+      "pwn",
+      "overwrite backups",
+      "disable auth"
+    ],
+    "risk_threshold": 0.25,
+    "enable_replay_audit": false,
+    "max_replay_depth": 6
+  },
+  "telemetry": {
+    "enabled": false,
+    "trace_to_runtime": false
+  },
+  "matrix": {
+    "version": "2.0",
+    "shell": {
+      "enabled": true,
+      "command_safety_weight": 0.35,
+      "command_safety_threshold": 0.95,
+      "command_safety_hard_fail": 0.6,
+      "semantic_match_weight": 0.35,
+      "semantic_match_threshold": 0.82,
+      "execution_reliability_weight": 0.3,
+      "execution_reliability_threshold": 0.75,
+      "execution_reliability_hard_fail": 0.65,
+      "confidence_floor": 0.7
+    },
+    "tool_retrieval": {
+      "enabled": true,
+      "evidence_recall_weight": 0.4,
+      "evidence_recall_threshold": 0.78,
+      "evidence_recall_hard_fail": 0.5,
+      "evidence_precision_weight": 0.4,
+      "evidence_precision_threshold": 0.8,
+      "semantic_match_weight": 0.2,
+      "semantic_match_threshold": 0.7,
+      "evidence_precision_hard_fail": 0.55,
+      "confidence_floor": 0.7
+    },
+    "reasoning": {
+      "enabled": true,
+      "answer_quality_weight": 0.6,
+      "answer_quality_threshold": 0.8,
+      "answer_quality_hard_fail": 0.65,
+      "policy_compliance_weight": 0.4,
+      "policy_compliance_threshold": 1.0,
+      "policy_compliance_hard_fail": 1.0,
+      "semantic_match_weight": 0.2,
+      "semantic_match_threshold": 0.72,
+      "semantic_match_hard_fail": 0.5,
+      "confidence_floor": 0.75
+    },
+    "decision_making": {
+      "enabled": true,
+      "policy_compliance_weight": 1.0,
+      "policy_compliance_threshold": 1.0,
+      "policy_compliance_hard_fail": 1.0,
+      "semantic_match_weight": 0.3,
+      "semantic_match_threshold": 0.75,
+      "semantic_match_hard_fail": 0.55,
+      "answer_quality_weight": 0.35,
+      "answer_quality_threshold": 0.7,
+      "answer_quality_hard_fail": 0.5,
+      "confidence_floor": 0.7
+    }
+  }
+}

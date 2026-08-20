@@ -1,0 +1,1425 @@
+<html>
+  <head>
+    <title>DSPy RLM configuration</title>
+  </head>
+  <body>
+    <div
+      x-data="{
+        _ensureObject(value, fallback = {}) {
+          return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : { ...fallback };
+        },
+        _ensureSection(target, key, fallback = {}) {
+          if (!target || typeof target !== 'object' || Array.isArray(target)) {
+            return undefined;
+          }
+          if (typeof target[key] !== 'object' || target[key] === null || Array.isArray(target[key])) {
+            target[key] = this._ensureObject(fallback);
+          }
+          return target[key];
+        },
+        applyPreset(level) {
+          if (typeof config !== 'object' || config === null) {
+            config = {};
+          }
+
+          const matrix = this._ensureSection(config, 'matrix', {
+            version: '2.0',
+            shell: {},
+            tool_retrieval: {},
+            reasoning: {},
+            decision_making: {},
+          });
+          const shell = this._ensureSection(matrix, 'shell', {
+            enabled: true,
+            command_safety_weight: 0.35,
+            command_safety_threshold: 0.95,
+            command_safety_hard_fail: 0.7,
+            execution_reliability_weight: 0.30,
+            execution_reliability_threshold: 0.75,
+            execution_reliability_hard_fail: 0.65,
+            semantic_match_weight: 0.35,
+            semantic_match_threshold: 0.82,
+          });
+          const retrieval = this._ensureSection(matrix, 'tool_retrieval', {
+            enabled: true,
+            evidence_recall_weight: 0.40,
+            evidence_recall_threshold: 0.78,
+            evidence_recall_hard_fail: 0.50,
+            evidence_precision_weight: 0.40,
+            evidence_precision_threshold: 0.80,
+            evidence_precision_hard_fail: 0.55,
+            semantic_match_weight: 0.20,
+            semantic_match_threshold: 0.70,
+          });
+          const reasoning = this._ensureSection(matrix, 'reasoning', {
+            enabled: true,
+            answer_quality_weight: 0.60,
+            answer_quality_threshold: 0.80,
+            answer_quality_hard_fail: 0.65,
+            policy_compliance_weight: 0.40,
+            policy_compliance_threshold: 1.0,
+            policy_compliance_hard_fail: 1.0,
+            semantic_match_weight: 0.20,
+            semantic_match_threshold: 0.72,
+          });
+          const decision = this._ensureSection(matrix, 'decision_making', {
+            enabled: true,
+            policy_compliance_weight: 1.0,
+            policy_compliance_threshold: 1.0,
+            policy_compliance_hard_fail: 1.0,
+            semantic_match_weight: 0.30,
+            semantic_match_threshold: 0.75,
+            semantic_match_hard_fail: 0.55,
+            answer_quality_weight: 0.35,
+            answer_quality_threshold: 0.70,
+            answer_quality_hard_fail: 0.50,
+          });
+          const evaluator = this._ensureSection(config, 'evaluator', {
+            enable_semantic_judge: true,
+            preferred_dspy_model: '',
+            semantic_loop_batch_size: 8,
+            risk_threshold: 0.25,
+            enable_replay_audit: true,
+            max_replay_depth: 6,
+          });
+
+          if (level === 'safe') {
+            config.auto_optimize_enabled = true;
+            config.optimization_interval_messages = 24;
+            config.optimization_min_samples = 24;
+            config.optimization_cooldown_hours = 12;
+            config.optimization_preview_limit = 30;
+            config.replay_set_size = 4;
+            config.replay_tolerable_regression = 0.05;
+            config.optimization_interval_minutes = 240;
+            config.scheduler_mode = 'distributed';
+            config.scheduler_max_workers = 2;
+            config.gepa_steps = 2;
+            config.gepa_threads = 1;
+            shell.command_safety_threshold = 0.98;
+            shell.command_safety_hard_fail = 0.7;
+            shell.execution_reliability_threshold = 0.85;
+            shell.command_safety_weight = 0.35;
+            shell.execution_reliability_weight = 0.30;
+            shell.semantic_match_weight = 0.35;
+            config.scheduler_heartbeat_seconds = 12;
+            evaluator.risk_threshold = 0.20;
+            evaluator.enable_replay_audit = true;
+          } else if (level === 'balanced') {
+            config.auto_optimize_enabled = true;
+            config.optimization_interval_messages = 12;
+            config.optimization_min_samples = 10;
+            config.optimization_cooldown_hours = 6;
+            config.optimization_preview_limit = 20;
+            config.scheduler_mode = 'distributed';
+            config.scheduler_max_workers = 3;
+            config.gepa_steps = 3;
+            config.gepa_threads = 2;
+            shell.command_safety_threshold = 0.95;
+            shell.execution_reliability_threshold = 0.75;
+            retrieval.evidence_recall_threshold = 0.78;
+            reasoning.answer_quality_threshold = 0.80;
+            config.scheduler_heartbeat_seconds = 8;
+            evaluator.risk_threshold = 0.25;
+          } else if (level === 'aggressive') {
+            config.auto_optimize_enabled = true;
+            config.optimization_interval_messages = 6;
+            config.optimization_min_samples = 6;
+            config.optimization_cooldown_hours = 2;
+            config.optimization_preview_limit = 14;
+            config.scheduler_mode = 'distributed';
+            config.scheduler_max_workers = 4;
+            config.gepa_steps = 5;
+            config.gepa_threads = 4;
+            config.replay_set_size = 3;
+            config.replay_tolerable_regression = 0.15;
+            shell.command_safety_threshold = 0.90;
+            shell.command_safety_hard_fail = 0.55;
+            shell.execution_reliability_threshold = 0.68;
+            retrieval.evidence_precision_threshold = 0.70;
+            reasoning.answer_quality_threshold = 0.72;
+            config.scheduler_heartbeat_seconds = 6;
+            evaluator.risk_threshold = 0.30;
+          }
+
+          config.matrix = matrix;
+          config.evaluator = evaluator;
+        },
+      }"
+      x-init="
+        const toBool = (value, fallback = false) => {
+          if (typeof value === 'boolean') return value;
+          if (typeof value === 'number') return value !== 0;
+          if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return ['1', 'true', 'yes', 'on', 'enabled'].includes(normalized);
+          }
+          return fallback;
+        };
+
+        const toInt = (value, fallback = 0, min = 0, max = Number.POSITIVE_INFINITY) => {
+          const parsed = Number.parseInt(String(value ?? ''), 10);
+          if (!Number.isFinite(parsed)) {
+            return fallback;
+          }
+          return Math.max(min, Math.min(max, parsed));
+        };
+
+        const toFloat = (value, fallback = 0, min = 0, max = 1) => {
+          const parsed = Number.parseFloat(String(value ?? ''));
+          if (!Number.isFinite(parsed)) {
+            return fallback;
+          }
+          return Math.max(min, Math.min(max, parsed));
+        };
+
+        const toText = (value, fallback = '') => (value == null ? fallback : String(value));
+
+        const ensureObject = (value, fallback = {}) =>
+          typeof value === 'object' && value !== null && !Array.isArray(value) ? value : { ...fallback };
+
+        const ensureSection = (target, key, fallback = {}) => {
+          if (typeof target !== 'object' || target === null || Array.isArray(target)) {
+            return undefined;
+          }
+          if (typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key])) {
+            return target[key];
+          }
+          const created = { ...fallback };
+          target[key] = created;
+          return created;
+        };
+
+        if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+          config = {};
+        }
+
+        let traceCapture = ensureSection(config, 'trace_capture', {});
+        if (!traceCapture) {
+          traceCapture = {};
+          config.trace_capture = traceCapture;
+        }
+        let optimization = ensureSection(config, 'optimization', {});
+        if (!optimization) {
+          optimization = {};
+          config.optimization = optimization;
+        }
+        let scheduler = ensureSection(config, 'scheduler', {});
+        if (!scheduler) {
+          scheduler = {};
+          config.scheduler = scheduler;
+        }
+        let matrix = ensureSection(config, 'matrix', {
+          version: '2.0',
+          shell: {},
+          tool_retrieval: {},
+          reasoning: {},
+          decision_making: {},
+        });
+        if (!matrix) {
+          matrix = {
+            version: '2.0',
+            shell: {},
+            tool_retrieval: {},
+            reasoning: {},
+            decision_making: {},
+          };
+          config.matrix = matrix;
+        }
+        let evaluator = ensureSection(config, 'evaluator', {
+          enable_semantic_judge: true,
+          preferred_dspy_model: '',
+          semantic_loop_batch_size: 8,
+          risk_threshold: 0.25,
+          enable_replay_audit: true,
+          max_replay_depth: 6,
+        });
+        if (!evaluator) {
+          evaluator = {
+            enable_semantic_judge: true,
+            preferred_dspy_model: '',
+            semantic_loop_batch_size: 8,
+            risk_threshold: 0.25,
+            enable_replay_audit: true,
+            max_replay_depth: 6,
+          };
+          config.evaluator = evaluator;
+        }
+        let prompt = ensureSection(config, 'prompt', {
+          inject_guidance: true,
+          inject_even_without_guidance: true,
+          max_injected_chars: 1800,
+          fallback_guidance: 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.',
+        });
+        if (!prompt) {
+          prompt = {
+            inject_guidance: true,
+            inject_even_without_guidance: true,
+            max_injected_chars: 1800,
+            fallback_guidance: 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.',
+          };
+          config.prompt = prompt;
+        }
+        let dependencies = ensureSection(config, 'dependencies', {
+          install_mode: 'auto',
+          dependency_file: 'requirements.txt',
+          fallback_to_pip: true,
+          ensure_at_startup: false,
+          install_timeout_seconds: 0,
+        });
+        if (!dependencies) {
+          dependencies = {
+            install_mode: 'auto',
+            dependency_file: 'requirements.txt',
+            fallback_to_pip: true,
+            ensure_at_startup: false,
+            install_timeout_seconds: 0,
+          };
+          config.dependencies = dependencies;
+        }
+
+        const ensureOptimizationSection = () => {
+          optimization = ensureSection(config, 'optimization', {
+            enabled: true,
+            auto_optimize: false,
+            auto_optimize_interval_messages: 12,
+            auto_optimize_interval_minutes: 180,
+            min_samples_for_promotion: 10,
+            confidence_floor: 0.7,
+            global_score_threshold: 0.8,
+            max_samples_per_objective: 40,
+            cooldown_hours: 6,
+            ge_pa_steps: 3,
+            ge_pa_threads: 2,
+            max_active_objectives_per_context: 8,
+            objective_signature_lookback: 25,
+            retain_samples_per_context: 3000,
+            max_evaluation_batch: 10,
+            max_events_per_context: 10,
+            optimization_preview_limit: 20,
+            enable_dspy_optimizer: true,
+            enable_replay_audit: true,
+            replay_set_size: 6,
+            replay_tolerable_regression: 0.1,
+            replay_audit_sample_size: 6,
+            max_concurrent_candidates: 4,
+          });
+          if (!optimization) {
+            optimization = {};
+          }
+          config.optimization = optimization;
+          return optimization;
+        };
+
+        const ensureTraceCaptureSection = () => {
+          traceCapture = ensureSection(config, 'trace_capture', {});
+          if (!traceCapture) {
+            traceCapture = {};
+          }
+          config.trace_capture = traceCapture;
+          return traceCapture;
+        };
+
+        config.trace_capture = traceCapture;
+        config.optimization = optimization;
+        config.scheduler = scheduler;
+        config.matrix = matrix;
+        config.evaluator = evaluator;
+        config.prompt = prompt;
+        config.dependencies = dependencies;
+
+        const shell = ensureSection(matrix, 'shell', {
+          enabled: true,
+          command_safety_weight: 0.35,
+          command_safety_threshold: 0.95,
+          command_safety_hard_fail: 0.60,
+          execution_reliability_weight: 0.30,
+          execution_reliability_threshold: 0.75,
+          execution_reliability_hard_fail: 0.65,
+          semantic_match_weight: 0.35,
+          semantic_match_threshold: 0.82,
+        });
+
+        const retrieval = ensureSection(matrix, 'tool_retrieval', {
+          enabled: true,
+          evidence_recall_weight: 0.40,
+          evidence_recall_threshold: 0.78,
+          evidence_recall_hard_fail: 0.50,
+          evidence_precision_weight: 0.40,
+          evidence_precision_threshold: 0.80,
+          evidence_precision_hard_fail: 0.55,
+          semantic_match_weight: 0.20,
+          semantic_match_threshold: 0.70,
+        });
+
+        const reasoning = ensureSection(matrix, 'reasoning', {
+          enabled: true,
+          answer_quality_weight: 0.60,
+          answer_quality_threshold: 0.80,
+          answer_quality_hard_fail: 0.65,
+          policy_compliance_weight: 0.40,
+          policy_compliance_threshold: 1,
+          policy_compliance_hard_fail: 1,
+          semantic_match_weight: 0.20,
+          semantic_match_threshold: 0.72,
+        });
+
+        const decision = ensureSection(matrix, 'decision_making', {
+          enabled: true,
+          policy_compliance_weight: 1.0,
+          policy_compliance_threshold: 1,
+          policy_compliance_hard_fail: 1,
+          semantic_match_weight: 0.30,
+          semantic_match_threshold: 0.75,
+          semantic_match_hard_fail: 0.55,
+          answer_quality_weight: 0.35,
+          answer_quality_threshold: 0.70,
+          answer_quality_hard_fail: 0.50,
+        });
+
+        const ensureArray = (value) => Array.isArray(value) ? value : [];
+
+        config.enabled = toBool(config.enabled, false);
+        config.instrumentation_enabled = toBool(config.instrumentation_enabled, true);
+        config.status_refresh_seconds = toInt(config.status_refresh_seconds, 8, 1, 120);
+        config.trace_enabled = toBool(config.trace_enabled, config.instrumentation_enabled);
+        config.trace_retention_limit = toInt(config.trace_retention_limit, 604800, 60, 31536000);
+
+        config.trace_capture = traceCapture;
+        traceCapture.max_events_per_context = toInt(traceCapture.max_events_per_context, config.trace_retention_limit, 1, 2000000);
+        traceCapture.max_events_per_loop = toInt(traceCapture.max_events_per_loop, 160, 1, 10000);
+        traceCapture.max_event_payload_chars = toInt(traceCapture.max_event_payload_chars, 1400, 64, 20000);
+        traceCapture.min_tool_calls_for_sample = toInt(traceCapture.min_tool_calls_for_sample, 1, 0, 20);
+
+        config.optimization = optimization;
+        optimization.enabled = toBool(optimization.enabled, true);
+        config.auto_optimize_enabled = toBool(config.auto_optimize_enabled, optimization.auto_optimize);
+        optimization.auto_optimize = config.auto_optimize_enabled;
+        optimization.auto_optimize_interval_messages = toInt(optimization.auto_optimize_interval_messages, 12, 1, 10000);
+        config.optimization_interval_messages = toInt(config.optimization_interval_messages, optimization.auto_optimize_interval_messages, 1, 10000);
+        config.optimization_interval_minutes = toInt(config.optimization_interval_minutes, 180, 1, 1440);
+        optimization.auto_optimize_interval_minutes = config.optimization_interval_minutes;
+        config.optimization_min_samples = toInt(config.optimization_min_samples, 10, 1, 1000);
+        config.optimization_min_samples_for_promotion = toInt(config.optimization_min_samples_for_promotion, 10, 1, 1000);
+        optimization.min_samples_for_promotion = config.optimization_min_samples;
+        optimization.cooldown_hours = toInt(optimization.cooldown_hours, 6, 0, 8760);
+        optimization.cooldown_hours = toInt(optimization.cooldown_hours, 6, 0, 8760);
+        config.optimization_minimum = toInt(config.optimization_minimum, 1, 1, 1000);
+        config.optimization_trace_window = toInt(config.optimization_trace_window, traceCapture.max_events_per_context, 1, 2000000);
+        traceCapture.max_events_per_context = config.optimization_trace_window;
+        config.optimization_max_active_objectives_per_context = toInt(config.optimization_max_active_objectives_per_context, 8, 1, 64);
+        optimization.max_active_objectives_per_context = config.optimization_max_active_objectives_per_context;
+        optimization.max_samples_per_objective = toInt(optimization.max_samples_per_objective, 40, 1, 200);
+        optimization.retain_samples_per_context = toInt(optimization.retain_samples_per_context, 3000, 10, 200000);
+        optimization.max_sample_size_chars = toInt(optimization.max_sample_size_chars, 2400, 64, 100000);
+        optimization.confidence_floor = toFloat(optimization.confidence_floor, 0.7);
+        optimization.global_score_threshold = toFloat(optimization.global_score_threshold, 0.8);
+        optimization.objective_signature_lookback = toInt(optimization.objective_signature_lookback, 25, 1, 400);
+        optimization.enable_dspy_optimizer = toBool(optimization.enable_dspy_optimizer, true);
+        config.enable_dspy_optimizer = toBool(config.enable_dspy_optimizer, optimization.enable_dspy_optimizer);
+        config.gepa_steps = toInt(config.gepa_steps, 3, 1, 128);
+        optimization.ge_pa_steps = config.gepa_steps;
+        config.ge_pa_steps = toInt(config.ge_pa_steps, config.gepa_steps, 1, 128);
+        config.gepa_threads = toInt(config.gepa_threads, 2, 1, 64);
+        optimization.ge_pa_threads = config.gepa_threads;
+        config.ge_pa_threads = toInt(config.ge_pa_threads, config.gepa_threads, 1, 64);
+        optimization.max_evaluation_batch = toInt(optimization.max_evaluation_batch, 10, 1, 128);
+        config.optimization_preview_limit = toInt(config.optimization_preview_limit, 20, 10, 10000);
+        config.replay_set_size = toInt(config.replay_set_size, 6, 1, 20);
+        optimization.replay_set_size = config.replay_set_size;
+        config.replay_tolerable_regression = toFloat(config.replay_tolerable_regression, 0.10);
+        optimization.replay_tolerable_regression = config.replay_tolerable_regression;
+        config.replay_audit_sample_size = toInt(config.replay_audit_sample_size, 6, 1, 40);
+        optimization.replay_audit_sample_size = config.replay_audit_sample_size;
+        optimization.enable_replay_audit = toBool(optimization.enable_replay_audit, true);
+        config.enable_replay_audit = toBool(config.enable_replay_audit, optimization.enable_replay_audit);
+        optimization.dry_run_mode = toBool(optimization.dry_run_mode, false);
+        optimization.dry_run_promote_only = toBool(optimization.dry_run_promote_only, false);
+        optimization.max_concurrent_candidates = toInt(optimization.max_concurrent_candidates, 4, 1, 16);
+
+        config.scheduler = scheduler;
+        scheduler.mode = toText(scheduler.mode || config.scheduler_mode, 'distributed').toLowerCase();
+        if (!['single', 'distributed'].includes(scheduler.mode)) scheduler.mode = 'distributed';
+        config.scheduler_max_workers = toInt(config.scheduler_max_workers, scheduler.max_workers, 1, 64);
+        scheduler.max_workers = config.scheduler_max_workers;
+        config.scheduler_mode = scheduler.mode;
+        config.scheduler_poll_interval_seconds = toInt(config.scheduler_poll_interval_seconds, scheduler.poll_interval_seconds, 1, 300);
+        scheduler.poll_interval_seconds = config.scheduler_poll_interval_seconds;
+        config.scheduler_job_lease_seconds = toInt(config.scheduler_job_lease_seconds, scheduler.job_lease_seconds || 45, 10, 2000);
+        scheduler.job_lease_seconds = config.scheduler_job_lease_seconds;
+        config.scheduler_max_retries = toInt(config.scheduler_max_retries, scheduler.max_retries, 0, 50);
+        scheduler.max_retries = config.scheduler_max_retries;
+        config.scheduler_heartbeat_seconds = toInt(config.scheduler_heartbeat_seconds, scheduler.heartbeat_seconds, 2, 120);
+        scheduler.heartbeat_seconds = config.scheduler_heartbeat_seconds;
+        config.scheduler_stale_worker_seconds = toInt(config.scheduler_stale_worker_seconds, scheduler.stale_worker_seconds, 20, 3600);
+        scheduler.stale_worker_seconds = config.scheduler_stale_worker_seconds;
+        config.scheduler_lock_ttl_seconds = toInt(config.scheduler_lock_ttl_seconds, scheduler.scheduler_lock_ttl_seconds, 10, 600);
+        scheduler.scheduler_lock_ttl_seconds = config.scheduler_lock_ttl_seconds;
+        config.scheduler_enforce_single_tenant_per_context = toBool(config.scheduler_enforce_single_tenant_per_context, scheduler.enforce_single_tenant_per_context);
+        scheduler.enforce_single_tenant_per_context = config.scheduler_enforce_single_tenant_per_context;
+        config.scheduler_backoff_base_seconds = toInt(config.scheduler_backoff_base_seconds, scheduler.backoff_base_seconds, 1, 120);
+        scheduler.backoff_base_seconds = config.scheduler_backoff_base_seconds;
+
+        config.matrix = ensureObject(config.matrix, {
+          version: '2.0',
+          shell: {},
+          tool_retrieval: {},
+          reasoning: {},
+          decision_making: {},
+        });
+        config.matrix.shell = ensureObject(config.matrix.shell, {
+          enabled: true,
+          command_safety_weight: 0.35,
+          command_safety_threshold: 0.95,
+          command_safety_hard_fail: 0.60,
+          execution_reliability_weight: 0.30,
+          execution_reliability_threshold: 0.75,
+          execution_reliability_hard_fail: 0.65,
+          semantic_match_weight: 0.35,
+          semantic_match_threshold: 0.82,
+        });
+        config.matrix.tool_retrieval = ensureObject(config.matrix.tool_retrieval, {
+          enabled: true,
+          evidence_recall_weight: 0.40,
+          evidence_recall_threshold: 0.78,
+          evidence_recall_hard_fail: 0.50,
+          evidence_precision_weight: 0.40,
+          evidence_precision_threshold: 0.80,
+          evidence_precision_hard_fail: 0.55,
+          semantic_match_weight: 0.20,
+          semantic_match_threshold: 0.70,
+        });
+        config.matrix.reasoning = ensureObject(config.matrix.reasoning, {
+          enabled: true,
+          answer_quality_weight: 0.60,
+          answer_quality_threshold: 0.80,
+          answer_quality_hard_fail: 0.65,
+          policy_compliance_weight: 0.40,
+          policy_compliance_threshold: 1,
+          policy_compliance_hard_fail: 1,
+          semantic_match_weight: 0.20,
+          semantic_match_threshold: 0.72,
+        });
+        config.matrix.decision_making = ensureObject(config.matrix.decision_making, {
+          enabled: true,
+          policy_compliance_weight: 1.0,
+          policy_compliance_threshold: 1,
+          policy_compliance_hard_fail: 1,
+          semantic_match_weight: 0.30,
+          semantic_match_threshold: 0.75,
+          semantic_match_hard_fail: 0.55,
+          answer_quality_weight: 0.35,
+          answer_quality_threshold: 0.70,
+          answer_quality_hard_fail: 0.50,
+        });
+
+        config.matrix.shell.enabled = toBool(config.matrix.shell.enabled, true);
+        config.matrix.shell.command_safety_weight = toFloat(config.matrix.shell.command_safety_weight, 0.35, 0, 1);
+        config.matrix.shell.command_safety_threshold = toFloat(config.matrix.shell.command_safety_threshold, 0.95, 0, 1);
+        config.matrix.shell.command_safety_hard_fail = toFloat(config.matrix.shell.command_safety_hard_fail, 0.60, 0, 1);
+        config.matrix.shell.execution_reliability_weight = toFloat(config.matrix.shell.execution_reliability_weight, 0.30, 0, 1);
+        config.matrix.shell.execution_reliability_threshold = toFloat(config.matrix.shell.execution_reliability_threshold, 0.75, 0, 1);
+        config.matrix.shell.execution_reliability_hard_fail = toFloat(config.matrix.shell.execution_reliability_hard_fail, 0.65, 0, 1);
+        config.matrix.shell.semantic_match_weight = toFloat(config.matrix.shell.semantic_match_weight, 0.35, 0, 1);
+        config.matrix.shell.semantic_match_threshold = toFloat(config.matrix.shell.semantic_match_threshold, 0.82, 0, 1);
+
+        config.matrix.tool_retrieval.enabled = toBool(config.matrix.tool_retrieval.enabled, true);
+        config.matrix.tool_retrieval.evidence_recall_weight = toFloat(config.matrix.tool_retrieval.evidence_recall_weight, 0.40, 0, 1);
+        config.matrix.tool_retrieval.evidence_recall_threshold = toFloat(config.matrix.tool_retrieval.evidence_recall_threshold, 0.78, 0, 1);
+        config.matrix.tool_retrieval.evidence_recall_hard_fail = toFloat(config.matrix.tool_retrieval.evidence_recall_hard_fail, 0.50, 0, 1);
+        config.matrix.tool_retrieval.evidence_precision_weight = toFloat(config.matrix.tool_retrieval.evidence_precision_weight, 0.40, 0, 1);
+        config.matrix.tool_retrieval.evidence_precision_threshold = toFloat(config.matrix.tool_retrieval.evidence_precision_threshold, 0.80, 0, 1);
+        config.matrix.tool_retrieval.evidence_precision_hard_fail = toFloat(config.matrix.tool_retrieval.evidence_precision_hard_fail, 0.55, 0, 1);
+        config.matrix.tool_retrieval.semantic_match_weight = toFloat(config.matrix.tool_retrieval.semantic_match_weight, 0.20, 0, 1);
+        config.matrix.tool_retrieval.semantic_match_threshold = toFloat(config.matrix.tool_retrieval.semantic_match_threshold, 0.70, 0, 1);
+
+        config.matrix.reasoning.enabled = toBool(config.matrix.reasoning.enabled, true);
+        config.matrix.reasoning.answer_quality_weight = toFloat(config.matrix.reasoning.answer_quality_weight, 0.60, 0, 1);
+        config.matrix.reasoning.answer_quality_threshold = toFloat(config.matrix.reasoning.answer_quality_threshold, 0.80, 0, 1);
+        config.matrix.reasoning.answer_quality_hard_fail = toFloat(config.matrix.reasoning.answer_quality_hard_fail, 0.65, 0, 1);
+        config.matrix.reasoning.policy_compliance_weight = toFloat(config.matrix.reasoning.policy_compliance_weight, 0.40, 0, 1);
+        config.matrix.reasoning.policy_compliance_threshold = toFloat(config.matrix.reasoning.policy_compliance_threshold, 1, 0, 1);
+        config.matrix.reasoning.policy_compliance_hard_fail = toFloat(config.matrix.reasoning.policy_compliance_hard_fail, 1, 0, 1);
+        config.matrix.reasoning.semantic_match_weight = toFloat(config.matrix.reasoning.semantic_match_weight, 0.20, 0, 1);
+        config.matrix.reasoning.semantic_match_threshold = toFloat(config.matrix.reasoning.semantic_match_threshold, 0.72, 0, 1);
+
+        config.matrix.decision_making.enabled = toBool(config.matrix.decision_making.enabled, true);
+        config.matrix.decision_making.policy_compliance_weight = toFloat(config.matrix.decision_making.policy_compliance_weight, 1.0, 0, 1);
+        config.matrix.decision_making.policy_compliance_threshold = toFloat(config.matrix.decision_making.policy_compliance_threshold, 1.0, 0, 1);
+        config.matrix.decision_making.policy_compliance_hard_fail = toFloat(config.matrix.decision_making.policy_compliance_hard_fail, 1.0, 0, 1);
+        config.matrix.decision_making.semantic_match_weight = toFloat(config.matrix.decision_making.semantic_match_weight, 0.30, 0, 1);
+        config.matrix.decision_making.semantic_match_threshold = toFloat(config.matrix.decision_making.semantic_match_threshold, 0.75, 0, 1);
+        config.matrix.decision_making.semantic_match_hard_fail = toFloat(config.matrix.decision_making.semantic_match_hard_fail, 0.55, 0, 1);
+        config.matrix.decision_making.answer_quality_weight = toFloat(config.matrix.decision_making.answer_quality_weight, 0.35, 0, 1);
+        config.matrix.decision_making.answer_quality_threshold = toFloat(config.matrix.decision_making.answer_quality_threshold, 0.70, 0, 1);
+        config.matrix.decision_making.answer_quality_hard_fail = toFloat(config.matrix.decision_making.answer_quality_hard_fail, 0.50, 0, 1);
+
+        config.evaluator = ensureObject(config.evaluator, {
+          enable_semantic_judge: true,
+          preferred_dspy_model: '',
+          semantic_loop_batch_size: 8,
+          risk_threshold: 0.25,
+          enable_replay_audit: true,
+          max_replay_depth: 6,
+        });
+        config.evaluator.enable_semantic_judge = toBool(config.evaluator.enable_semantic_judge, true);
+        config.evaluator.preferred_dspy_model = toText(config.evaluator.preferred_dspy_model, '');
+        config.evaluator.semantic_loop_batch_size = toInt(config.evaluator.semantic_loop_batch_size, 8, 1, 64);
+        config.evaluator.risk_threshold = toFloat(config.evaluator.risk_threshold, 0.25, 0, 1);
+        config.evaluator.enable_replay_audit = toBool(config.evaluator.enable_replay_audit, true);
+        config.evaluator.max_replay_depth = toInt(config.evaluator.max_replay_depth, 6, 1, 20);
+        config.evaluator.policy_breach_keywords = Array.isArray(config.evaluator.policy_breach_keywords)
+          ? config.evaluator.policy_breach_keywords
+          : toText(config.evaluator.policy_breach_keywords, '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+
+        if (!config.evaluator.policy_breach_keywords.length) {
+          config.evaluator.policy_breach_keywords = [
+            'forbidden',
+            'delete production',
+            'drop table',
+            'rm -rf /',
+            'exfiltrate',
+            'secret',
+            'pwn',
+            'overwrite backups',
+            'disable auth',
+          ];
+        }
+
+        config.prompt = ensureObject(config.prompt, {
+          inject_guidance: true,
+          inject_even_without_guidance: true,
+          max_injected_chars: 1800,
+          fallback_guidance: 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.',
+        });
+        config.prompt.inject_guidance = toBool(config.prompt.inject_guidance, true);
+        config.prompt.inject_even_without_guidance = toBool(config.prompt.inject_even_without_guidance, true);
+        config.prompt.max_injected_chars = toInt(config.prompt.max_injected_chars, 1800, 128, 30000);
+        config.prompt.fallback_guidance = toText(config.prompt.fallback_guidance, 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.');
+
+        config.dependencies = ensureObject(config.dependencies, {
+          install_mode: 'auto',
+          dependency_file: 'requirements.txt',
+          fallback_to_pip: true,
+          ensure_at_startup: false,
+          install_timeout_seconds: 0,
+        });
+        config.dependencies.install_mode = toText(config.dependencies.install_mode, 'auto');
+        config.dependencies.dependency_file = toText(config.dependencies.dependency_file, 'requirements.txt');
+        config.dependencies.fallback_to_pip = toBool(config.dependencies.fallback_to_pip, true);
+        config.dependencies.ensure_at_startup = toBool(config.dependencies.ensure_at_startup, false);
+        config.dependencies.install_timeout_seconds = toInt(config.dependencies.install_timeout_seconds, 0, 0, 1800);
+
+        $watch(() => config.scheduler_mode, (value) => {
+          scheduler.mode = toText(value, 'distributed').toLowerCase();
+        });
+        $watch(() => config.scheduler_max_workers, (value) => {
+          scheduler.max_workers = toInt(value, 2, 1, 64);
+        });
+        $watch(() => config.scheduler_poll_interval_seconds, (value) => {
+          scheduler.poll_interval_seconds = toInt(value, 3, 1, 300);
+        });
+        $watch(() => config.scheduler_job_lease_seconds, (value) => {
+          scheduler.job_lease_seconds = toInt(value, 45, 10, 2000);
+        });
+        $watch(() => config.scheduler_max_retries, (value) => {
+          scheduler.max_retries = toInt(value, 2, 0, 50);
+        });
+        $watch(() => config.scheduler_heartbeat_seconds, (value) => {
+          scheduler.heartbeat_seconds = toInt(value, 8, 2, 120);
+        });
+        $watch(() => config.scheduler_stale_worker_seconds, (value) => {
+          scheduler.stale_worker_seconds = toInt(value, 180, 20, 3600);
+        });
+        $watch(() => config.scheduler_lock_ttl_seconds, (value) => {
+          scheduler.scheduler_lock_ttl_seconds = toInt(value, 30, 10, 600);
+        });
+        $watch(() => config.scheduler_backoff_base_seconds, (value) => {
+          scheduler.backoff_base_seconds = toInt(value, 2, 1, 120);
+        });
+        $watch(() => config.scheduler_enforce_single_tenant_per_context, (value) => {
+          scheduler.enforce_single_tenant_per_context = toBool(value, false);
+        });
+
+        $watch(() => config.auto_optimize_enabled, (value) => {
+          const optimizationSection = ensureOptimizationSection();
+          optimizationSection.auto_optimize = toBool(value, false);
+        });
+        $watch(() => config.gepa_steps, (value) => {
+          const mapped = toInt(value, 3, 1, 128);
+          const optimizationSection = ensureOptimizationSection();
+          optimizationSection.ge_pa_steps = mapped;
+          optimizationSection.gepa_steps = mapped;
+        });
+        $watch(() => config.gepa_threads, (value) => {
+          const mapped = toInt(value, 2, 1, 64);
+          const optimizationSection = ensureOptimizationSection();
+          optimizationSection.ge_pa_threads = mapped;
+          optimizationSection.gepa_threads = mapped;
+        });
+        $watch(() => config.optimization_trace_window, (value) => {
+          const traceCaptureSection = ensureTraceCaptureSection();
+          traceCaptureSection.max_events_per_context = toInt(value, config.optimization_trace_window, 10, 2000000);
+        });
+        $watch(() => config.optimization_preview_limit, (value) => {
+          const optimizationSection = ensureOptimizationSection();
+          optimizationSection.optimization_preview_limit = toInt(value, 20, 10, 10000);
+        });
+      "
+    >
+      <template x-if="config && typeof config === 'object'">
+        <section class="dspy-config-shell">
+          <header class="dspy-config-header">
+            <div>
+              <p class="dspy-eyebrow">DSPy RLM Cockpit</p>
+              <h1>Configuration Studio</h1>
+              <p class="dspy-subtitle">
+                Tune optimization, distributed scheduling, matrix gates, semantic evaluation, and dependency behavior from one screen.
+              </p>
+            </div>
+            <div class="dspy-header-actions">
+              <span class="dspy-status-pill" :class="config.enabled ? 'is-on' : 'is-off'" x-text="config.enabled ? 'Runtime: On' : 'Runtime: Off'"></span>
+              <span class="dspy-status-pill" x-text="`${config.scheduler_mode}`"></span>
+            </div>
+          </header>
+
+          <section class="dspy-presets">
+            <button type="button" class="dspy-btn" @click="applyPreset('safe')">Safe</button>
+            <button type="button" class="dspy-btn is-strong" @click="applyPreset('balanced')">Balanced</button>
+            <button type="button" class="dspy-btn" @click="applyPreset('aggressive')">Aggressive</button>
+          </section>
+
+          <section class="dspy-grid">
+            <div class="dspy-card">
+              <h2>Core controls</h2>
+              <div class="dspy-field">
+                <label>
+                  <span>Plugin enabled</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.enabled" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Trace instrumentation</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.instrumentation_enabled" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Trace capture active</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.trace_enabled" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Status refresh (seconds)</span>
+                  <input type="number" min="1" max="120" step="1" x-model.number="config.status_refresh_seconds" />
+                </label>
+                <small>UI polling interval while browsing status.</small>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Trace events per context</span>
+                  <input type="number" min="10" step="20" x-model.number="config.trace_capture.max_events_per_context" />
+                </label>
+                <small>Window size used by optimization traces.</small>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Trace events per loop</span>
+                  <input type="number" min="1" step="1" x-model.number="config.trace_capture.max_events_per_loop" />
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Payload chars per event</span>
+                  <input type="number" min="64" step="32" x-model.number="config.trace_capture.max_event_payload_chars" />
+                </label>
+              </div>
+            </div>
+
+            <div class="dspy-card">
+              <h2>Optimization gates</h2>
+              <div class="dspy-field">
+                <label>
+                  <span>Auto optimize</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.auto_optimize_enabled" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Interval messages</span>
+                  <input type="number" min="1" step="1" x-model.number="config.optimization_interval_messages" />
+                </label>
+                <small>Trigger cadence in loop count.</small>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Min samples</span>
+                  <input type="number" min="1" step="1" x-model.number="config.optimization_min_samples" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Cooldown (hours)</span>
+                  <input type="number" min="0" step="1" x-model.number="config.optimization_cooldown_hours" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Trace retention window</span>
+                  <input type="number" min="60" step="1" x-model.number="config.optimization_trace_window" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Preview limit</span>
+                  <input type="number" min="10" step="1" x-model.number="config.optimization_preview_limit" />
+                </label>
+              </div>
+            </div>
+
+            <div class="dspy-card">
+              <h2>GEPA engine</h2>
+              <div class="dspy-field">
+                <label>
+                  <span>Enable GEPA</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.enable_dspy_optimizer" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>GEPA steps</span>
+                  <input type="number" min="1" max="64" step="1" x-model.number="config.gepa_steps" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>GEPA threads</span>
+                  <input type="number" min="1" max="64" step="1" x-model.number="config.gepa_threads" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Max evaluation batch</span>
+                  <input type="number" min="1" max="128" step="1" x-model.number="config.optimization.max_evaluation_batch" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Replay size</span>
+                  <input type="number" min="1" max="20" step="1" x-model.number="config.replay_set_size" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Replay regression tolerance</span>
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.replay_tolerable_regression" />
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Enable replay audit</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.enable_replay_audit" /><span class="slider"></span></label>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="dspy-card">
+            <h2>Distributed scheduler topology</h2>
+            <div class="dspy-grid dspy-grid--small">
+              <div class="dspy-cell">
+                <label>Mode</label>
+                <select x-model="config.scheduler_mode">
+                  <option value="single">single</option>
+                  <option value="distributed">distributed</option>
+                </select>
+              </div>
+              <div class="dspy-cell">
+                <label>Max workers</label>
+                <input type="number" min="1" max="64" step="1" x-model.number="config.scheduler_max_workers" />
+              </div>
+              <div class="dspy-cell">
+                <label>Poll interval (sec)</label>
+                <input type="number" min="1" max="300" step="1" x-model.number="config.scheduler_poll_interval_seconds" />
+              </div>
+              <div class="dspy-cell">
+                <label>Job lease (sec)</label>
+                <input type="number" min="10" max="2000" step="1" x-model.number="config.scheduler_job_lease_seconds" />
+              </div>
+              <div class="dspy-cell">
+                <label>Max retries</label>
+                <input type="number" min="0" max="50" step="1" x-model.number="config.scheduler_max_retries" />
+              </div>
+              <div class="dspy-cell">
+                <label>Heartbeat (sec)</label>
+                <input type="number" min="2" max="120" step="1" x-model.number="config.scheduler_heartbeat_seconds" />
+              </div>
+              <div class="dspy-cell">
+                <label>Stale worker timeout</label>
+                <input type="number" min="20" max="3600" step="1" x-model.number="config.scheduler_stale_worker_seconds" />
+              </div>
+              <div class="dspy-cell">
+                <label>Lock TTL</label>
+                <input type="number" min="10" max="600" step="1" x-model.number="config.scheduler_lock_ttl_seconds" />
+              </div>
+              <div class="dspy-cell">
+                <label>Backoff base (sec)</label>
+                <input type="number" min="1" max="120" step="1" x-model.number="config.scheduler_backoff_base_seconds" />
+              </div>
+              <div class="dspy-cell">
+                <label>Single-tenant enforcement</label>
+                <label class="toggle inline"><input type="checkbox" x-model="config.scheduler_enforce_single_tenant_per_context" /><span class="slider"></span></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="dspy-card">
+            <h2>Validation matrix</h2>
+            <div class="dspy-matrix-grid">
+              <article class="dspy-matrix-card">
+                <header>Shell</header>
+                <label class="dspy-field-toggle"><span>Enabled</span><label class="toggle"><input type="checkbox" x-model="config.matrix.shell.enabled" /><span class="slider"></span></label></label>
+                <label>Safety weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.command_safety_weight" />
+                </label>
+                <label>Safety threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.command_safety_threshold" />
+                </label>
+                <label>Safety hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.command_safety_hard_fail" />
+                </label>
+                <label>Reliability weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.execution_reliability_weight" />
+                </label>
+                <label>Reliability threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.execution_reliability_threshold" />
+                </label>
+                <label>Reliability hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.execution_reliability_hard_fail" />
+                </label>
+                <label>Semantic match weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.semantic_match_weight" />
+                </label>
+                <label>Semantic threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.shell.semantic_match_threshold" />
+                </label>
+              </article>
+
+              <article class="dspy-matrix-card">
+                <header>Tool retrieval</header>
+                <label class="dspy-field-toggle"><span>Enabled</span><label class="toggle"><input type="checkbox" x-model="config.matrix.tool_retrieval.enabled" /><span class="slider"></span></label></label>
+                <label>Recall weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.evidence_recall_weight" />
+                </label>
+                <label>Recall threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.evidence_recall_threshold" />
+                </label>
+                <label>Recall hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.evidence_recall_hard_fail" />
+                </label>
+                <label>Precision weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.evidence_precision_weight" />
+                </label>
+                <label>Precision threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.evidence_precision_threshold" />
+                </label>
+                <label>Precision hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.evidence_precision_hard_fail" />
+                </label>
+                <label>Semantic weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.semantic_match_weight" />
+                </label>
+                <label>Semantic threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.tool_retrieval.semantic_match_threshold" />
+                </label>
+              </article>
+
+              <article class="dspy-matrix-card">
+                <header>Reasoning</header>
+                <label class="dspy-field-toggle"><span>Enabled</span><label class="toggle"><input type="checkbox" x-model="config.matrix.reasoning.enabled" /><span class="slider"></span></label></label>
+                <label>Answer quality weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.answer_quality_weight" />
+                </label>
+                <label>Answer quality threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.answer_quality_threshold" />
+                </label>
+                <label>Answer quality hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.answer_quality_hard_fail" />
+                </label>
+                <label>Policy weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.policy_compliance_weight" />
+                </label>
+                <label>Policy threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.policy_compliance_threshold" />
+                </label>
+                <label>Policy hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.policy_compliance_hard_fail" />
+                </label>
+                <label>Semantic weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.semantic_match_weight" />
+                </label>
+                <label>Semantic threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.reasoning.semantic_match_threshold" />
+                </label>
+              </article>
+
+              <article class="dspy-matrix-card">
+                <header>Decision making</header>
+                <label class="dspy-field-toggle"><span>Enabled</span><label class="toggle"><input type="checkbox" x-model="config.matrix.decision_making.enabled" /><span class="slider"></span></label></label>
+                <label>Policy weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.policy_compliance_weight" />
+                </label>
+                <label>Policy threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.policy_compliance_threshold" />
+                </label>
+                <label>Policy hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.policy_compliance_hard_fail" />
+                </label>
+                <label>Semantic weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.semantic_match_weight" />
+                </label>
+                <label>Semantic threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.semantic_match_threshold" />
+                </label>
+                <label>Semantic hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.semantic_match_hard_fail" />
+                </label>
+                <label>Answer quality weight
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.answer_quality_weight" />
+                </label>
+                <label>Answer quality threshold
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.answer_quality_threshold" />
+                </label>
+                <label>Answer quality hard fail
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.matrix.decision_making.answer_quality_hard_fail" />
+                </label>
+              </article>
+            </div>
+          </section>
+
+          <section class="dspy-grid">
+            <div class="dspy-card">
+              <h2>Evaluator quality loops</h2>
+              <div class="dspy-field">
+                <label>
+                  <span>Enable semantic evaluator</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.evaluator.enable_semantic_judge" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Preferred DSPy model</span>
+                  <input type="text" x-model="config.evaluator.preferred_dspy_model" placeholder="optional" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Batch size</span>
+                  <input type="number" min="1" max="64" step="1" x-model.number="config.evaluator.semantic_loop_batch_size" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Risk threshold</span>
+                  <input type="number" min="0" max="1" step="0.01" x-model.number="config.evaluator.risk_threshold" />
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Policy breach keywords</span>
+                  <textarea
+                    rows="8"
+                    :value="(config.evaluator.policy_breach_keywords || []).join('\n')"
+                    @input="
+                      const values = String($event.target.value || '').split('\n').map((value) => value.trim()).filter(Boolean);
+                      config.evaluator.policy_breach_keywords = values;
+                    "
+                  ></textarea>
+                </label>
+                <small>One keyword per line.</small>
+              </div>
+            </div>
+
+            <div class="dspy-card">
+              <h2>Prompt guidance</h2>
+              <div class="dspy-field">
+                <label>
+                  <span>Inject guidance</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.prompt.inject_guidance" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Inject without guidance</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.prompt.inject_even_without_guidance" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Max injected chars</span>
+                  <input type="number" min="128" max="30000" step="64" x-model.number="config.prompt.max_injected_chars" />
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Fallback guidance</span>
+                  <textarea rows="6" x-model="config.prompt.fallback_guidance"></textarea>
+                </label>
+              </div>
+            </div>
+
+            <div class="dspy-card">
+              <h2>Dependency operations</h2>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Install mode</span>
+                  <select x-model="config.dependencies.install_mode">
+                    <option value="auto">auto</option>
+                    <option value="manual">manual</option>
+                  </select>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Dependency manifest</span>
+                  <input type="text" x-model="config.dependencies.dependency_file" />
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Fallback to pip</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.dependencies.fallback_to_pip" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field">
+                <label>
+                  <span>Ensure at startup</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.dependencies.ensure_at_startup" /><span class="slider"></span></label>
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Install timeout</span>
+                  <input type="number" min="0" max="1800" step="15" x-model.number="config.dependencies.install_timeout_seconds" />
+                </label>
+              </div>
+              <p class="hint">Runtime install command is defined in plugin hooks and can be run manually via host tooling.</p>
+            </div>
+          </section>
+        </section>
+      </template>
+      <template x-if="!config || typeof config !== 'object'">
+        <p class="dspy-config-empty-state">Loading saved settings…</p>
+      </template>
+    </div>
+  </body>
+
+  <style>
+    :root {
+      --dspy-bg-1: #0a1631;
+      --dspy-bg-2: #111c3b;
+      --dspy-surface: color-mix(in srgb, #111a38 78%, transparent);
+      --dspy-stroke: color-mix(in srgb, #9db7ff 24%, transparent);
+      --dspy-text: #edf2ff;
+      --dspy-soft: #a2aecb;
+      --dspy-soft-border: color-mix(in srgb, #9fc4ff 28%, transparent);
+      --dspy-on: #3ed1a4;
+      --dspy-off: #d66a68;
+      --dspy-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+    }
+
+    @keyframes reveal {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .dspy-config-shell {
+      color: var(--dspy-text);
+      background: radial-gradient(circle at 14% 14%, rgba(120, 160, 255, 0.18), transparent 38%),
+        radial-gradient(circle at 84% 0%, rgba(76, 190, 162, 0.17), transparent 32%),
+        linear-gradient(165deg, var(--dspy-bg-1), var(--dspy-bg-2));
+      border: 1px solid var(--dspy-stroke);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 2px;
+      box-shadow: var(--dspy-shadow);
+      animation: reveal 320ms ease;
+      backdrop-filter: blur(2px);
+      font-family: 'Trebuchet MS', 'Avenir Next', 'Segoe UI', sans-serif;
+    }
+
+    .dspy-config-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .dspy-eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 0.72rem;
+      margin: 0 0 4px;
+      color: #86bfff;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+      line-height: 1.1;
+    }
+
+    .dspy-subtitle {
+      margin: 8px 0 0;
+      color: var(--dspy-soft);
+      font-size: 0.9rem;
+      max-width: 64ch;
+    }
+
+    .dspy-header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .dspy-status-pill {
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      border: 1px solid var(--dspy-soft-border);
+      background: rgba(255, 255, 255, 0.05);
+      color: #deebff;
+      text-transform: capitalize;
+    }
+
+    .dspy-status-pill.is-on {
+      border-color: rgba(62, 209, 164, 0.55);
+      color: #9ef0cc;
+      background: rgba(62, 209, 164, 0.12);
+    }
+
+    .dspy-status-pill.is-off {
+      border-color: rgba(214, 106, 104, 0.55);
+      color: #ffc7c6;
+      background: rgba(214, 106, 104, 0.14);
+    }
+
+    .dspy-presets {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .dspy-btn {
+      border: 1px solid var(--dspy-soft-border);
+      background: rgba(255, 255, 255, 0.06);
+      color: #e6ecff;
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .dspy-btn.is-strong {
+      border-color: rgba(62, 209, 164, 0.55);
+      background: rgba(62, 209, 164, 0.12);
+    }
+
+    .dspy-btn:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+
+    .dspy-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .dspy-grid--small {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+
+    .dspy-card {
+      background: color-mix(in srgb, var(--dspy-surface) 84%, transparent);
+      border: 1px solid var(--dspy-soft-border);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 9px;
+    }
+
+    .dspy-card > h2 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.015em;
+    }
+
+    .dspy-field,
+    .dspy-cell {
+      display: grid;
+      gap: 6px;
+    }
+
+    .dspy-cell label,
+    .dspy-field label {
+      font-size: 0.83rem;
+      display: grid;
+      gap: 6px;
+      color: #deecff;
+    }
+
+    .dspy-card small,
+    .dspy-cell small,
+    .hint {
+      color: var(--dspy-soft);
+      font-size: 0.74rem;
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    .dspy-field-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .dspy-field input[type='number'],
+    .dspy-cell input,
+    .dspy-field input[type='text'],
+    .dspy-field select,
+    .dspy-cell select,
+    textarea {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--dspy-soft-border);
+      background: rgba(10, 17, 41, 0.8);
+      color: var(--dspy-text);
+      padding: 7px 8px;
+      font: inherit;
+    }
+
+    .dspy-matrix-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .dspy-matrix-card {
+      border: 1px solid var(--dspy-soft-border);
+      border-radius: 10px;
+      background: rgba(16, 27, 52, 0.45);
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .dspy-matrix-card header {
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 2px;
+      font-size: 0.86rem;
+      color: #d6e7ff;
+    }
+
+    .toggle {
+      position: relative;
+      width: 38px;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .toggle input {
+      opacity: 0;
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .toggle .slider {
+      width: 100%;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.2);
+      position: relative;
+      transition: background 160ms ease;
+    }
+
+    .toggle .slider::after {
+      content: '';
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #f4f7ff;
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      transition: transform 150ms ease;
+      box-shadow: 0 0 0 0 rgba(62, 209, 164, 0.35);
+    }
+
+    .toggle input:checked + .slider {
+      background: rgba(62, 209, 164, 0.5);
+    }
+
+    .toggle input:checked + .slider::after {
+      transform: translateX(18px);
+      background: #effcff;
+    }
+
+    .dspy-cell .toggle {
+      margin-left: auto;
+    }
+
+    .dspy-config-empty-state {
+      margin: 0;
+      color: var(--dspy-soft);
+      font-size: 0.9rem;
+      padding: 0.5rem 0;
+    }
+
+    @media (max-width: 1020px) {
+      .dspy-config-header,
+      .dspy-grid {
+        gap: 10px;
+      }
+
+      .dspy-card {
+        padding: 10px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .dspy-btn,
+      .dspy-field input,
+      .dspy-field select,
+      .dspy-cell input,
+      .dspy-cell select,
+      textarea {
+        width: 100%;
+      }
+
+      .dspy-presets {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+  </style>
+</html>

@@ -1,0 +1,9 @@
+name: dspy_rlm
+title: DSPy GEPA/RLM Self-Improvement
+description: Disabled-by-default local evidence and guidance experimentation; explicit operator enablement is required.
+version: 0.2.0
+always_enabled: false
+settings_sections:
+  - agent
+per_project_config: false
+per_agent_config: false
