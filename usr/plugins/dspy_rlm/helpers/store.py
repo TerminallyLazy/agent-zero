@@ -17,7 +17,7 @@ from typing import Any, Iterable, Mapping
 
 from .paths import STORE_FILE
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _CONNECTION_LOCK = threading.RLock()
 
 
@@ -199,6 +199,66 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
       updated_at REAL NOT NULL,
       expires_at REAL NOT NULL
     );
+    """),
+    (2, """
+    CREATE TABLE IF NOT EXISTS prompt_snapshots (
+      snapshot_id TEXT PRIMARY KEY,
+      context_id TEXT NOT NULL,
+      base_digest TEXT NOT NULL,
+      components_json TEXT NOT NULL,
+      protected_json TEXT NOT NULL,
+      created_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_prompt_snapshots_context_created
+      ON prompt_snapshots(context_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS prompt_artifacts (
+      artifact_id TEXT PRIMARY KEY,
+      context_id TEXT NOT NULL,
+      target_key TEXT NOT NULL,
+      target_mode TEXT NOT NULL,
+      activation_mode TEXT NOT NULL,
+      base_digest TEXT NOT NULL,
+      artifact_json TEXT NOT NULL,
+      artifact_digest TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_prompt_artifacts_context_created
+      ON prompt_artifacts(context_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS active_prompt_artifacts (
+      context_id TEXT NOT NULL,
+      target_key TEXT NOT NULL,
+      artifact_id TEXT NOT NULL,
+      baseline_snapshot_id TEXT NOT NULL,
+      state TEXT NOT NULL,
+      activation_mode TEXT NOT NULL,
+      canary_percentage INTEGER NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 0,
+      observations INTEGER NOT NULL DEFAULT 0,
+      failures INTEGER NOT NULL DEFAULT 0,
+      baseline_failure_rate REAL NOT NULL DEFAULT 0,
+      updated_at REAL NOT NULL,
+      PRIMARY KEY(context_id, target_key),
+      FOREIGN KEY(artifact_id) REFERENCES prompt_artifacts(artifact_id),
+      FOREIGN KEY(baseline_snapshot_id) REFERENCES prompt_snapshots(snapshot_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS prompt_activation_audits (
+      audit_id TEXT PRIMARY KEY,
+      context_id TEXT NOT NULL,
+      target_key TEXT NOT NULL,
+      artifact_id TEXT,
+      action TEXT NOT NULL,
+      previous_state TEXT,
+      resulting_state TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_prompt_activation_audits_context_created
+      ON prompt_activation_audits(context_id, created_at DESC);
     """),
 )
 
@@ -532,6 +592,15 @@ class Store:
         with self._connect() as conn:
             rows = conn.execute("SELECT worker_id,heartbeat_json,updated_at,expires_at FROM worker_heartbeats WHERE expires_at>? ORDER BY worker_id", (_now(),)).fetchall()
         return [{"worker_id": row["worker_id"], "heartbeat": _decode(row["heartbeat_json"]), "updated_at": row["updated_at"], "expires_at": row["expires_at"]} for row in rows]
+
+    def remove_workers(self, worker_ids: list[str]) -> int:
+        normalized = sorted({str(worker_id).strip() for worker_id in worker_ids if str(worker_id).strip()})
+        if not normalized:
+            return 0
+        placeholders = ",".join("?" for _ in normalized)
+        with _CONNECTION_LOCK, self._connect() as conn:
+            cursor = conn.execute(f"DELETE FROM worker_heartbeats WHERE worker_id IN ({placeholders})", normalized)
+        return int(cursor.rowcount or 0)
 
 
 # Explicit repository aliases keep call sites focused on their bounded domain.

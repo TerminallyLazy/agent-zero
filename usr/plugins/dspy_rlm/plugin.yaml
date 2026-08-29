@@ -1,7 +1,7 @@
 name: dspy_rlm
-title: DSPy GEPA/RLM Self-Improvement
-description: Disabled-by-default local evidence and guidance experimentation; explicit operator enablement is required.
-version: 0.2.0
+title: A0 Self-Improvement
+description: Improves Agent Zero with DSPy GEPA optimization, bounded RLM analysis of execution evidence, semantic evaluation, and managed multiprocess workers.
+version: 1.0.0
 always_enabled: false
 settings_sections:
   - agent

@@ -26,6 +26,10 @@ class RuntimePolicy:
     manual_optimization_enabled: bool
     injection_enabled: bool
     auto_promotion_enabled: bool
+    prompt_optimization_enabled: bool
+    prompt_capture_enabled: bool
+    prompt_target_mode: str
+    prompt_activation_mode: str
     dry_run_mode: bool
     dry_run_promote_only: bool
     min_samples_for_promotion: int
@@ -40,10 +44,13 @@ class RuntimePolicy:
         normalized = normalize_config(dict(config) if isinstance(config, Mapping) else None)
         optimization = normalized.get("optimization", {})
         prompt = normalized.get("prompt", {})
+        prompt_optimization = normalized.get("prompt_optimization", {})
         if not isinstance(optimization, dict):
             optimization = {}
         if not isinstance(prompt, dict):
             prompt = {}
+        if not isinstance(prompt_optimization, dict):
+            prompt_optimization = {}
 
         return cls(
             enabled=bool(normalized.get("enabled", False)),
@@ -53,6 +60,10 @@ class RuntimePolicy:
             manual_optimization_enabled=bool(optimization.get("manual_optimize", True)),
             injection_enabled=bool(prompt.get("inject_guidance", False)),
             auto_promotion_enabled=bool(optimization.get("auto_promote", False)),
+            prompt_optimization_enabled=bool(prompt_optimization.get("enabled", False)),
+            prompt_capture_enabled=bool(prompt_optimization.get("allow_prompt_capture", False)),
+            prompt_target_mode=str(prompt_optimization.get("target_mode") or "guidance_overlay"),
+            prompt_activation_mode=str(prompt_optimization.get("activation_mode") or "manual"),
             dry_run_mode=bool(optimization.get("dry_run_mode", False)),
             dry_run_promote_only=bool(optimization.get("dry_run_promote_only", False)),
             min_samples_for_promotion=int(optimization.get("min_samples_for_promotion", 1)),
@@ -70,7 +81,8 @@ class RuntimePolicy:
         """Return stable deny reasons for a capability.
 
         Supported capabilities are ``capture``, ``enqueue``, ``optimize``,
-        ``inject``, and ``auto_promote``.  Unknown capabilities fail closed.
+        ``inject``, ``optimize_prompt``, and ``auto_promote``. Unknown
+        capabilities fail closed.
         """
         # Diagnostics describe migration/coercion problems.  The migration
         # already closes the affected gate, so they must not couple otherwise
@@ -107,6 +119,13 @@ class RuntimePolicy:
                 reasons.append("auto_promotion_disabled")
             if self.dry_run_mode or self.dry_run_promote_only:
                 reasons.append("dry_run_promotion_blocked")
+        elif capability == "optimize_prompt":
+            if not self.optimization_enabled:
+                reasons.append("optimization_disabled")
+            if not self.prompt_optimization_enabled:
+                reasons.append("prompt_optimization_disabled")
+            if self.prompt_target_mode != "guidance_overlay" and not self.prompt_capture_enabled:
+                reasons.append("prompt_capture_not_approved")
         else:
             reasons.append("unknown_capability")
         return tuple(dict.fromkeys(reasons))

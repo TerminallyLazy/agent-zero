@@ -1,15 +1,17 @@
 <html>
   <head>
-    <title>dspy_rlm</title>
+    <title>A0 Self-Improvement</title>
     <script type="module">
-      import { store } from "/plugins/dspy_rlm/webui/dspy-rlm-store.js";
+    import { store } from "/plugins/dspy_rlm/webui/dspy-rlm-store.js?v=102";
     </script>
   </head>
   <body>
     <div x-data x-init="$store.dspyRlm.initRuntime()" x-destroy="$store.dspyRlm.stopAutoRefresh()">
       <template x-if="!$store.dspyRlm.statusLoaded">
         <div class="plugin-page-loading">
-          <p>Loading status...</p>
+          <div class="loading-orbit" aria-hidden="true"></div>
+          <p class="loading-title">Reading the learning system</p>
+          <p class="loading-copy">Resolving context, workers, evidence, and optimization state.</p>
           <template x-if="$store.dspyRlm.lastError">
             <div class="plugin-error" x-text="$store.dspyRlm.lastError"></div>
           </template>
@@ -27,15 +29,21 @@
       <template x-if="$store.dspyRlm.statusLoaded">
         <section class="dspy-rlm-shell">
           <header class="dspy-rlm-header">
-            <div>
-              <p class="kicker">Optimization cockpit</p>
-              <h1>DSPy RLM</h1>
+            <div class="brand-lockup">
+              <div class="brand-mark" aria-hidden="true">
+                <img src="/plugins/dspy_rlm/webui/thumbnail.png" alt="" />
+              </div>
+              <div>
+                <p class="kicker">Agent Zero learning system</p>
+                <h1>A0 <span>Self-Improvement</span></h1>
+                <p class="header-deck">DSPy GEPA optimization and bounded RLM evidence analysis for this context.</p>
+              </div>
             </div>
             <div class="header-actions">
               <button class="btn btn-field" @click="$store.dspyRlm.refreshStatus({ force: true })" :disabled="$store.dspyRlm.loading">
-                <span x-text="$store.dspyRlm.loading ? 'Refreshing…' : 'Refresh status'"></span>
+                <span x-text="$store.dspyRlm.loading ? 'Syncing...' : 'Sync status'"></span>
               </button>
-              <button class="btn btn-field" @click="$store.dspyRlm.openConfig()">Open settings</button>
+              <button class="btn btn-field is-primary" @click="$store.dspyRlm.openConfig()">Configure</button>
             </div>
           </header>
 
@@ -56,8 +64,9 @@
           </section>
 
           <section class="dspy-rlm-grid">
+            <div class="dashboard-column dashboard-column--primary">
             <article class="panel">
-              <h2>Optimization</h2>
+              <h2>Improvement cycle</h2>
               <div class="metric-grid">
                 <div>
                   <p class="metric-label">Auto optimization</p>
@@ -99,7 +108,7 @@
             </article>
 
             <article class="panel">
-              <h2>Trace signal</h2>
+              <h2>Evidence signal</h2>
               <div class="metric-grid">
                 <div>
                   <p class="metric-label">Events</p>
@@ -127,7 +136,7 @@
             </article>
 
             <article class="panel">
-              <h2>Scheduler</h2>
+              <h2>Worker pool</h2>
               <div class="metric-grid">
                 <div>
                   <p class="metric-label">Mode</p>
@@ -152,9 +161,11 @@
               </p>
               <p class="panel-note">Workers are local processes sharing this host's SQLite store. This is not multi-host distributed scheduling.</p>
             </article>
+            </div>
 
+            <div class="dashboard-column dashboard-column--secondary">
             <article class="panel">
-              <h2>Validation matrix</h2>
+              <h2>Quality gates</h2>
               <template x-if="$store.dspyRlm.matrixSummary.length">
                 <div class="tool-list">
                   <template x-for="metric in $store.dspyRlm.matrixSummary" :key="metric.label">
@@ -176,7 +187,7 @@
             </article>
 
             <article class="panel">
-              <h2>Guidance</h2>
+              <h2>Active guidance</h2>
               <div class="guidance-state">
                 <p>
                   <span class="note-title">Current guidance:</span>
@@ -188,7 +199,7 @@
             </article>
 
             <article class="panel">
-              <h2>Top tools</h2>
+              <h2>Tool patterns</h2>
               <template x-if="$store.dspyRlm.hasRecentEvents()">
                 <div class="tool-list">
                   <template x-for="item in $store.dspyRlm.latestToolRows()" :key="item.toolName">
@@ -208,10 +219,11 @@
                 <p class="panel-note">No tool telemetry in the selected context yet.</p>
               </template>
             </article>
+            </div>
           </section>
 
           <article class="panel panel-full">
-            <h2>Recent optimization run</h2>
+            <h2>Latest run</h2>
             <template x-if="$store.dspyRlm.lastOptimizationResult">
               <div class="result-grid">
                 <p class="result-field"><span>Status:</span> <strong x-text="$store.dspyRlm.lastOptimizationResult.status || '—'"></strong></p>
@@ -263,11 +275,11 @@
 
       .dspy-rlm-header h1 {
         margin: 0;
-        font-size: 1.35rem;
+        font-size: 1.65rem;
       }
 
       .kicker {
-        font-size: 0.75rem;
+        font-size: 0.66rem;
         letter-spacing: 0.13em;
         text-transform: uppercase;
         color: var(--dspy-text-soft);
@@ -450,7 +462,7 @@
         height: 100%;
         border-radius: 999px;
         background: linear-gradient(to right, #ff8f70, #56d39a);
-        transition: width 180ms ease;
+        transition: none;
       }
 
       .guidance-state {
@@ -548,5 +560,6 @@
         border: 1px solid #7a2727;
       }
     </style>
+    <link rel="stylesheet" href="/plugins/dspy_rlm/webui/dspy-rlm-polish.css?v=101" />
   </body>
 </html>

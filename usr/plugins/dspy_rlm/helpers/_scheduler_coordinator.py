@@ -1,9 +1,9 @@
 """Queue-only optimization coordinator.
 
-HTTP/plugin hooks enqueue durable local-multiprocess work.  They never spawn
-processes; operators run ``python3 -m usr.plugins.dspy_rlm.worker --once`` or
-``--serve`` explicitly.  Promotion is intentionally exposed only by the
-:mod:`promotion` coordinator, never by a worker.
+HTTP/plugin hooks enqueue durable local-multiprocess work. Worker lifecycle is
+owned by the plugin supervisor at explicit install, config-save, or enqueue
+seams; status reads never spawn processes. Promotion is intentionally exposed
+only by the :mod:`promotion` coordinator, never by a worker.
 """
 from __future__ import annotations
 
@@ -75,8 +75,8 @@ def schedule_optimization_job(context_id: str, cfg: dict[str, Any] | None = None
     return get_scheduler(plugin_dir).schedule_job(context_id, cfg, force)
 
 
-def scheduler_status(plugin_dir: str | Path | None = None) -> dict[str, Any]:
-    return get_scheduler(plugin_dir).status()
+def scheduler_status(plugin_dir: str | Path | None = None, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    return get_scheduler(plugin_dir).status(cfg)
 
 
 def stop_scheduler(plugin_dir: str | Path | None = None) -> dict[str, Any]:
@@ -138,8 +138,8 @@ class SchedulerCoordinator:
             "objective_id": objective_id, "context_id": context_id, "worker_count": len(self.queue.active_workers()),
         }
 
-    def status(self) -> dict[str, Any]:
-        cfg = config_module.normalize_config(None)
+    def status(self, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+        cfg = config_module.normalize_config(cfg)
         scheduler_cfg = cfg.get("scheduler", {})
         runtime = self.state.runtime_status()
         workers = self.queue.active_workers()

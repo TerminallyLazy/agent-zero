@@ -9,6 +9,7 @@ from usr.plugins.dspy_rlm.helpers import config as config_module
 from usr.plugins.dspy_rlm.helpers import state, trace as trace_helper
 from usr.plugins.dspy_rlm.helpers.runtime_policy import RuntimePolicy
 from usr.plugins.dspy_rlm.helpers import _scheduler_coordinator as scheduler
+from usr.plugins.dspy_rlm.helpers import prompt_artifacts
 
 
 class DspyRlmOptimizationScheduler(Extension):
@@ -44,6 +45,11 @@ class DspyRlmOptimizationScheduler(Extension):
                 loop_iteration=iteration,
                 response_text=response_text,
             )
+            applied_prompt_artifact = str(state.load_context_state(context_id).get("prompt_artifact_applied") or "")
+            if applied_prompt_artifact:
+                prompt_artifacts.record_observation(
+                    context_id, applied_prompt_artifact, success=bool(response_text.strip()), cfg=cfg
+                )
 
         if not policy.can_enqueue():
             return
@@ -56,4 +62,7 @@ class DspyRlmOptimizationScheduler(Extension):
             return
 
         # Queue optimization in the coordinator to avoid blocking message flow.
-        scheduler.schedule_optimization_job(context_id=context_id, cfg=cfg, force=False)
+        queued = scheduler.schedule_optimization_job(context_id=context_id, cfg=cfg, force=False)
+        if queued.get("dispatched", False):
+            from usr.plugins.dspy_rlm.helpers.worker_supervisor import reconcile
+            await asyncio.to_thread(reconcile, cfg)

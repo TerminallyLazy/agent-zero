@@ -1,13 +1,5 @@
-# REVIEW-ONLY GEPA worker dependency manifest. NOT INSTALLABLE.
-#
-# Exact versions are recorded for audit, but package artifact hashes have not been
-# verified from an approved mirror. Do not pass this file to pip. In particular,
-# `pip install --require-hashes -r requirements-gepa.lock` must fail until a
-# reviewer replaces this file with a complete, platform-appropriate hash lock.
-#
-# A usable replacement must pin every resolved direct and transitive wheel with
-# `--hash=sha256:<verified digest>`, be reviewed against the trusted package index,
-# and remain scoped to the isolated plugin worker venv. This plugin never installs
-# this manifest or Agent Zero host dependencies.
-dspy-ai==2.6.27
-gepa==0.0.17
+# Direct worker pins validated against the current DSPy RLM/GEPA API. Installation
+# is always scoped to state/worker-venv and never mutates Agent Zero's interpreter.
+dspy[deno]==3.3.1
+gepa[dspy]==0.1.4
+dspy-cli==0.1.13

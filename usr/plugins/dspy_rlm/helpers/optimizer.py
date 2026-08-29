@@ -18,7 +18,11 @@ from .runtime_policy import RuntimePolicy
 from . import trace
 from .engines import EngineBudget, GepaEngine, HeuristicEngine
 from .guidance import render_guidance_artifact
+from .model_resolution import resolve_dspy_model
 from .rlm import EvidenceIndex, RlmBudget, RlmController, RlmFinding, RlmQuery
+from .dspy_runtime import analyze_with_dspy_rlm
+from . import prompt_artifacts
+from .engines.prompt_gepa import PromptGepaEngine
 
 
 def _utc_now_iso() -> str:
@@ -324,8 +328,8 @@ def _engine_budget(cfg: dict[str, Any]) -> EngineBudget:
         max_examples=max(1, int(opt.get("max_samples_per_objective", 40) or 40)),
         # No cost estimate is trustworthy without a configured accounting adapter.
         # Zero is persisted as an explicit no-unbounded-cost budget declaration.
-        max_cost_usd=0.0,
-        max_compile_seconds=60.0,
+        max_cost_usd=max(0.0, float(opt.get("max_cost_usd", 5.0) or 0.0)),
+        max_compile_seconds=max(5.0, float(opt.get("max_compile_seconds", 120.0) or 120.0)),
         max_steps=max(1, int(opt.get("gepa_steps", opt.get("ge_pa_steps", 3)) or 3)),
         num_threads=max(1, int(opt.get("gepa_threads", opt.get("ge_pa_threads", 1)) or 1)),
     )
@@ -343,6 +347,20 @@ def _rlm_findings_for_context(context_id: str, objective_bucket: str) -> tuple[R
         return ()
 
 
+def _configured_rlm_findings(context_id: str, objective_bucket: str, cfg: dict[str, Any]) -> tuple[RlmFinding, ...]:
+    events = trace.read_context_events(context_id, limit=160)
+    try:
+        index = EvidenceIndex(events)
+    except (TypeError, ValueError):
+        return ()
+    model_findings = analyze_with_dspy_rlm(index, objective_bucket, cfg)
+    if model_findings:
+        return model_findings
+    return RlmController(index, RlmBudget(max_depth=1, max_queries=3, max_evidence_chars=8_000, max_findings=3)).analyze(
+        RlmQuery("objective_bucket", {"objective_bucket": objective_bucket})
+    )
+
+
 def _candidate_engine_result(
     context_id: str,
     objective_bucket: str,
@@ -354,7 +372,7 @@ def _candidate_engine_result(
     missing dependency or compile error remains visible as ``gepa_unavailable`` or
     ``failed`` and never turns a heuristic artifact into a GEPA-labelled one.
     """
-    findings = _rlm_findings_for_context(context_id, objective_bucket)
+    findings = _configured_rlm_findings(context_id, objective_bucket, cfg)
     heuristic = HeuristicEngine().compile(
         context_id=context_id,
         objective_bucket=objective_bucket,
@@ -363,7 +381,7 @@ def _candidate_engine_result(
     opt = cfg.get("optimization", {}) if isinstance(cfg, dict) else {}
     if not bool(opt.get("enable_dspy_optimizer", False)):
         return heuristic, None
-    model_ref = str((cfg.get("evaluator", {}) if isinstance(cfg.get("evaluator", {}), dict) else {}).get("preferred_dspy_model") or "")
+    model_ref = resolve_dspy_model(cfg, "gepa").selector
     gepa = GepaEngine().compile(
         context_id=context_id,
         objective_bucket=objective_bucket,
@@ -372,6 +390,45 @@ def _candidate_engine_result(
         budget=_engine_budget(cfg),
     )
     return (gepa if gepa.succeeded else heuristic), gepa
+
+
+def _prompt_component_candidate(
+    context_id: str,
+    cfg: dict[str, Any],
+    objective_rows: list[dict[str, Any]],
+    validation: dict[str, Any],
+) -> dict[str, Any] | None:
+    settings = cfg.get("prompt_optimization") if isinstance(cfg.get("prompt_optimization"), dict) else {}
+    target_mode = str(settings.get("target_mode") or "guidance_overlay")
+    if not bool(settings.get("enabled")) or target_mode == "guidance_overlay":
+        return None
+    if not bool(settings.get("allow_prompt_capture")):
+        return {"status": "review_only", "reason": "prompt_capture_not_approved", "target_mode": target_mode, "promotion_decision": "review_only"}
+    if not bool(validation.get("passed")):
+        return {"status": "rejected", "reason": "validation_failed", "target_mode": target_mode, "promotion_decision": "reject"}
+    snapshot = prompt_artifacts.latest_snapshot(context_id)
+    if not snapshot:
+        return {"status": "review_only", "reason": "prompt_snapshot_required", "target_mode": target_mode, "promotion_decision": "review_only"}
+    activation_mode = str(settings.get("activation_mode") or "manual")
+    artifact, compile_result = PromptGepaEngine().compile(
+        context_id=context_id, snapshot=snapshot, objective_rows=objective_rows,
+        model_config_ref=resolve_dspy_model(cfg, "gepa").selector,
+        target_mode=target_mode, activation_mode=activation_mode,
+        selected_components=settings.get("selected_components", ()), budget=_engine_budget(cfg),
+        max_components=int(settings.get("max_components_per_compile", 4) or 4),
+    )
+    if artifact is None:
+        return {"status": str(compile_result.get("status") or "failed"), "reason": str(compile_result.get("error") or "prompt_compile_failed"), "target_mode": target_mode, "activation_mode": activation_mode, "compile": compile_result, "promotion_decision": "review_only"}
+    prompt_artifacts.stage_artifact(artifact)
+    activation = prompt_artifacts.begin_activation(artifact, cfg)
+    return {
+        "status": "candidate" if activation_mode == "manual" else "canary",
+        "reason": str(activation.get("reason") or "prompt_candidate_staged"),
+        "target_mode": target_mode, "activation_mode": activation_mode,
+        "prompt_artifact_id": artifact.artifact_id, "prompt_artifact": artifact.to_mapping(),
+        "compile": compile_result, "activation": activation,
+        "promotion_decision": "manual_review" if activation_mode == "manual" else "canary",
+    }
 
 
 def _collect_objectives(context_id: str, cfg: dict[str, Any]) -> list[dict[str, Any]]:
@@ -607,6 +664,15 @@ def run_optimization_sync(context_id: str, cfg: dict[str, Any], *, force: bool =
         objective_count = max(objective_count, len(scored_rows))
         validation = objective_validation.validate(scored_rows, cfg)
         matrix_scores = _build_matrix_scores(scored_rows)
+        prompt_result = _prompt_component_candidate(context_id, cfg, objective_rows, validation)
+        if prompt_result is not None:
+            prompt_result.update({
+                "validation": validation, "matrix_scores": matrix_scores,
+                "objective_rows": objective_rows, "trace_summary": summary,
+                "started_at": optimization_result["started_at"],
+            })
+            state_module.mark_optimization_complete(context_id, prompt_result)
+            return prompt_result
         objective_bucket = str((objective_rows[0] if objective_rows else {}).get("objective_bucket", "reasoning") or "reasoning")
         objective_signature = str((objective_rows[0] or {}).get("objective_signature") if objective_rows else "")
         candidate, gepa_attempt = _candidate_engine_result(context_id, objective_bucket, cfg)

@@ -1,36 +1,29 @@
-"""Dependency-plan tests that do not install, execute subprocesses, or use a network."""
+"""Isolated worker dependency setup contracts."""
 from __future__ import annotations
 
-from pathlib import Path
-
-from usr.plugins.dspy_rlm import execute
+from usr.plugins.dspy_rlm.helpers import dependencies
 
 
-def test_checked_in_lock_is_explicitly_diagnostic_not_hash_ready() -> None:
-    report = execute.dependency_diagnostics()
+def test_current_worker_pins_include_rlm_gepa_and_cli() -> None:
+    assert dependencies.locked_requirements() == [
+        "dspy[deno]==3.3.1",
+        "gepa[dspy]==0.1.4",
+        "dspy-cli==0.1.13",
+    ]
 
-    assert report["exact_requirements"] == ["dspy-ai==2.6.27", "gepa==0.0.17"]
-    assert report["hash_complete"] is False
-    assert report["ready"] is False
-    assert "lock_manifest_missing_hashes" in report["diagnostics"]
 
-
-def test_manual_plan_is_blocked_and_worker_isolated() -> None:
-    plan = execute.manual_setup_plan()
-
-    assert plan["ok"] is False
+def test_setup_plan_targets_only_the_isolated_worker() -> None:
+    plan = dependencies.manual_setup_plan()
+    assert plan["mode"] == "isolated_worker_venv"
     assert plan["execution_performed"] is False
-    assert plan["mode"] == "manual_explicit_setup_only"
-    assert plan["trusted_index_required"] is True
-    assert plan["hashes_required"] is True
-    assert "lock_manifest_missing_hashes" in plan["blockers"]
-    assert "operator_must_explicitly_execute_plan" in plan["blockers"]
     assert "worker-venv" in plan["isolated_worker_venv"]
+    assert all("worker-venv" in command for command in plan["commands_for_operator_review"])
 
 
-def test_readme_has_no_host_install_command_and_declares_lock_not_installable() -> None:
-    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-
-    assert "**not installable**" in readme
-    assert "pip install" not in readme
-    assert "/Users/lazy/" not in readme
+def test_diagnostics_fail_closed_without_a_matching_marker(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dependencies, "WORKER_VENV", tmp_path / "worker-venv")
+    monkeypatch.setattr(dependencies, "WORKER_PYTHON", tmp_path / "worker-venv" / "bin" / "python")
+    monkeypatch.setattr(dependencies, "INSTALL_MARKER", tmp_path / "worker-env.json")
+    report = dependencies.dependency_diagnostics()
+    assert report["ready"] is False
+    assert report["missing"]

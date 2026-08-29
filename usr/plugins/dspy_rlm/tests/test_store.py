@@ -43,14 +43,14 @@ def test_migrate_imports_legacy_rows_once_and_exposes_current_schema(tmp_path):
         )
 
     store = Store(db)
-    assert store.schema_version == 1
+    assert store.schema_version == 2
     assert store.get_sample("sample-1") == {"context_id": "ctx", "objective_bucket": "reasoning"}
     assert store.get_active_guidance("ctx", "reasoning")["guidance_version"] == "guide-1"
 
     # A second open must not re-import and advance the migrated active revision.
     assert Store(db).get_active_guidance("ctx", "reasoning")["revision"] == 1
     with sqlite3.connect(db) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
         assert conn.execute("SELECT COUNT(*) FROM jobs WHERE job_key='job-1'").fetchone()[0] == 1
 
 

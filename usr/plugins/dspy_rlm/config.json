@@ -36,7 +36,9 @@
     "optimization_preview_limit": 20,
     "enable_replay_audit": false,
     "replay_audit_sample_size": 6,
-    "max_concurrent_candidates": 1
+    "max_concurrent_candidates": 1,
+    "max_compile_seconds": 120,
+    "max_cost_usd": 5.0
   },
   "engine": "heuristic",
   "worker": {
@@ -56,17 +58,45 @@
     "backoff_base_seconds": 2
   },
   "dependencies": {
-    "install_mode": "manual",
+    "install_mode": "isolated_worker",
     "dependency_file": "requirements.txt",
     "fallback_to_pip": false,
-    "ensure_at_startup": false,
-    "install_timeout_seconds": 0
+    "ensure_at_startup": true,
+    "install_timeout_seconds": 115
+  },
+  "rlm": {
+    "enabled": true,
+    "model_ref": "",
+    "max_iters": 6,
+    "max_llm_calls": 8,
+    "max_output_chars": 12000,
+    "max_findings": 12
   },
   "prompt": {
     "inject_guidance": false,
     "inject_even_without_guidance": false,
     "max_injected_chars": 1800,
     "fallback_guidance": ""
+  },
+  "prompt_optimization": {
+    "enabled": false,
+    "allow_prompt_capture": false,
+    "target_mode": "guidance_overlay",
+    "activation_mode": "manual",
+    "selected_components": [
+
+    ],
+    "max_snapshot_chars": 60000,
+    "max_components_per_compile": 4,
+    "canary_percentage": 10,
+    "canary_min_observations": 10,
+    "canary_max_observations": 40,
+    "automatic_requires_canary": true,
+    "rollback": {
+      "enabled": true,
+      "maximum_score_regression": 0.05,
+      "maximum_failure_rate_increase": 0.05
+    }
   },
   "evaluator": {
     "enable_semantic_judge": false,

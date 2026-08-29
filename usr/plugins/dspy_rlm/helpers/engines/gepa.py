@@ -13,6 +13,7 @@ import time
 from typing import Any, Iterable, Mapping, Sequence
 
 from ..guidance import GuidanceArtifact, GuidanceValidationError, MAX_ARTIFACT_LIFETIME_SECONDS
+from ..model_resolution import build_dspy_lm
 from ..rlm import RlmFinding
 from . import EngineBudget, EngineResult
 from .heuristic import finding_hashes, rules_from_findings
@@ -102,7 +103,7 @@ def _make_program(dspy_api: Any) -> Any:
     return predict(PROGRAM_SIGNATURE)
 
 
-def _metric(example: Any, prediction: Any, trace: Any = None) -> float:
+def _metric_score(example: Any, prediction: Any) -> float:
     """Score only allowlisted rule labels.  It must not execute prediction text."""
     expected = getattr(example, "rules", None)
     if expected is None and isinstance(example, Mapping):
@@ -118,6 +119,27 @@ def _metric(example: Any, prediction: Any, trace: Any = None) -> float:
     if not expected_set:
         return 1.0 if not observed_set else 0.0
     return len(expected_set & observed_set) / float(len(expected_set | observed_set))
+
+
+def _metric_factory(dspy_api: Any):
+    def metric(example: Any, prediction: Any, trace: Any = None, pred_name: Any = None, pred_trace: Any = None) -> Any:
+        score = _metric_score(example, prediction)
+        feedback = "Use only approved rule labels and match the evidence-derived target rules."
+        prediction_type = getattr(dspy_api, "Prediction", None)
+        return prediction_type(score=score, feedback=feedback) if callable(prediction_type) else score
+    return metric
+
+
+def _rule_labels(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            value = [item.strip() for item in value.split(",")]
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        return ()
+    allowed = {"verify_tool_contract", "check_tool_result", "retry_after_failure", "prefer_reversible_action", "bound_tool_scope"}
+    return tuple(dict.fromkeys(str(item) for item in value if str(item) in allowed))
 
 
 class GepaEngine:
@@ -194,16 +216,22 @@ class GepaEngine:
             trainset = examples[:split]
             valset = examples[split:] or examples[:1]
             program = _make_program(api)
+            reflection_lm = build_dspy_lm(api, model_config_ref) if callable(getattr(api, "LM", None)) else None
             compiler = api.GEPA(
-                metric=_metric,
-                auto="light",
-                max_full_evals=budget.max_steps,
+                metric=_metric_factory(api),
+                max_metric_calls=max(8, budget.max_steps * max(2, len(examples)) * 2),
+                reflection_lm=reflection_lm,
                 num_threads=budget.num_threads,
             )
             started = time.monotonic()
             # This is the pinned DSPy GEPA operation.  Do not substitute a
             # local reflective prompt when this compile fails or is unavailable.
-            compiled = compiler.compile(student=program, trainset=trainset, valset=valset)
+            context = getattr(api, "context", None)
+            if callable(context) and reflection_lm is not None:
+                with context(lm=reflection_lm):
+                    compiled = compiler.compile(student=program, trainset=trainset, valset=valset)
+            else:
+                compiled = compiler.compile(student=program, trainset=trainset, valset=valset)
             elapsed = time.monotonic() - started
             reproducibility["compile_seconds"] = round(elapsed, 6)
             reproducibility["compile_return_type"] = f"{type(compiled).__module__}.{type(compiled).__qualname__}"
@@ -277,13 +305,19 @@ class GepaEngine:
                         return artifact
                 except GuidanceValidationError:
                     pass
-        # GEPA's returned program is opaque.  Never turn opaque generated prose into
-        # prompt content; only the fixed artifact rule vocabulary is eligible.
-        rules = rules_from_findings(findings)
+        # Execute the compiled program and project only its approved rule labels.
+        observed: list[str] = []
+        if callable(compiled):
+            for finding in findings:
+                prediction = compiled(finding_kind=finding.kind, metrics=_safe_metrics(finding))
+                raw_rules = getattr(prediction, "rules", prediction.get("rules") if isinstance(prediction, Mapping) else ())
+                observed.extend(_rule_labels(raw_rules))
+        rules = [
+            {"type": label, **({"max_retries": 1} if label == "retry_after_failure" else {})}
+            for label in dict.fromkeys(observed)
+        ]
         if not rules:
-            # This is reachable only if a caller changes the selection invariant.
-            # Do not manufacture an artifact that claims a GEPA-derived action.
-            raise GuidanceValidationError("compiled GEPA candidate has no actionable findings")
+            raise GuidanceValidationError("compiled GEPA program produced no approved guidance rules")
         issued = _utc(now)
         expires = issued + timedelta(seconds=max(1, min(int(lifetime_seconds), MAX_ARTIFACT_LIFETIME_SECONDS)))
         token = _hash({"compiled_type": f"{type(compiled).__module__}.{type(compiled).__qualname__}", "findings": finding_hashes, "manifests": manifest_hashes})[-20:]

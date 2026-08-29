@@ -328,6 +328,8 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "enable_replay_audit": True,
         "replay_audit_sample_size": 6,
         "max_concurrent_candidates": 4,
+        "max_compile_seconds": 120.0,
+        "max_cost_usd": 5.0,
     }
     normalized["optimization"] = _coerce_matrix_bucket(
         _as_dict(cfg.get("optimization")),
@@ -466,6 +468,12 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
         optimization_defaults["max_concurrent_candidates"],
         1,
         16,
+    )
+    normalized_opt["max_compile_seconds"] = _as_float(
+        normalized_opt.get("max_compile_seconds"), optimization_defaults["max_compile_seconds"], 5.0, 3600.0
+    )
+    normalized_opt["max_cost_usd"] = _as_float(
+        normalized_opt.get("max_cost_usd"), optimization_defaults["max_cost_usd"], 0.0, 1000.0
     )
 
     scheduler_defaults = {
@@ -649,12 +657,30 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
         20,
     )
 
+    rlm_defaults = {
+        "enabled": True,
+        "model_ref": "",
+        "max_iters": 6,
+        "max_llm_calls": 8,
+        "max_output_chars": 12_000,
+        "max_findings": 12,
+    }
+    rlm_src = _as_dict(cfg.get("rlm"))
+    normalized["rlm"] = {
+        "enabled": _as_bool(rlm_src.get("enabled"), rlm_defaults["enabled"]),
+        "model_ref": _as_str(rlm_src.get("model_ref"), rlm_defaults["model_ref"]).strip(),
+        "max_iters": _as_int(rlm_src.get("max_iters"), rlm_defaults["max_iters"], 1, 20),
+        "max_llm_calls": _as_int(rlm_src.get("max_llm_calls"), rlm_defaults["max_llm_calls"], 1, 50),
+        "max_output_chars": _as_int(rlm_src.get("max_output_chars"), rlm_defaults["max_output_chars"], 1000, 50_000),
+        "max_findings": _as_int(rlm_src.get("max_findings"), rlm_defaults["max_findings"], 1, 32),
+    }
+
     dependency_defaults = {
-        "install_mode": "manual",
+        "install_mode": "isolated_worker",
         "dependency_file": "requirements.txt",
         "fallback_to_pip": False,
-        "ensure_at_startup": False,
-        "install_timeout_seconds": 0,
+        "ensure_at_startup": True,
+        "install_timeout_seconds": 115,
     }
     normalized["dependencies"] = _coerce_matrix_bucket(
         _as_dict(cfg.get("dependencies")), dependency_defaults
@@ -685,6 +711,61 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
         normalized["prompt"].get("fallback_guidance", prompt_defaults["fallback_guidance"]),
         prompt_defaults["fallback_guidance"],
     )
+
+    prompt_optimization_defaults = {
+        "enabled": False,
+        "allow_prompt_capture": False,
+        "target_mode": "guidance_overlay",
+        "activation_mode": "manual",
+        "selected_components": [],
+        "max_snapshot_chars": 60_000,
+        "max_components_per_compile": 4,
+        "canary_percentage": 10,
+        "canary_min_observations": 10,
+        "canary_max_observations": 40,
+        "automatic_requires_canary": True,
+        "rollback": {
+            "enabled": True,
+            "maximum_score_regression": 0.05,
+            "maximum_failure_rate_increase": 0.05,
+        },
+    }
+    prompt_optimization = _coerce_matrix_bucket(
+        _as_dict(cfg.get("prompt_optimization")), prompt_optimization_defaults
+    )
+    target_mode = _as_str(prompt_optimization.get("target_mode"), "guidance_overlay").strip().lower()
+    activation_mode = _as_str(prompt_optimization.get("activation_mode"), "manual").strip().lower()
+    selected_components = []
+    for component in _as_list(prompt_optimization.get("selected_components")):
+        if component.startswith("segment:") and len(component) <= 48 and all(
+            character.isalnum() or character in ":_-" for character in component
+        ):
+            selected_components.append(component)
+    rollback = _coerce_matrix_bucket(
+        _as_dict(prompt_optimization.get("rollback")),
+        prompt_optimization_defaults["rollback"],
+    )
+    normalized["prompt_optimization"] = {
+        "enabled": _as_bool(prompt_optimization.get("enabled"), False),
+        "allow_prompt_capture": _as_bool(prompt_optimization.get("allow_prompt_capture"), False),
+        "target_mode": target_mode if target_mode in {"guidance_overlay", "selected_components", "assembled_prompt"} else "guidance_overlay",
+        "activation_mode": activation_mode if activation_mode in {"manual", "canary", "automatic"} else "manual",
+        "selected_components": list(dict.fromkeys(selected_components))[:32],
+        "max_snapshot_chars": _as_int(prompt_optimization.get("max_snapshot_chars"), 60_000, 1_000, 250_000),
+        "max_components_per_compile": _as_int(prompt_optimization.get("max_components_per_compile"), 4, 1, 12),
+        "canary_percentage": _as_int(prompt_optimization.get("canary_percentage"), 10, 1, 100),
+        "canary_min_observations": _as_int(prompt_optimization.get("canary_min_observations"), 10, 3, 1_000),
+        "canary_max_observations": _as_int(prompt_optimization.get("canary_max_observations"), 40, 3, 5_000),
+        # Automatic prompt activation is never allowed to skip the canary phase.
+        "automatic_requires_canary": True,
+        "rollback": {
+            "enabled": _as_bool(rollback.get("enabled"), True),
+            "maximum_score_regression": _as_float(rollback.get("maximum_score_regression"), 0.05, 0.0, 1.0),
+            "maximum_failure_rate_increase": _as_float(rollback.get("maximum_failure_rate_increase"), 0.05, 0.0, 1.0),
+        },
+    }
+    if normalized["prompt_optimization"]["canary_max_observations"] < normalized["prompt_optimization"]["canary_min_observations"]:
+        normalized["prompt_optimization"]["canary_max_observations"] = normalized["prompt_optimization"]["canary_min_observations"]
 
     # Accept the v2 nested telemetry section.  Flat names remain compatibility
     # aliases only, so a nested explicit false cannot be silently overridden.
@@ -758,6 +839,7 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
             "telemetry": normalized["telemetry"],
             "engine": normalized["engine"],
             "worker": normalized["worker"],
+            "rlm": normalized["rlm"],
         }
     )
 

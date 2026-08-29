@@ -22,8 +22,12 @@ def _assert_inert_v2_defaults(config: dict) -> None:
     assert config["optimization"]["enabled"] is False
     assert config["optimization"]["auto_optimize"] is False
     assert config["prompt"]["inject_guidance"] is False
-    assert config["dependencies"]["install_mode"] == "manual"
-    assert config["dependencies"]["ensure_at_startup"] is False
+    assert config["rlm"]["enabled"] is True
+    assert config["prompt_optimization"]["enabled"] is False
+    assert config["prompt_optimization"]["allow_prompt_capture"] is False
+    assert config["prompt_optimization"]["automatic_requires_canary"] is True
+    assert config["dependencies"]["install_mode"] == "isolated_worker"
+    assert config["dependencies"]["ensure_at_startup"] is True
     assert config["engine"] == "heuristic"
     assert config["worker"]["backend"] == "sqlite_local"
     assert config["worker"]["max_workers"] == 1

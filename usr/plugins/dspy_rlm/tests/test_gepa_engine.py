@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any
 
@@ -93,9 +94,19 @@ def _fake_dspy(records: dict[str, Any], *, fail_compile: bool = False) -> Any:
             records["compile_kwargs"] = kwargs
             if fail_compile:
                 raise RuntimeError("injected compile failure")
-            compiled = SimpleNamespace(cost_usd=0.0)
+            class FakeCompiled:
+                cost_usd = 0.0
+
+                def __call__(self, **kwargs: Any) -> Any:
+                    records.setdefault("compiled_calls", []).append(kwargs)
+                    return SimpleNamespace(rules=("verify_tool_contract", "check_tool_result"))
+
+            compiled = FakeCompiled()
             records["compiled"] = compiled
             return compiled
+
+    class FakePrediction(SimpleNamespace):
+        pass
 
     return SimpleNamespace(
         __name__="fake_dspy",
@@ -103,6 +114,9 @@ def _fake_dspy(records: dict[str, Any], *, fail_compile: bool = False) -> Any:
         Example=FakeExample,
         Predict=FakePredict,
         GEPA=FakeGEPA,
+        Prediction=FakePrediction,
+        LM=lambda selector: SimpleNamespace(selector=selector),
+        context=lambda **kwargs: nullcontext(),
     )
 
 
@@ -130,15 +144,16 @@ def test_injected_dspy_gepa_builds_examples_program_metric_and_invokes_compile()
     assert all(example.finding_kind == "tool_reliability" for example in records["examples"])
     assert all("summary" not in example.__dict__ for example in records["examples"])
     assert records["program"].signature == "finding_kind,metrics -> rules"
-    assert records["gepa_kwargs"]["auto"] == "light"
-    assert records["gepa_kwargs"]["max_full_evals"] == 2
+    assert records["gepa_kwargs"]["max_metric_calls"] == 8
+    assert records["gepa_kwargs"]["reflection_lm"].selector == "local-test-model"
     assert records["compile_kwargs"]["student"] is records["program"]
     assert len(records["compile_kwargs"]["trainset"]) == 1
     assert len(records["compile_kwargs"]["valset"]) == 1
     metric = records["gepa_kwargs"]["metric"]
     expected_rules = records["examples"][0].rules
-    assert metric(records["examples"][0], SimpleNamespace(rules=expected_rules)) == 1.0
-    assert metric(records["examples"][0], SimpleNamespace(rules=("unapproved_rule",))) == 0.0
+    assert metric(records["examples"][0], SimpleNamespace(rules=expected_rules)).score == 1.0
+    assert metric(records["examples"][0], SimpleNamespace(rules=("unapproved_rule",))).score == 0.0
+    assert len(records["compiled_calls"]) == 2
     assert result.compiled_program is records["compiled"]
 
 

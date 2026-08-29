@@ -186,6 +186,9 @@ class LocalMultiprocessQueue:
     def active_workers(self) -> list[dict[str, Any]]:
         return self.store.active_workers()
 
+    def remove_workers(self, worker_ids: list[str]) -> int:
+        return self.store.remove_workers(worker_ids)
+
     def status(self) -> dict[str, Any]:
         runtime = self.state.runtime_status()
         workers = self.active_workers()

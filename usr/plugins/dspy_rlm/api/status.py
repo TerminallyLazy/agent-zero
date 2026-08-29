@@ -11,6 +11,7 @@ from helpers.api import ApiHandler, Request, Response
 from helpers.print_style import PrintStyle
 
 from usr.plugins.dspy_rlm.helpers import config as config_module
+from usr.plugins.dspy_rlm.helpers.model_resolution import resolve_dspy_model
 from usr.plugins.dspy_rlm.helpers.runtime_policy import RuntimePolicy
 
 STATUS_TIMEOUT_SECONDS = 2.0
@@ -95,10 +96,22 @@ def _finite_rate(value: Any) -> float:
 def public_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
     optimization = cfg.get("optimization") if isinstance(cfg.get("optimization"), Mapping) else {}
     scheduler = cfg.get("scheduler") if isinstance(cfg.get("scheduler"), Mapping) else {}
+    rlm = cfg.get("rlm") if isinstance(cfg.get("rlm"), Mapping) else {}
+    prompt_optimization = cfg.get("prompt_optimization") if isinstance(cfg.get("prompt_optimization"), Mapping) else {}
+    rlm_model = resolve_dspy_model(cfg, "rlm")
+    gepa_enabled = bool(optimization.get("enable_dspy_optimizer", cfg.get("enable_dspy_optimizer", False)))
+    configured_engine = str(cfg.get("engine") or "").strip().lower()
+    engine = configured_engine if configured_engine in {"heuristic", "gepa"} else ("gepa" if gepa_enabled else "heuristic")
     return {
         "enabled": bool(cfg.get("enabled", False)),
         "instrumentation_enabled": bool(cfg.get("instrumentation_enabled", False)),
-        "engine": str(cfg.get("engine") or "heuristic") if str(cfg.get("engine") or "heuristic") in {"heuristic", "gepa"} else "heuristic",
+        "engine": engine,
+        "enable_dspy_optimizer": gepa_enabled,
+        "rlm": {
+            "enabled": bool(rlm.get("enabled", False)),
+            "model_configured": rlm_model.configured,
+            "model_source": rlm_model.source,
+        },
         "optimization": {
             "enabled": bool(optimization.get("enabled", False)),
             "manual_optimize": bool(optimization.get("manual_optimize", False)),
@@ -111,6 +124,13 @@ def public_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
             # configuration alias such as "distributed" as a capability.
             "mode": "local_multiprocess",
             "max_workers": _nonnegative_int(scheduler.get("max_workers", 1), 1) or 1,
+        },
+        "prompt_optimization": {
+            "enabled": bool(prompt_optimization.get("enabled", False)),
+            "capture_approved": bool(prompt_optimization.get("allow_prompt_capture", False)),
+            "target_mode": str(prompt_optimization.get("target_mode") or "guidance_overlay"),
+            "activation_mode": str(prompt_optimization.get("activation_mode") or "manual"),
+            "canary_percentage": _nonnegative_int(prompt_optimization.get("canary_percentage", 10), 10),
         },
     }
 
@@ -248,13 +268,16 @@ class Status(ApiHandler):
             return error
         assert context is not None and cfg is not None
 
-        from usr.plugins.dspy_rlm import execute
+        from usr.plugins.dspy_rlm.helpers import dependencies
         from usr.plugins.dspy_rlm.helpers import _scheduler_coordinator as scheduler
         from usr.plugins.dspy_rlm.helpers import state, trace
+        from usr.plugins.dspy_rlm.helpers import worker_supervisor
+        from usr.plugins.dspy_rlm.helpers import prompt_artifacts
 
         context_id = str(context.id)
-        scheduler_snapshot, context_state, trace_summary, recent_jobs, metrics, active_guidance = await asyncio.gather(
-            safe_eval("scheduler.status", scheduler.scheduler_status, {}),
+        supervisor = await safe_eval("worker_supervisor.snapshot", lambda: worker_supervisor.snapshot(cfg), {})
+        scheduler_snapshot, context_state, trace_summary, recent_jobs, metrics, active_guidance, prompt_status = await asyncio.gather(
+            safe_eval("scheduler.status", lambda: scheduler.scheduler_status(cfg=cfg), {}),
             safe_eval("state.load_context_state", lambda: state.load_context_state(context_id), {}),
             safe_eval("trace.summarize_context", lambda: trace.summarize_context(context_id, limit=_nonnegative_int(cfg.get("optimization_trace_window", 200), 200)), {}),
             safe_eval("state.get_recent_jobs", lambda: state.get_recent_jobs(context_id=context_id, limit=10), []),
@@ -267,14 +290,20 @@ class Status(ApiHandler):
                 },
                 {},
             ),
+            safe_eval("prompt_artifacts.public_status", lambda: prompt_artifacts.public_status(context_id), {}),
         )
-        diagnostics = execute.dependency_diagnostics()
+        diagnostics = dependencies.dependency_diagnostics()
         return {
             "plugin": "dspy_rlm",
             "enabled": True,
             "context_id": context_id,
             "config": public_config(cfg),
             "scheduler": public_scheduler(scheduler_snapshot if isinstance(scheduler_snapshot, Mapping) else {}),
+            "worker_supervisor": {
+                "desired": _nonnegative_int(supervisor.get("desired")) if isinstance(supervisor, Mapping) else 0,
+                "running": _nonnegative_int(supervisor.get("running")) if isinstance(supervisor, Mapping) else 0,
+                "reason": str(supervisor.get("reason") or "unknown") if isinstance(supervisor, Mapping) else "unknown",
+            },
             # These names are the stable WebUI contract. No diagnostic paths,
             # package-index URLs, import errors, or host environment details leave
             # the process through the status endpoint.
@@ -283,7 +312,7 @@ class Status(ApiHandler):
                 "lock_manifest": "requirements-gepa.lock",
                 "missing_count": _nonnegative_int(len(diagnostics.get("missing", []))),
                 "hash_complete": bool(diagnostics.get("hash_complete", False)),
-                "setup_mode": "manual_explicit_setup_only",
+                "setup_mode": "isolated_worker_venv",
             },
             "context_state": public_context_state(context_state if isinstance(context_state, Mapping) else {}),
             "active_guidance": {
@@ -293,4 +322,5 @@ class Status(ApiHandler):
             "trace_summary": public_trace_summary(trace_summary if isinstance(trace_summary, Mapping) else {}),
             "recent_jobs": [public_job(job) for job in recent_jobs[:10] if isinstance(job, Mapping)],
             "context_samples": public_context_samples(metrics if isinstance(metrics, Mapping) else {}),
+            "prompt_optimization": prompt_status if isinstance(prompt_status, Mapping) else {},
         }

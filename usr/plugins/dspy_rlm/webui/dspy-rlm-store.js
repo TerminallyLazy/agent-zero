@@ -98,11 +98,13 @@ function normalizeConfig(raw = {}) {
   const matrix = cfg.matrix && typeof cfg.matrix === "object" ? cfg.matrix : {};
   const evaluator = cfg.evaluator && typeof cfg.evaluator === "object" ? cfg.evaluator : {};
   const prompt = cfg.prompt && typeof cfg.prompt === "object" ? cfg.prompt : {};
+  const rlm = cfg.rlm && typeof cfg.rlm === "object" ? cfg.rlm : {};
+  const promptOptimization = cfg.prompt_optimization && typeof cfg.prompt_optimization === "object" ? cfg.prompt_optimization : {};
 
   return {
     ...cfg,
     enabled: toBool(cfg.enabled, false),
-    instrumentation_enabled: toBool(cfg.instrumentation_enabled, true),
+    instrumentation_enabled: toBool(cfg.instrumentation_enabled, false),
     status_refresh_seconds: toInt(cfg.status_refresh_seconds, DEFAULT_REFRESH_SECONDS),
     auto_optimize_enabled: toBool(cfg.auto_optimize_enabled, toBool(optimization.auto_optimize, false)),
     optimization_interval_messages: toInt(cfg.optimization_interval_messages, toInt(optimization.auto_optimize_interval_messages, 12)),
@@ -110,14 +112,27 @@ function normalizeConfig(raw = {}) {
     optimization_trace_window: toInt(cfg.optimization_trace_window, toInt(trace.max_events_per_context, 220)),
     optimization_cooldown_hours: toInt(cfg.optimization_cooldown_hours, toInt(optimization.cooldown_hours, 6)),
     trace_retention_limit: toInt(cfg.trace_retention_limit, toInt(trace.event_ttl_seconds, 604800)),
-    trace_enabled: toBool(cfg.trace_enabled, toBool(cfg.instrumentation_enabled, true)),
-    enable_dspy_optimizer: toBool(cfg.enable_dspy_optimizer, toBool(optimization.enable_dspy_optimizer, true)),
+    trace_enabled: toBool(cfg.trace_enabled, toBool(cfg.instrumentation_enabled, false)),
+    enable_dspy_optimizer: toBool(cfg.enable_dspy_optimizer, toBool(optimization.enable_dspy_optimizer, false)),
     gepa_steps: toInt(cfg.gepa_steps, toInt(optimization.ge_pa_steps, 3)),
     gepa_threads: toInt(cfg.gepa_threads, toInt(optimization.ge_pa_threads, 2)),
     ge_pa_steps: toInt(cfg.ge_pa_steps, toInt(cfg.gepa_steps, 3)),
     ge_pa_threads: toInt(cfg.ge_pa_threads, toInt(cfg.gepa_threads, 2)),
     optimization_preview_limit: toInt(cfg.optimization_preview_limit, toInt(optimization.optimization_preview_limit, 20)),
     dependencies: cfg.dependencies && typeof cfg.dependencies === "object" ? cfg.dependencies : {},
+    rlm: {
+      ...rlm,
+      enabled: toBool(rlm.enabled, true),
+      model_configured: toBool(rlm.model_configured, false),
+    },
+    prompt_optimization: {
+      ...promptOptimization,
+      enabled: toBool(promptOptimization.enabled, false),
+      capture_approved: toBool(promptOptimization.capture_approved ?? promptOptimization.allow_prompt_capture, false),
+      target_mode: toStringSafe(promptOptimization.target_mode || "guidance_overlay"),
+      activation_mode: toStringSafe(promptOptimization.activation_mode || "manual"),
+      canary_percentage: toInt(promptOptimization.canary_percentage, 10),
+    },
     scheduler: {
       mode: toStringSafe(cfg.scheduler_mode || scheduler.mode || "local_multiprocess"),
       max_workers: toInt(cfg.scheduler_max_workers, toInt(scheduler.max_workers, 2)),
@@ -132,7 +147,7 @@ function normalizeConfig(raw = {}) {
     },
     optimization: {
       ...optimization,
-      enabled: toBool(optimization.enabled, true),
+      enabled: toBool(optimization.enabled, false),
       auto_optimize: toBool(optimization.auto_optimize, false),
       auto_optimize_interval_messages: toInt(optimization.auto_optimize_interval_messages, 12),
       min_samples_for_promotion: toInt(optimization.min_samples_for_promotion, 10),
@@ -142,7 +157,7 @@ function normalizeConfig(raw = {}) {
       global_score_threshold: toFloat(optimization.global_score_threshold, 0.8),
       ge_pa_steps: toInt(cfg.gepa_steps, toInt(cfg.ge_pa_steps, toInt(optimization.ge_pa_steps, 3))),
       ge_pa_threads: toInt(cfg.gepa_threads, toInt(cfg.ge_pa_threads, toInt(optimization.ge_pa_threads, 2))),
-      enable_dspy_optimizer: toBool(cfg.enable_dspy_optimizer, toBool(optimization.enable_dspy_optimizer, true)),
+      enable_dspy_optimizer: toBool(cfg.enable_dspy_optimizer, toBool(optimization.enable_dspy_optimizer, false)),
       enable_replay_audit: toBool(optimization.enable_replay_audit, true),
       replay_set_size: toInt(optimization.replay_set_size, 6),
       replay_tolerable_regression: toFloat(optimization.replay_tolerable_regression, 0.1),
@@ -157,7 +172,7 @@ function normalizeConfig(raw = {}) {
     },
     evaluator: {
       ...evaluator,
-      enable_semantic_judge: toBool(evaluator.enable_semantic_judge, true),
+      enable_semantic_judge: toBool(evaluator.enable_semantic_judge, false),
       semantic_loop_batch_size: toInt(evaluator.semantic_loop_batch_size, 8),
       risk_threshold: toFloat(evaluator.risk_threshold, 0.25),
       enable_replay_audit: toBool(evaluator.enable_replay_audit, true),
@@ -171,8 +186,8 @@ function normalizeConfig(raw = {}) {
       preferred_dspy_model: toStringSafe(evaluator.preferred_dspy_model),
     },
     prompt: {
-      inject_guidance: toBool(prompt.inject_guidance, true),
-      inject_even_without_guidance: toBool(prompt.inject_even_without_guidance, true),
+      inject_guidance: toBool(prompt.inject_guidance, false),
+      inject_even_without_guidance: toBool(prompt.inject_even_without_guidance, false),
       max_injected_chars: toInt(prompt.max_injected_chars, 1800),
       fallback_guidance: toStringSafe(prompt.fallback_guidance),
     },
@@ -189,7 +204,7 @@ function normalizeTraceSummary(raw = {}) {
       count: Math.max(0, toInt(item.count, 0)),
     }));
 
-  const summary =
+  const summary = {
     ...DEFAULT_SUMMARY,
     ...raw,
     top_tools: rows,
@@ -305,7 +320,20 @@ function clamp01(value) {
 
 function parseContextId() {
   const fromUrl = new URLSearchParams(window.location.search || "").get("ctxid");
-  return String(fromUrl || getContext() || "");
+  let current = "";
+  try {
+    current = typeof window.getContext === "function" ? window.getContext() : "";
+  } catch (_) {
+    current = "";
+  }
+  let available = "";
+  try {
+    const chats = window.Alpine?.store?.("chats");
+    available = chats?.selected || chats?.contexts?.[0]?.id || "";
+  } catch (_) {
+    available = "";
+  }
+  return String(fromUrl || current || available || "");
 }
 
 function withTimeout(promise, timeoutMs, message) {
@@ -431,7 +459,7 @@ export const store = createStore("dspyRlm", {
 
   get dependenciesLabel() {
     if (this.dependencies?.gepa_worker_ready) return "GEPA worker ready";
-    if (!this.dependencies?.hash_complete) return "GEPA worker setup blocked: reviewed hashes required";
+    if (!this.dependencies?.hash_complete) return "GEPA worker setup requires refreshed dependency pins";
     const missing = Math.max(0, toInt(this.dependencies?.missing_count, 0));
     return missing ? `GEPA worker dependencies missing (${missing})` : "GEPA worker not ready";
   },
@@ -443,8 +471,8 @@ export const store = createStore("dspyRlm", {
 
   get autoOptimizeLabel() {
     return toBool(this.autoOptimizeEnabled, false)
-      ? `Enabled (every ${toInt(this.config?.optimization_interval_messages, 12)} loops)`
-      : "Disabled";
+      ? "On"
+      : "Off";
   },
 
   get objectiveModeLabel() {
@@ -517,7 +545,13 @@ export const store = createStore("dspyRlm", {
   },
 
   get optimizationMode() {
-    return toBool(this.config?.enable_dspy_optimizer, false) ? "GEPA mode" : "Heuristic mode";
+    const prompt = this.config?.prompt_optimization || {};
+    if (toBool(prompt.enabled, false) && prompt.target_mode !== "guidance_overlay") {
+      const target = prompt.target_mode === "assembled_prompt" ? "assembled prompt" : "prompt components";
+      return `GEPA ${target} · ${prompt.activation_mode || "manual"}`;
+    }
+    if (!toBool(this.config?.enable_dspy_optimizer, false)) return "Heuristic mode";
+    return toBool(this.config?.rlm?.enabled, false) ? "GEPA + RLM mode" : "GEPA mode";
   },
 
   get statusBanner() {
@@ -556,7 +590,8 @@ export const store = createStore("dspyRlm", {
   },
 
   get schedulerMode() {
-    return toStringSafe(this.scheduler?.mode || "local_multiprocess");
+    const mode = toStringSafe(this.scheduler?.mode || "local_multiprocess");
+    return mode === "local_multiprocess" ? "Local" : mode.replaceAll("_", " ");
   },
 
   get schedulerWorkersLabel() {
@@ -687,6 +722,12 @@ export const store = createStore("dspyRlm", {
   async refreshStatus({ force = false, suppressError = false } = {}) {
     if (!force && this.loading) return;
     this.lastError = "";
+    if (!this.contextId) this.contextId = parseContextId();
+    if (!this.contextId) {
+      this.loading = false;
+      if (!suppressError) this.lastError = "Create or select a chat context to inspect optimization state";
+      return;
+    }
     if (!force) this.loading = true;
 
     try {
@@ -708,7 +749,7 @@ export const store = createStore("dspyRlm", {
         lock_manifest: toStringSafe(payload?.dependencies?.lock_manifest || "requirements-gepa.lock"),
         missing_count: Math.max(0, toInt(payload?.dependencies?.missing_count, 0)),
         hash_complete: toBool(payload?.dependencies?.hash_complete, false),
-        setup_mode: toStringSafe(payload?.dependencies?.setup_mode || "manual_explicit_setup_only"),
+        setup_mode: toStringSafe(payload?.dependencies?.setup_mode || "isolated_worker_venv"),
       };
       this.contextState = normalizeContextState(payload?.context_state || {});
       this.traceSummary = normalizeTraceSummary(payload?.trace_summary || {});

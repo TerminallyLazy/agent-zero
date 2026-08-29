@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>DSPy RLM configuration</title>
+    <title>A0 Self-Improvement configuration</title>
   </head>
   <body>
     <div
@@ -227,7 +227,7 @@
           config.matrix = matrix;
         }
         let evaluator = ensureSection(config, 'evaluator', {
-          enable_semantic_judge: true,
+          enable_semantic_judge: false,
           preferred_dspy_model: '',
           semantic_loop_batch_size: 8,
           risk_threshold: 0.25,
@@ -236,7 +236,7 @@
         });
         if (!evaluator) {
           evaluator = {
-            enable_semantic_judge: true,
+            enable_semantic_judge: false,
             preferred_dspy_model: '',
             semantic_loop_batch_size: 8,
             risk_threshold: 0.25,
@@ -246,36 +246,66 @@
           config.evaluator = evaluator;
         }
         let prompt = ensureSection(config, 'prompt', {
-          inject_guidance: true,
-          inject_even_without_guidance: true,
+          inject_guidance: false,
+          inject_even_without_guidance: false,
           max_injected_chars: 1800,
-          fallback_guidance: 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.',
+          fallback_guidance: '',
         });
         if (!prompt) {
           prompt = {
-            inject_guidance: true,
-            inject_even_without_guidance: true,
+            inject_guidance: false,
+            inject_even_without_guidance: false,
             max_injected_chars: 1800,
-            fallback_guidance: 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.',
+            fallback_guidance: '',
           };
           config.prompt = prompt;
         }
         let dependencies = ensureSection(config, 'dependencies', {
-          install_mode: 'auto',
+          install_mode: 'isolated_worker',
           dependency_file: 'requirements.txt',
-          fallback_to_pip: true,
-          ensure_at_startup: false,
-          install_timeout_seconds: 0,
+          fallback_to_pip: false,
+          ensure_at_startup: true,
+          install_timeout_seconds: 115,
         });
         if (!dependencies) {
           dependencies = {
-            install_mode: 'auto',
+            install_mode: 'isolated_worker',
             dependency_file: 'requirements.txt',
-            fallback_to_pip: true,
-            ensure_at_startup: false,
-            install_timeout_seconds: 0,
+            fallback_to_pip: false,
+            ensure_at_startup: true,
+            install_timeout_seconds: 115,
           };
           config.dependencies = dependencies;
+        }
+        let rlm = ensureSection(config, 'rlm', {
+          enabled: true,
+          model_ref: '',
+          max_iters: 6,
+          max_llm_calls: 8,
+          max_output_chars: 12000,
+          max_findings: 12,
+        });
+        if (!rlm) {
+          rlm = { enabled: true, model_ref: '', max_iters: 6, max_llm_calls: 8, max_output_chars: 12000, max_findings: 12 };
+          config.rlm = rlm;
+        }
+        let promptOptimization = ensureSection(config, 'prompt_optimization', {
+          enabled: false,
+          allow_prompt_capture: false,
+          target_mode: 'guidance_overlay',
+          activation_mode: 'manual',
+          selected_components: [],
+          max_snapshot_chars: 60000,
+          max_components_per_compile: 4,
+          canary_percentage: 10,
+          canary_min_observations: 10,
+          canary_max_observations: 40,
+          automatic_requires_canary: true,
+          rollback: { enabled: true, maximum_score_regression: 0.05, maximum_failure_rate_increase: 0.05 },
+        });
+        if (!promptOptimization) {
+          promptOptimization = { enabled: false, allow_prompt_capture: false, target_mode: 'guidance_overlay', activation_mode: 'manual', selected_components: [], rollback: {} };
+          config.prompt_optimization = promptOptimization;
         }
 
         const ensureOptimizationSection = () => {
@@ -320,6 +350,8 @@
           return traceCapture;
         };
 
+        const ensureArray = (value) => Array.isArray(value) ? value : [];
+
         config.trace_capture = traceCapture;
         config.optimization = optimization;
         config.scheduler = scheduler;
@@ -327,6 +359,23 @@
         config.evaluator = evaluator;
         config.prompt = prompt;
         config.dependencies = dependencies;
+        config.rlm = rlm;
+        config.prompt_optimization = promptOptimization;
+        promptOptimization.enabled = toBool(promptOptimization.enabled, false);
+        promptOptimization.allow_prompt_capture = toBool(promptOptimization.allow_prompt_capture, false);
+        if (!['guidance_overlay', 'selected_components', 'assembled_prompt'].includes(promptOptimization.target_mode)) promptOptimization.target_mode = 'guidance_overlay';
+        if (!['manual', 'canary', 'automatic'].includes(promptOptimization.activation_mode)) promptOptimization.activation_mode = 'manual';
+        promptOptimization.selected_components = ensureArray(promptOptimization.selected_components);
+        promptOptimization.max_snapshot_chars = toInt(promptOptimization.max_snapshot_chars, 60000, 1000, 250000);
+        promptOptimization.max_components_per_compile = toInt(promptOptimization.max_components_per_compile, 4, 1, 12);
+        promptOptimization.canary_percentage = toInt(promptOptimization.canary_percentage, 10, 1, 100);
+        promptOptimization.canary_min_observations = toInt(promptOptimization.canary_min_observations, 10, 3, 1000);
+        promptOptimization.canary_max_observations = toInt(promptOptimization.canary_max_observations, 40, promptOptimization.canary_min_observations, 5000);
+        promptOptimization.automatic_requires_canary = true;
+        promptOptimization.rollback = ensureObject(promptOptimization.rollback, {});
+        promptOptimization.rollback.enabled = toBool(promptOptimization.rollback.enabled, true);
+        promptOptimization.rollback.maximum_score_regression = toFloat(promptOptimization.rollback.maximum_score_regression, 0.05, 0, 1);
+        promptOptimization.rollback.maximum_failure_rate_increase = toFloat(promptOptimization.rollback.maximum_failure_rate_increase, 0.05, 0, 1);
 
         const shell = ensureSection(matrix, 'shell', {
           enabled: true,
@@ -376,8 +425,6 @@
           answer_quality_threshold: 0.70,
           answer_quality_hard_fail: 0.50,
         });
-
-        const ensureArray = (value) => Array.isArray(value) ? value : [];
 
         config.enabled = toBool(config.enabled, false);
         config.instrumentation_enabled = toBool(config.instrumentation_enabled, true);
@@ -598,17 +645,17 @@
         config.prompt.fallback_guidance = toText(config.prompt.fallback_guidance, 'Use concise, evidence-driven reasoning and prioritize safe, auditable actions.');
 
         config.dependencies = ensureObject(config.dependencies, {
-          install_mode: 'auto',
+          install_mode: 'isolated_worker',
           dependency_file: 'requirements.txt',
-          fallback_to_pip: true,
-          ensure_at_startup: false,
-          install_timeout_seconds: 0,
+          fallback_to_pip: false,
+          ensure_at_startup: true,
+          install_timeout_seconds: 115,
         });
-        config.dependencies.install_mode = toText(config.dependencies.install_mode, 'auto');
+        config.dependencies.install_mode = toText(config.dependencies.install_mode, 'isolated_worker');
         config.dependencies.dependency_file = toText(config.dependencies.dependency_file, 'requirements.txt');
-        config.dependencies.fallback_to_pip = toBool(config.dependencies.fallback_to_pip, true);
-        config.dependencies.ensure_at_startup = toBool(config.dependencies.ensure_at_startup, false);
-        config.dependencies.install_timeout_seconds = toInt(config.dependencies.install_timeout_seconds, 0, 0, 1800);
+        config.dependencies.fallback_to_pip = toBool(config.dependencies.fallback_to_pip, false);
+        config.dependencies.ensure_at_startup = toBool(config.dependencies.ensure_at_startup, true);
+        config.dependencies.install_timeout_seconds = toInt(config.dependencies.install_timeout_seconds, 115, 15, 1800);
 
         $watch(() => config.scheduler_mode, (value) => {
           scheduler.mode = toText(value, 'distributed').toLowerCase();
@@ -671,15 +718,15 @@
         <section class="dspy-config-shell">
           <header class="dspy-config-header">
             <div>
-              <p class="dspy-eyebrow">DSPy RLM Cockpit</p>
-              <h1>Configuration Studio</h1>
+              <p class="dspy-eyebrow">A0 SELF-IMPROVEMENT</p>
+              <h1>Learning Controls</h1>
               <p class="dspy-subtitle">
-                Tune optimization, distributed scheduling, matrix gates, semantic evaluation, and dependency behavior from one screen.
+                Configure evidence capture, RLM analysis, GEPA optimization, quality gates, and managed workers from one screen.
               </p>
             </div>
             <div class="dspy-header-actions">
               <span class="dspy-status-pill" :class="config.enabled ? 'is-on' : 'is-off'" x-text="config.enabled ? 'Runtime: On' : 'Runtime: Off'"></span>
-              <span class="dspy-status-pill" x-text="`${config.scheduler_mode}`"></span>
+              <span class="dspy-status-pill" x-text="config.scheduler_mode === 'single' ? 'Single worker' : 'Multiprocess'"></span>
             </div>
           </header>
 
@@ -691,7 +738,7 @@
 
           <section class="dspy-grid">
             <div class="dspy-card">
-              <h2>Core controls</h2>
+              <h2>Capture & runtime</h2>
               <div class="dspy-field">
                 <label>
                   <span>Plugin enabled</span>
@@ -739,7 +786,7 @@
             </div>
 
             <div class="dspy-card">
-              <h2>Optimization gates</h2>
+              <h2>Optimization cadence</h2>
               <div class="dspy-field">
                 <label>
                   <span>Auto optimize</span>
@@ -780,7 +827,7 @@
             </div>
 
             <div class="dspy-card">
-              <h2>GEPA engine</h2>
+              <h2>GEPA optimizer</h2>
               <div class="dspy-field">
                 <label>
                   <span>Enable GEPA</span>
@@ -797,6 +844,18 @@
                 <label>
                   <span>GEPA threads</span>
                   <input type="number" min="1" max="64" step="1" x-model.number="config.gepa_threads" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Compile timeout (sec)</span>
+                  <input type="number" min="5" max="3600" step="5" x-model.number="config.optimization.max_compile_seconds" />
+                </label>
+              </div>
+              <div class="dspy-field inline">
+                <label>
+                  <span>Maximum cost (USD)</span>
+                  <input type="number" min="0" max="1000" step="0.25" x-model.number="config.optimization.max_cost_usd" />
                 </label>
               </div>
               <div class="dspy-field inline">
@@ -824,16 +883,97 @@
                 </label>
               </div>
             </div>
+
+            <div class="dspy-card">
+              <h2>RLM long-context analysis</h2>
+              <div class="dspy-field">
+                <label>
+                  <span>RLM analysis enabled</span>
+                  <label class="toggle"><input type="checkbox" x-model="config.rlm.enabled" /><span class="slider"></span></label>
+                </label>
+                <small>Explores redacted aggregate evidence with DSPy's bounded, sandboxed RLM. Leave the selector blank to inherit Agent Zero's effective utility model.</small>
+              </div>
+              <div class="dspy-field">
+                <label><span>DSPy model selector</span><input type="text" x-model="config.rlm.model_ref" placeholder="Auto: Agent Zero utility model" /></label>
+              </div>
+              <div class="dspy-field inline">
+                <label><span>REPL iterations</span><input type="number" min="1" max="20" x-model.number="config.rlm.max_iters" /></label>
+              </div>
+              <div class="dspy-field inline">
+                <label><span>Recursive LM calls</span><input type="number" min="1" max="50" x-model.number="config.rlm.max_llm_calls" /></label>
+              </div>
+              <div class="dspy-field inline">
+                <label><span>Output character cap</span><input type="number" min="1000" max="50000" step="1000" x-model.number="config.rlm.max_output_chars" /></label>
+              </div>
+              <div class="dspy-field inline">
+                <label><span>Finding cap</span><input type="number" min="1" max="32" x-model.number="config.rlm.max_findings" /></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="dspy-card prompt-lab" data-section-id="prompt-optimization-lab">
+            <h2>Advanced Prompt Optimization Lab</h2>
+            <p class="prompt-lab__warning">Experimental and opt-in. Candidates are stored as versioned overlays; Agent Zero prompt files are never rewritten. Automatic activation always passes through a bounded canary.</p>
+            <div class="dspy-grid dspy-grid--small">
+              <div class="dspy-field">
+                <label><span>Enable prompt optimization</span><label class="toggle"><input type="checkbox" x-model="config.prompt_optimization.enabled" /><span class="slider"></span></label></label>
+                <small>Guidance overlays remain the safe default until another target mode is selected.</small>
+              </div>
+              <div class="dspy-field">
+                <label><span>Approve local prompt snapshots</span><label class="toggle"><input type="checkbox" x-model="config.prompt_optimization.allow_prompt_capture" /><span class="slider"></span></label></label>
+                <small>Required for direct component modes. Snapshots remain in the plugin's local SQLite store.</small>
+              </div>
+              <div class="dspy-cell">
+                <label>Optimization target</label>
+                <select x-model="config.prompt_optimization.target_mode">
+                  <option value="guidance_overlay">Guidance overlay</option>
+                  <option value="selected_components">Selected components</option>
+                  <option value="assembled_prompt">Assembled mutable prompt</option>
+                </select>
+              </div>
+              <div class="dspy-cell">
+                <label>Activation policy</label>
+                <select x-model="config.prompt_optimization.activation_mode">
+                  <option value="manual">Manual</option>
+                  <option value="canary">Canary</option>
+                  <option value="automatic">Automatic after canary</option>
+                </select>
+              </div>
+            </div>
+            <div class="prompt-lab__columns" x-show="config.prompt_optimization.target_mode !== 'guidance_overlay'">
+              <div class="prompt-lab__group">
+                <h3>Targeting and budget</h3>
+                <label x-show="config.prompt_optimization.target_mode === 'selected_components'">Component IDs
+                  <textarea rows="4" :value="(config.prompt_optimization.selected_components || []).join('\n')" @input="config.prompt_optimization.selected_components = String($event.target.value || '').split('\n').map(v => v.trim()).filter(Boolean)"></textarea>
+                </label>
+                <small>Component IDs appear in the live cockpit after a prompt snapshot is captured. Protected components are always rejected server-side.</small>
+                <label>Snapshot character cap<input type="number" min="1000" max="250000" step="1000" x-model.number="config.prompt_optimization.max_snapshot_chars" /></label>
+                <label>Components per compile<input type="number" min="1" max="12" x-model.number="config.prompt_optimization.max_components_per_compile" /></label>
+              </div>
+              <div class="prompt-lab__group">
+                <h3>Canary and rollback</h3>
+                <label>Canary traffic (%)<input type="number" min="1" max="100" x-model.number="config.prompt_optimization.canary_percentage" /></label>
+                <label>Minimum observations<input type="number" min="3" max="1000" x-model.number="config.prompt_optimization.canary_min_observations" /></label>
+                <label>Maximum observations<input type="number" min="3" max="5000" x-model.number="config.prompt_optimization.canary_max_observations" /></label>
+                <label class="dspy-field-toggle"><span>Automatic rollback</span><label class="toggle"><input type="checkbox" x-model="config.prompt_optimization.rollback.enabled" /><span class="slider"></span></label></label>
+                <label>Maximum score regression<input type="number" min="0" max="1" step="0.01" x-model.number="config.prompt_optimization.rollback.maximum_score_regression" /></label>
+                <label>Failure-rate increase<input type="number" min="0" max="1" step="0.01" x-model.number="config.prompt_optimization.rollback.maximum_failure_rate_increase" /></label>
+              </div>
+              <aside class="prompt-lab__protected">
+                <h3>Always protected</h3>
+                <p>Response and break-loop contracts</p><p>Tool schemas and execution contracts</p><p>Security, authentication, and secret handling</p><p>Self-improvement control guidance</p>
+              </aside>
+            </div>
           </section>
 
           <section class="dspy-card">
-            <h2>Distributed scheduler topology</h2>
+            <h2>Worker scheduler</h2>
             <div class="dspy-grid dspy-grid--small">
               <div class="dspy-cell">
                 <label>Mode</label>
                 <select x-model="config.scheduler_mode">
-                  <option value="single">single</option>
-                  <option value="distributed">distributed</option>
+                  <option value="single">Single worker</option>
+                  <option value="distributed">Managed multiprocess</option>
                 </select>
               </div>
               <div class="dspy-cell">
@@ -876,7 +1016,7 @@
           </section>
 
           <section class="dspy-card">
-            <h2>Validation matrix</h2>
+            <h2>Quality gates</h2>
             <div class="dspy-matrix-grid">
               <article class="dspy-matrix-card">
                 <header>Shell</header>
@@ -1001,7 +1141,7 @@
 
           <section class="dspy-grid">
             <div class="dspy-card">
-              <h2>Evaluator quality loops</h2>
+              <h2>Semantic evaluator</h2>
               <div class="dspy-field">
                 <label>
                   <span>Enable semantic evaluator</span>
@@ -1043,7 +1183,7 @@
             </div>
 
             <div class="dspy-card">
-              <h2>Prompt guidance</h2>
+              <h2>Guidance delivery</h2>
               <div class="dspy-field">
                 <label>
                   <span>Inject guidance</span>
@@ -1071,13 +1211,12 @@
             </div>
 
             <div class="dspy-card">
-              <h2>Dependency operations</h2>
+              <h2>Worker environment</h2>
               <div class="dspy-field inline">
                 <label>
                   <span>Install mode</span>
                   <select x-model="config.dependencies.install_mode">
-                    <option value="auto">auto</option>
-                    <option value="manual">manual</option>
+                    <option value="isolated_worker">isolated worker</option>
                   </select>
                 </label>
               </div>
@@ -1105,7 +1244,7 @@
                   <input type="number" min="0" max="1800" step="15" x-model.number="config.dependencies.install_timeout_seconds" />
                 </label>
               </div>
-              <p class="hint">Runtime install command is defined in plugin hooks and can be run manually via host tooling.</p>
+              <p class="hint">Install, update, and Docker startup hooks maintain the isolated worker environment automatically. Agent Zero's interpreter is not modified.</p>
             </div>
           </section>
         </section>
@@ -1422,4 +1561,6 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="/plugins/dspy_rlm/webui/dspy-rlm-polish.css?v=101" />
+  <script type="module" src="/plugins/dspy_rlm/webui/dspy-rlm-config-ui.js?v=100"></script>
 </html>

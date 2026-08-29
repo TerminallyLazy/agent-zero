@@ -33,8 +33,10 @@ class Optimize(ApiHandler):
 
         from usr.plugins.dspy_rlm.helpers import _scheduler_coordinator as scheduler
         from usr.plugins.dspy_rlm.helpers import state
+        from usr.plugins.dspy_rlm.helpers.worker_supervisor import reconcile
 
         queued = scheduler.schedule_optimization_job(context_id=str(context.id), cfg=cfg, force=force)
+        workers = reconcile(cfg) if queued.get("dispatched", False) else {}
         return {
             "plugin": "dspy_rlm",
             "ok": bool(queued.get("dispatched", False)),
@@ -45,6 +47,7 @@ class Optimize(ApiHandler):
             "worker_operation": {
                 "mode": "local_multiprocess",
                 "request_execution": "queue_only",
+                "workers": workers,
                 "operator_command": "python3 -m usr.plugins.dspy_rlm.worker --once",
             },
         }

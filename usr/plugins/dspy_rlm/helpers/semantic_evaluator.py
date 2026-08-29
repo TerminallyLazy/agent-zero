@@ -11,6 +11,7 @@ from difflib import SequenceMatcher
 from typing import Any, Mapping, Protocol
 
 from .objective import collect_recent_objectives
+from .dspy_runtime import semantic_judge
 
 
 class StructuredJudge(Protocol):
@@ -97,6 +98,11 @@ def evaluate_objective_samples(samples: list[dict[str, Any]], cfg: dict[str, Any
         policy_compliance = 1.0 - min(1.0, len(risk_flags) * 0.4)
         telemetry_score = max(0.0, lexical_similarity * .2 + command_safety * .2 + reliability * .18 + evidence_recall * .13 + evidence_precision * .12 + answer_quality * .12 + policy_compliance * .13)
         deterministic = _explicit_deterministic_evidence(sample, policy_breach=policy_breach)
+        judge = semantic_judge(sample, cfg)
+        if judge is not None:
+            lexical_similarity = float(judge["score"])
+            answer_quality = float(judge["score"])
+            telemetry_score = max(0.0, min(1.0, telemetry_score * 0.35 + float(judge["score"]) * 0.65))
         scored.append({
             "sample": dict(sample),
             "scores": {"semantic_match": float(lexical_similarity), "command_safety": float(command_safety),
@@ -105,7 +111,7 @@ def evaluate_objective_samples(samples: list[dict[str, Any]], cfg: dict[str, Any
                        "policy_compliance": float(policy_compliance)},
             "score_kind": "telemetry_only", "telemetry_only": True,
             "telemetry": {"lexical_similarity": float(lexical_similarity), "telemetry_score": float(telemetry_score),
-                          "lexical_method": "sequence_matcher"},
+                          "lexical_method": "sequence_matcher", "semantic_judge": judge},
             "deterministic": deterministic, "risk_flags": risk_flags, "policy_breach": policy_breach,
             "overall_score": float(telemetry_score),
             "rationale": f"telemetry_only lexical={lexical_similarity:.2f}; deterministic_available={deterministic['available']}; policy_flags={','.join(risk_flags) or 'none'}",

@@ -64,8 +64,11 @@ async def test_optimize_api_force_cannot_bypass_disabled_capability(
         "load_config",
         lambda *args, **kwargs: _enabled_config(enabled=False),
     )
+    from usr.plugins.dspy_rlm.api import status as status_module
+    monkeypatch.setattr(status_module.AgentContext, "get", lambda _context_id: SimpleNamespace(id="ctx-1", agent0=object()))
 
-    result = await Optimize().process({"context_id": "ctx-1", "force": True}, None)
+    handler = object.__new__(Optimize)
+    result = await handler.process({"context_id": "ctx-1", "force": True}, None)
 
     assert result["ok"] is False
     assert result["result"]["reason"] == "optimization_disabled"

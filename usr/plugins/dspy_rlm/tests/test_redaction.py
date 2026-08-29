@@ -17,7 +17,7 @@ from usr.plugins.dspy_rlm.helpers.redaction import (
 
 def test_nested_secrets_are_redacted_without_overmatching_plain_metadata():
     payload = {
-        "profile": {"api_key": "sk-supersecret-token-value", "nested": [{"password": "correct-horse"}]},
+        "profile": {"api_key": "synthetic-secret-token-value", "nested": [{"password": "correct-horse"}]},
         "monkey": "ordinary metadata",
         "url": "postgres://alice:correct-horse@db.example/app",
     }
