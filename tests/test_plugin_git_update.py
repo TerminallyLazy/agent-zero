@@ -9,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from helpers import git as git_helpers
+from plugins._plugin_installer.api import plugin_install
 from plugins._plugin_installer.helpers import install
 
 
@@ -115,6 +116,21 @@ def test_plugin_hub_renders_dirty_update_errors_inline():
     assert "error_kind" in store
     assert "pi-detail-error" in detail
     assert "conflicting_files" in detail
+
+
+def test_plugin_hub_force_refresh_reaches_index_fetch(monkeypatch):
+    received: list[bool] = []
+
+    def fake_get_plugin_hub_index(*, force: bool = False):
+        received.append(force)
+        return {"index": {"plugins": {}}, "installed_plugins": []}
+
+    monkeypatch.setattr(plugin_install, "get_plugin_hub_index", fake_get_plugin_hub_index)
+
+    result = plugin_install.PluginInstall._fetch_index(None, {"force": True})
+
+    assert result["success"] is True
+    assert received == [True]
 
 
 def test_plugin_update_returns_structured_dirty_tree_error(monkeypatch, tmp_path: Path):

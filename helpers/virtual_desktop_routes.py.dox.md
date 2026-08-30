@@ -35,6 +35,7 @@
 ## Key Concepts
 
 - Important called helpers/classes observed in the source: `self.relative_path`, `self.session_request`, `self.query`, `virtual_desktop.proxy_for_token`, `WebSocket`, `self.upstream_target`, `WSConnection`, `writer.write`, `rest.partition`, `unquote`, `quote`, `http.client.HTTPConnection`, `query_string.decode`, `urlsplit`, `location.startswith`, `path.startswith`, `parse_qs`, `login.get_credentials_hash`, `SecureCookieSessionInterface.get_signing_serializer`, `dict.get.decode`.
+- The virtual-desktop ASGI builder reuses `compose_server_lifespan` from `helpers.ui_server`; its route override must preserve the same Streamable HTTP startup and shutdown contract as the standard UI builder.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

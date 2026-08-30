@@ -32,6 +32,7 @@
 - Top-level functions:
 - `_positive_int_env(name: str, default: int) -> int`
 - `configure_process_environment() -> None`
+- `compose_server_lifespan(startup_monitor: StartupMonitor, mcp_app)`: Compose startup monitoring with the FastMCP Streamable HTTP application lifespan.
 - Notable constants/configuration names: `UPLOAD_LIMIT_BYTES`, `SOCKETIO_PING_INTERVAL_SECONDS`, `SOCKETIO_PING_TIMEOUT_SECONDS`, `GZIP_MINIMUM_RESPONSE_BYTES`, `GZIP_COMPRESSION_LEVEL`, `UI_INDEX_ASSET_URL`, `A0_SOCKETIO_PING_INTERVAL_SECONDS`, `A0_SOCKETIO_PING_TIMEOUT_SECONDS`.
 
 ## Runtime Contracts
@@ -49,6 +50,7 @@
 - Authenticated extension asset routes serve root-contained files from both `extensions/webui/` and `usr/extensions/webui/`, matching the URLs emitted by the WebUI extension manifest.
 - The authenticated `/` route uses `serve_splash()` to return the no-store, self-contained bootstrap document. The authenticated extensionless `/ui/index` route renders the existing index and runtime/user placeholders for the splash to install into the current document without navigation; `/index.html` remains a direct fallback for the same rendering path. The authenticated `/safe` route first returns a no-store, self-contained document that unregisters all origin service workers, then renders the existing index through `serve_index()` when its internal `__direct=1` marker is present; it never initializes the asset bundle or a worker. The authenticated `serve_ui_asset_bundle()` endpoint passes the application entry URL to the generic recursive bundler and supports gzip transfer and payload-specific ETag revalidation while component, extension, and Alpine lifecycles remain unchanged.
 - The Starlette HTTP branch applies negotiated gzip to responses of at least 1 KiB at compression level 6 while preserving already encoded responses; Socket.IO remains outside that middleware branch.
+- The root Starlette lifespan enters both startup monitoring and the mounted Streamable HTTP application's lifespan so MCP session state exists before `initialize` and is released during shutdown.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance
@@ -60,7 +62,7 @@
 ## Verification
 
 - Run targeted tests for changed helper behavior; run security regressions for auth, filesystem, WebSocket, tunnel, upload, or secret-handling helpers.
-- No direct test reference was found by name search; choose the nearest behavioral test or perform a focused smoke check.
+- `tests/test_mcp_streamable_http_lifespan.py` covers root-lifespan startup, MCP initialization, tool discovery, and clean session termination.
 
 ## Child DOX Index
 

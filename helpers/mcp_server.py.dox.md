@@ -32,7 +32,8 @@
 
 ## Key Concepts
 
-- Important called helpers/classes observed in the source: `PrintStyle`, `contextvars.ContextVar`, `FastMCP`, `mcp_server.tool`, `Field`, `settings.get_settings`, `initialize_agent`, `AgentContext`, `ToolError`, `ToolResponse`, `context.reset`, `AgentContext.remove`, `remove_chat`, `context.communicate`, `threading.RLock`, `self.reconfigure`, `StreamableHTTPSessionManager`, `mcp_server._get_additional_http_routes`, `create_base_app`, `PrintStyle.error`.
+- Important called helpers/classes observed in the source: `PrintStyle`, `contextvars.ContextVar`, `FastMCP`, `mcp_server.tool`, `Field`, `settings.get_settings`, `initialize_agent`, `AgentContext`, `ToolError`, `ToolResponse`, `context.reset`, `AgentContext.remove`, `remove_chat`, `context.communicate`, `threading.RLock`, `self.reconfigure`, `create_streamable_http_app`, `create_sse_app`, `PrintStyle.error`.
+- Streamable HTTP is created through FastMCP's supported application factory. The parent Agent Zero ASGI application must enter the returned application's lifespan before serving MCP requests; request handlers must not create task groups or assign private session-manager fields.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance
@@ -47,6 +48,7 @@
 - Related tests observed by source search:
   - `tests/test_default_prompt_budget.py`
   - `tests/test_fasta2a_client.py`
+  - `tests/test_mcp_streamable_http_lifespan.py`
   - `tests/test_ws_security.py`
 
 ## Child DOX Index

@@ -59,6 +59,20 @@ Ask before:
 - Do not document ignored `usr/` or `tmp/` changes unless explicitly requested.
 - Keep DOX concise, current, operational, and free of diary entries or duplicated parent guidance.
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub at `TerminallyLazy/agent-zero`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage labels are used unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository using root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+
 ## Child DOX Index
 
 | Child | Scope |

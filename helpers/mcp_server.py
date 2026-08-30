@@ -17,8 +17,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Receive, Scope, Send
-from fastmcp.server.http import create_sse_app, create_base_app, build_resource_metadata_url # type: ignore
-from starlette.routing import Mount  # type: ignore
+from fastmcp.server.http import create_sse_app, create_streamable_http_app  # type: ignore
 from starlette.requests import Request
 import threading
 
@@ -301,8 +300,6 @@ class DynamicMcpProxy:
         self.token = ""
         self.sse_app: ASGIApp | None = None
         self.http_app: ASGIApp | None = None
-        self.http_session_manager = None
-        self.http_session_task_group = None
         self._lock = threading.RLock()  # Use RLock to avoid deadlocks
         self.reconfigure(cfg["mcp_server_token"])
 
@@ -352,76 +349,22 @@ class DynamicMcpProxy:
         *,
         middleware: list[Middleware],
     ) -> ASGIApp:
-        """Create a Streamable HTTP app with manual session manager lifecycle."""
+        """Create the Streamable HTTP application using FastMCP's lifecycle."""
 
-        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager  # type: ignore
-        from mcp.server.auth.middleware.bearer_auth import RequireAuthMiddleware  # type: ignore
-        import anyio
-
-        server_routes = []
-        server_middleware = []
-
-        self.http_session_task_group = None
-        self.http_session_manager = StreamableHTTPSessionManager(
-            app=mcp_server._mcp_server,
+        return create_streamable_http_app(
+            server=mcp_server,
+            streamable_http_path=streamable_http_path,
             event_store=None,
+            auth=mcp_server.auth,
             json_response=True,
-            stateless=False,
-        )
-
-        async def handle_streamable_http(scope, receive, send):
-            if self.http_session_task_group is None:
-                self.http_session_task_group = anyio.create_task_group()
-                await self.http_session_task_group.__aenter__()
-                if self.http_session_manager:
-                    self.http_session_manager._task_group = self.http_session_task_group
-
-            if self.http_session_manager:
-                await self.http_session_manager.handle_request(scope, receive, send)
-
-        auth_provider = mcp_server.auth
-
-        if auth_provider:
-            server_routes.extend(auth_provider.get_routes(mcp_path=streamable_http_path))
-            server_middleware.extend(auth_provider.get_middleware())
-
-            resource_url = auth_provider._get_resource_url(streamable_http_path)
-            resource_metadata_url = (
-                build_resource_metadata_url(resource_url) if resource_url else None
-            )
-
-            server_routes.append(
-                Mount(
-                    streamable_http_path,
-                    app=RequireAuthMiddleware(
-                        handle_streamable_http,
-                        auth_provider.required_scopes,
-                        resource_metadata_url,
-                    ),
-                )
-            )
-        else:
-            server_routes.append(
-                Mount(
-                    streamable_http_path,
-                    app=handle_streamable_http,
-                )
-            )
-
-        additional_routes = mcp_server._get_additional_http_routes()
-        if additional_routes:
-            server_routes.extend(additional_routes)
-
-        server_middleware.extend(middleware)
-
-        return create_base_app(
-            routes=server_routes,
-            middleware=server_middleware,
+            stateless_http=False,
             debug=fastmcp.settings.debug,
+            middleware=list(middleware),
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Forward the ASGI calls to the appropriate app based on the URL path"""
+        """Forward ASGI calls to the appropriate MCP application."""
+
         with self._lock:
             sse_app = self.sse_app
             http_app = self.http_app

@@ -56,4 +56,5 @@ class PluginInstall(ApiHandler):
         return update_from_git(input.get("plugin_name", ""))
 
     def _fetch_index(self, input: dict) -> dict:
-        return {"success": True, **get_plugin_hub_index()}
+        force = input.get("force", False) is True
+        return {"success": True, **get_plugin_hub_index(force=force)}

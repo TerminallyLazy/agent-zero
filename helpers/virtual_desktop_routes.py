@@ -397,7 +397,7 @@ class VirtualDesktopGateway:
 
 
 def install_route_hooks() -> None:
-    from helpers.ui_server import UiServerRuntime
+    from helpers.ui_server import UiServerRuntime, compose_server_lifespan
 
     if getattr(UiServerRuntime, "_a0_virtual_desktop_route_hooks_installed", False):
         return
@@ -429,7 +429,10 @@ def install_route_hooks() -> None:
                     Mount("/a2a", app=a2a_app),
                     Mount("/", app=wsgi_app),
                 ],
-                lifespan=startup_monitor.lifespan(),
+                lifespan=compose_server_lifespan(
+                    startup_monitor,
+                    mcp_app,
+                ),
             )
 
         with startup_monitor.stage("socketio.asgi.create"):

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import timedelta
+from contextlib import AsyncExitStack, asynccontextmanager
 import asyncio
 import gzip
 import json
@@ -68,6 +69,28 @@ def configure_process_environment() -> None:
     from helpers.localization import Localization
 
     Localization.get().apply_process_timezone()
+
+
+def compose_server_lifespan(
+    startup_monitor: StartupMonitor,
+    mcp_app,
+):
+    startup_lifespan = startup_monitor.lifespan()
+    http_app = mcp_app.http_app
+
+    if http_app is None:
+        raise RuntimeError("MCP Streamable HTTP app is not initialized")
+
+    @asynccontextmanager
+    async def lifespan(root_app):
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(startup_lifespan(root_app))
+            await stack.enter_async_context(
+                http_app.router.lifespan_context(http_app)
+            )
+            yield
+
+    return lifespan
 
 
 @dataclass
@@ -242,7 +265,10 @@ class UiServerRuntime:
                     Mount("/a2a", app=a2a_app),
                     Mount("/", app=wsgi_app),
                 ],
-                lifespan=startup_monitor.lifespan(),
+                lifespan=compose_server_lifespan(
+                    startup_monitor,
+                    mcp_app,
+                ),
             )
             compressed_http_app = GZipMiddleware(
                 starlette_app,

@@ -8,6 +8,7 @@
 ## Ownership
 
 - `README.md`, `quickstart.md`, `guides/`, and `setup/` cover user-facing setup and workflows.
+- `agents/` contains repository-local configuration consumed by installed engineering skills.
 - `developer/` covers compact developer references and source handoffs.
 - `plans/` covers implementation plans, migration notes, and staged technical roadmaps.
 - `res/` contains documentation images and other documentation assets.
