@@ -296,6 +296,8 @@ class ConnectorBrowserRuntime:
             statuses = host_browser_metadata_for_context(self.context_id)
             raise RuntimeError(self._host_browser_unavailable_message(statuses))
         payload["browser_selection"] = self._host_browser_selection(sid)
+        from plugins._a0_connector.helpers.host_control import fence
+        fence(self.context_id, sid, payload, self.agent)
 
         if self._needs_prepare(sid, payload):
             await self._send_browser_op(
@@ -306,6 +308,7 @@ class ConnectorBrowserRuntime:
                         "op_id": str(uuid.uuid4()),
                         "context_id": self.context_id,
                         "action": "ensure",
+                        **({"host_epoch": payload["host_epoch"]} if "host_epoch" in payload else {}),
                         "profile_mode": self._host_browser_profile_mode(),
                         "browser_selection": self._host_browser_selection(sid),
                     },
@@ -357,6 +360,10 @@ class ConnectorBrowserRuntime:
         return payload
 
     async def _send_browser_op(self, sid: str, payload: dict[str, Any]) -> Any:
+        from plugins._a0_connector.helpers.host_targets import assert_dispatch
+        assert_dispatch(self.context_id, sid, "browser")
+        from plugins._a0_connector.helpers.host_control import fence
+        fence(self.context_id, sid, payload, self.agent)
         op_id = str(payload["op_id"])
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()

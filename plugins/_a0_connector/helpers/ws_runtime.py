@@ -7,7 +7,8 @@ import copy
 import json
 import threading
 import time
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -136,17 +137,41 @@ _sid_remote_exec_metadata: dict[str, RemoteExecMetadata] = {}
 _sid_launcher_gateway_metadata: dict[str, LauncherGatewayMetadata] = {}
 _replaced_gateway_sids: set[str] = set()
 _state_lock = threading.RLock()
+_host_route_versions: dict[str, str] = {}
+
+
+def _route_changed(sid: str, old: Any, new: Any) -> None:
+    def stable(value):
+        if value is None:
+            return None
+        row = asdict(value)
+        row.pop("updated_at", None)
+        row.pop("available_browsers", None)  # Inventory changes as tabs/browsers start.
+        row.pop("content_helper_sha256", None)  # Negotiated helper initialization, not host identity.
+        row.pop("last_error", None)  # Availability is checked separately at dispatch.
+        if isinstance(value, LauncherGatewayMetadata):
+            row.pop("status", None)
+        if row.get("status") in {"ready", "active"} or (
+            isinstance(value, ComputerUseMetadata) and row.get("status") in {"interactive", "persistent", "allow"}
+        ):
+            row["status"] = "ready"
+        return row
+    if stable(old) != stable(new):
+        _host_route_versions[sid] = uuid.uuid4().hex
+
 
 
 def register_sid(sid: str) -> None:
     with _state_lock:
         _replaced_gateway_sids.discard(sid)
         _sid_contexts.setdefault(sid, set())
+        _host_route_versions.setdefault(sid, uuid.uuid4().hex)
 
 
 def unregister_sid(sid: str) -> set[str]:
     with _state_lock:
         contexts = _sid_contexts.pop(sid, set())
+        _host_route_versions.pop(sid, None)
         _remote_tree_snapshots.pop(sid, None)
         _sid_computer_use_metadata.pop(sid, None)
         _sid_host_browser_metadata.pop(sid, None)
@@ -283,12 +308,15 @@ def store_sid_launcher_gateway_metadata(
             if other_sid != sid and other.gateway_id == gateway_id:
                 _sid_launcher_gateway_metadata.pop(other_sid, None)
                 _replaced_gateway_sids.add(other_sid)
+        _route_changed(sid, _sid_launcher_gateway_metadata.get(sid), metadata)
         _sid_launcher_gateway_metadata[sid] = metadata
     return metadata
 
 
 def clear_sid_launcher_gateway_metadata(sid: str) -> None:
     with _state_lock:
+        if sid in _sid_launcher_gateway_metadata:
+            _host_route_versions[sid] = uuid.uuid4().hex
         _sid_launcher_gateway_metadata.pop(sid, None)
 
 
@@ -381,6 +409,12 @@ def launcher_gateway_status() -> dict[str, Any]:
 
 
 def _candidate_sids_for_context_locked(context_id: str) -> list[str]:
+    from plugins._a0_connector.helpers.host_targets import pinned_candidate
+    pinned = pinned_candidate(context_id)
+    return pinned if pinned is not None else _unbound_candidate_sids_for_context_locked(context_id)
+
+
+def _unbound_candidate_sids_for_context_locked(context_id: str) -> list[str]:
     context_sids = sorted(_context_subscriptions.get(context_id, set()))
     context_set = set(context_sids)
     gateway_sid = _active_launcher_gateway_sid_locked()
@@ -466,12 +500,15 @@ def store_sid_remote_file_metadata(sid: str, payload: dict[str, Any]) -> RemoteF
         updated_at=time.time(),
     )
     with _state_lock:
+        _route_changed(sid, _sid_remote_file_metadata.get(sid), metadata)
         _sid_remote_file_metadata[sid] = metadata
     return metadata
 
 
 def clear_sid_remote_file_metadata(sid: str) -> None:
     with _state_lock:
+        if sid in _sid_remote_file_metadata:
+            _host_route_versions[sid] = uuid.uuid4().hex
         _sid_remote_file_metadata.pop(sid, None)
 
 
@@ -508,12 +545,15 @@ def store_sid_remote_exec_metadata(sid: str, payload: dict[str, Any]) -> RemoteE
         updated_at=time.time(),
     )
     with _state_lock:
+        _route_changed(sid, _sid_remote_exec_metadata.get(sid), metadata)
         _sid_remote_exec_metadata[sid] = metadata
     return metadata
 
 
 def clear_sid_remote_exec_metadata(sid: str) -> None:
     with _state_lock:
+        if sid in _sid_remote_exec_metadata:
+            _host_route_versions[sid] = uuid.uuid4().hex
         _sid_remote_exec_metadata.pop(sid, None)
 
 
@@ -574,12 +614,15 @@ def store_sid_computer_use_metadata(sid: str, payload: dict[str, Any]) -> Comput
         updated_at=time.time(),
     )
     with _state_lock:
+        _route_changed(sid, _sid_computer_use_metadata.get(sid), metadata)
         _sid_computer_use_metadata[sid] = metadata
     return metadata
 
 
 def clear_sid_computer_use_metadata(sid: str) -> None:
     with _state_lock:
+        if sid in _sid_computer_use_metadata:
+            _host_route_versions[sid] = uuid.uuid4().hex
         _sid_computer_use_metadata.pop(sid, None)
 
 
@@ -631,6 +674,7 @@ def store_sid_host_browser_metadata(sid: str, payload: dict[str, Any]) -> HostBr
         updated_at=time.time(),
     )
     with _state_lock:
+        _route_changed(sid, _sid_host_browser_metadata.get(sid), metadata)
         _sid_host_browser_metadata[sid] = metadata
     return metadata
 
@@ -682,6 +726,8 @@ def _normalize_available_host_browsers(value: Any) -> tuple[dict[str, Any], ...]
 
 def clear_sid_host_browser_metadata(sid: str) -> None:
     with _state_lock:
+        if sid in _sid_host_browser_metadata:
+            _host_route_versions[sid] = uuid.uuid4().hex
         _sid_host_browser_metadata.pop(sid, None)
 
 
@@ -1199,3 +1245,38 @@ def _set_future_result(
 ) -> None:
     if not future.done():
         future.set_result(payload)
+
+
+def host_routing_snapshot(context_id: str) -> dict[str, Any]:
+    """Private atomic input for host-target tokens; never return this on the wire."""
+    with _state_lock:
+        sid = _active_launcher_gateway_sid_locked()
+        gateway = _sid_launcher_gateway_metadata.get(sid or "")
+        candidates = _unbound_candidate_sids_for_context_locked(context_id)
+        competitors = [item for item in candidates if item != sid and any((
+            item in _sid_computer_use_metadata, item in _sid_host_browser_metadata,
+            item in _sid_remote_exec_metadata, item in _sid_remote_file_metadata,
+        ))]
+        def row(registry):
+            value = registry.get(sid or "")
+            result = asdict(value) if value else {}
+            result.pop("updated_at", None)
+            if result.get("status") in ("ready", "active") or (
+                isinstance(value, ComputerUseMetadata) and result.get("status") in ("interactive", "persistent", "allow")
+            ):
+                result["status"] = "ready"
+            return result
+        gateway_row = row(_sid_launcher_gateway_metadata)
+        gateway_row.pop("status", None)
+        files = row(_sid_remote_file_metadata)
+        return {
+            "sid": sid, "gateway": gateway_row or None,
+            "ambiguous": len(_active_launcher_gateways_locked()) > 1 or bool(competitors),
+            # Chat-only WebSocket observers (including the phone) cannot execute
+            # host tools. Their reconnects must not invalidate the host binding.
+            "topology": [(item, _host_route_versions.get(item))
+                         for item in sorted(set(competitors + ([sid] if sid else [])))],
+            "browser": row(_sid_host_browser_metadata), "computer_use": row(_sid_computer_use_metadata),
+            "files": files, "file_write": {"enabled": files.get("enabled") and files.get("write_enabled")},
+            "code_execution": row(_sid_remote_exec_metadata),
+        }

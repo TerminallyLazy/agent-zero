@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 import uuid
+import time
 from typing import Any
 
 from helpers import chat_media, history, media_artifacts
@@ -191,6 +192,10 @@ class ComputerUseRemote(Tool):
         self._prune_prior_capture_history()
 
     async def _dispatch_payload(self, *, sid: str, payload: dict[str, Any]) -> dict[str, Any]:
+        from plugins._a0_connector.helpers.host_targets import assert_dispatch
+        assert_dispatch(self.agent.context.id, sid, "computer_use")
+        from plugins._a0_connector.helpers.host_control import fence
+        fence(self.agent.context.id, sid, payload, self.agent)
         op_id = str(payload.get("op_id") or "").strip()
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -833,6 +838,15 @@ class ComputerUseRemote(Tool):
         height = data.get("height", "?")
         capture_id = str(data.get("capture_id") or resolved_capture_id or "?").strip()
         coordinate_space = str(data.get("coordinate_space") or "normalized_global_screen").strip()
+        if getattr(self, "log", None) is not None:
+            from plugins._a0_connector.helpers.host_targets import capture_identity
+            self.log.update(computer_snapshot={
+                "path": display_ref, "context_id": self.agent.context.id,
+                "capture_id": capture_id, "captured_at": time.time(),
+                "source": "computer", "ephemeral": False,
+                "outcome": "capture_received",
+                **capture_identity(self.agent.context.id),
+            })
         summary = (
             f"Computer-use capture id={capture_id} {width}x{height}, "
             f"coordinates={coordinate_space} [0,1]."

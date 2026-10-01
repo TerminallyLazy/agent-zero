@@ -23,6 +23,23 @@
 - Never re-add a connector prompt that the effective project/profile tool policy
   blocks.
 - Do not bypass WebSocket authentication or leak connector session data.
+- `host_tasks_v1` adds native read-only per-chat status and explicit text-only
+  host submission through authenticated, CSRF-protected `host_status` and
+  `host_task`. Mobile clients never grant scopes or change browser configuration.
+- `helpers/host_targets.py` owns session/context-bound generation tokens and
+  durable chat bindings. Require one unambiguous Launcher connection; reject
+  stale connections, scope/config changes and competing clients without fallback.
+  Subordinate contexts inherit through `parent_context_id`; running or queued
+  descendants prevent retargeting. Persist bindings before submission and retain
+  their restrictions after restart, requiring fresh explicit review.
+- Host routing generations track execution-capable connections. Chat-only
+  WebSocket observers may reconnect without invalidating a host binding; an
+  observer that begins advertising host tools becomes a competing target.
+  Browser inventory and the negotiated content-helper checksum are observations,
+  not target identity; helper initialization must not revoke an unchanged host.
+- Every remote tool rechecks its bound target before dispatch. Computer captures
+  publish bounded `computer_snapshot` metadata with context, capture ID, server
+  path, source, time and host identity; a capture is not proof of action success.
 - Advertise Launcher gateways additively through HTTP capability
   `launcher_gateway` and WebSocket feature `launcher_gateway_control`. Older
   ordinary CLI clients retain their existing protocol fields and behavior; do
@@ -44,11 +61,20 @@
 - Launcher gateway scopes expose file reading and writing separately. File
   writing depends on reading, and Code execution depends on file writing. Keep
   older gateway declarations without `file_write` read/write compatible.
-- Agent Zero WebUI exposes no Launcher gateway icon, menu, status, or control
-  bridge. Host access settings, Disconnect/Reconnect, scope changes, and
+- Agent Zero WebUI exposes the read-only Connect your computer assistant and
+  authenticated setup continuation, with shared guidance from `helpers/setup_help.json`.
+  Host access settings, Disconnect/Reconnect, scope changes, and
   Computer Use approval belong only to attached or detached A0 Launcher chrome.
   Keep the authenticated gateway HTTP/WebSocket protocol available for the
-  Launcher and connector runtime without adding a Core WebUI surface.
+  Launcher and connector runtime. The setup assistant never grants host access.
+- `host_setup_v1` is chat-independent and CSRF protected. Its bounded status
+  projection omits profiles, endpoints and paths. `helpers/host_setup.py` owns
+  the private SQLite server identity and 10-minute owner-bound continuation
+  codes. Codes are single-claim, rate limited, idempotent by request ID and grant
+  no scopes. Original-device confirmation precedes separate local permission
+  review. Unknown client requests are read back, never automatically replayed.
+  Verification metadata expires after five minutes and requires current access;
+  browser evidence covers a temporary page, computer evidence covers capture only.
 - File operation results may arrive as chunked JSON/base64
   `connector_file_op_result` frames; resolve the pending file operation only
   after all chunks for the `op_id` are assembled.
@@ -61,7 +87,20 @@
 - Computer Use receipts describe transport success unless the connector returns explicit effect evidence. Linux target-bound typing requires a verified active/focused `window_id`; window activation uses focus, never a press action on an application or window node. Do not retry an identical failed Computer Use call.
 - Accepted WebSocket user-message replay metadata may include attachment basenames only; strip paths, query strings, fragments, and bytes before logging them in `kvps`.
 
+- `host_viewer_v1` negotiates native live capture and takeover. `helpers/host_control.py`
+  persists ownership and receipts, never viewer pixels or keystrokes. Close the
+  gate before host acquire; all four host tool families enforce epochs before
+  dispatch. Plugin intervention/tool hooks hold owner and descendants independently
+  of ordinary pause; Return supplies a fresh observation without starting a new run.
+  Expiry/restart/unknown results remain held. Keep authenticated CSRF-protected
+  `api/v1/host_viewer.py` bounded and non-replaying. Frames use existing browser RPC
+  result transport; scope changes remain Launcher-owned.
+
 ## Work Guidance
+
+- Setup's fixed `a0-launcher://setup` link opens local guidance without a payload
+  or grant. Always retain manual-code and install/update fallback; a timeout
+  does not establish whether Launcher is installed.
 
 - Coordinate connector runtime changes with API, tools, prompts, and WebUI viewer behavior together.
 
@@ -70,6 +109,8 @@
 - Run connector-specific tests or smoke-test HTTP and `/ws` integration when changing runtime behavior.
 - Launcher gateway regression coverage lives in
   `tests/test_a0_connector_launcher_gateway.py`.
+- Host targeting, session isolation, persistence, inheritance and revocation
+  regressions live in `tests/test_a0_connector_host_tasks.py`.
 
 ## Child DOX Index
 

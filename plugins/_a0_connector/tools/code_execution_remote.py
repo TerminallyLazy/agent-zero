@@ -210,6 +210,10 @@ class CodeExecutionRemote(Tool):
         )
 
         try:
+            from plugins._a0_connector.helpers.host_targets import assert_dispatch
+            assert_dispatch(context_id, sid, "code_execution")
+            from plugins._a0_connector.helpers.host_control import fence
+            fence(context_id, sid, payload, self.agent)
             await get_shared_ws_manager().emit_to(
                 NAMESPACE,
                 sid,
