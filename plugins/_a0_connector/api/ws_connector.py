@@ -125,6 +125,8 @@ class WsConnector(WsHandler):
         PrintStyle.debug(f"[a0-connector] /ws connected: {sid}")
 
     async def on_disconnect(self, sid: str) -> None:
+        from plugins._a0_connector.helpers import host_control
+        host_control.forget(sid)
         contexts = unregister_sid(sid)
         for context_id in contexts:
             self._cancel_streaming(sid, context_id)
@@ -164,6 +166,8 @@ class WsConnector(WsHandler):
     ) -> dict[str, Any] | WsResult | None:
         if event == "connector_hello":
             self._store_remote_tool_metadata(data, sid)
+            from plugins._a0_connector.helpers import host_control
+            host_control.observe(sid, data.get("gateway") or {})
             self._associate_declared_context(data, sid)
             return {
                 "protocol": PROTOCOL_VERSION,

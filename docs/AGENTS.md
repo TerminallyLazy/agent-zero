@@ -7,6 +7,8 @@
 
 ## Ownership
 
+- `guides/computer-setup.md` owns cross-device Launcher/WebUI/iOS setup guidance.
+
 - `README.md`, `quickstart.md`, `guides/`, and `setup/` cover user-facing setup and workflows.
 - `developer/` covers compact developer references and source handoffs.
 - `plans/` covers implementation plans, migration notes, and staged technical roadmaps.

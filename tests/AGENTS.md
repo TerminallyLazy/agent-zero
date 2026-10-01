@@ -17,10 +17,19 @@
 - Keep tests deterministic and isolated from existing chats, uploads, downloads, plugin state, and settings.
 - Prefer exercising public helper/API contracts over fragile implementation details when practical.
 - Security regression tests should assert the protected behavior directly.
+- Host-task tests cover session/context token isolation, durable pre-submission
+  binding, stale/reconnected/competing routes, descendant inheritance and active
+  work, scope revocation, and unchanged ordinary unbound routing.
+- Chat-only observer reconnects preserve host generations; advertising host
+  tools from an observer must still invalidate the binding as a competing route.
 - Launcher gateway tests must cover feature negotiation, authenticated and
   CSRF-protected control, acknowledgement timeout, identity lifecycle,
   context-bound CLI routing precedence, duplicate/multiple-host behavior,
   scope-driven availability, and emergency disconnect without a live host.
+
+- `test_a0_host_viewer.py` covers durable holds, ownership isolation, duplicate
+  receipts, final dispatch epochs and fresh-state intervention. Keep lease tests
+  isolated from real connector sessions and user capture data.
 
 ## Work Guidance
 
@@ -29,6 +38,10 @@
 - Avoid broad sleeps or real-time dependencies; use monkeypatching or controlled clocks where possible.
 
 ## Verification
+
+- `test_a0_host_setup.py` covers shared readiness, verification freshness,
+  protected API policy, continuation identity/owner isolation, single-claim
+  behavior, cancellation, expiry and rate limits in an isolated database.
 
 - Run `pytest` for broad changes.
 - Run `pytest tests/test_name.py` for narrow changes and mention any broader test gaps at closeout.

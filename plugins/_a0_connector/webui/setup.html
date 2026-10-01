@@ -1,0 +1,40 @@
+<html><head><title>Connect your computer</title></head><body>
+<script type="module">import {store} from '/plugins/_a0_connector/webui/setup-store.js';</script>
+<div x-data><template x-if="$store.computerSetup"><section class="a0-setup" x-create="$store.computerSetup.start()" x-destroy="$store.computerSetup.stop()">
+  <p>Use your browser or desktop apps with Agent Zero. Start here or in Launcher on your computer.</p>
+  <p class="a0-setup-status" role="status" x-show="$store.computerSetup.notice" x-text="$store.computerSetup.notice"></p>
+  <template x-if="$store.computerSetup.snapshot"><div>
+    <p><strong x-text="$store.computerSetup.snapshot.host_label || 'No computer connected yet'"></strong><span x-show="$store.computerSetup.stale"> · Last known status</span></p>
+    <ol class="a0-setup-steps"><template x-for="step in $store.computerSetup.snapshot.steps" :key="step.id"><li>
+      <div class="a0-setup-step-title"><strong x-text="step.title"></strong><small x-text="$store.computerSetup.stateLabel(step)"></small></div>
+      <p x-text="step.detail"></p>
+      <button type="button" class="button" x-show="step.action === 'browser_settings'" @click="$store.computerSetup.browserSettings()">Open Browser settings</button>
+      <details><summary>Show me how</summary><p x-text="step.help_text || step.detail"></p></details>
+    </li></template></ol>
+  </div></template>
+  <div class="a0-setup-actions"><button type="button" class="button" :disabled="$store.computerSetup.busy" @click="$store.computerSetup.refresh()">Check again</button><a href="a0-launcher://setup" @click="$store.computerSetup.openLauncher()">Open Launcher on this computer</a><a href="https://github.com/agent0ai/a0-launcher/releases/latest" target="_blank" rel="noopener noreferrer">Get Launcher for your computer</a></div>
+  <details class="a0-setup-handoff"><summary>Continue on my computer</summary>
+    <p>No phone is required. You can also finish all setup from Launcher or this WebUI on your computer.</p>
+    <label><input type="checkbox" x-model="$store.computerSetup.browser"> Browser</label>
+    <label><input type="checkbox" x-model="$store.computerSetup.computer"> Computer</label>
+    <button type="button" class="button" :disabled="$store.computerSetup.busy || $store.computerSetup.stale || !!$store.computerSetup.pending || (!$store.computerSetup.browser && !$store.computerSetup.computer)" @click="$store.computerSetup.change('create')">Create setup code</button>
+    <button type="button" class="button" x-show="$store.computerSetup.pending" :disabled="$store.computerSetup.busy" @click="$store.computerSetup.forget()">Forget this code</button>
+    <p x-show="$store.computerSetup.pending">Forgetting removes this device's saved request. It expires on the server automatically and changes no permissions.</p>
+    <template x-if="$store.computerSetup.continuation"><div>
+      <p>Sign in to this same server in Launcher, open the computer icon, and enter:</p>
+      <p class="a0-setup-code" x-text="$store.computerSetup.continuation.code"></p>
+      <p>This code expires after 10 minutes. It shares setup progress, not passwords or permissions.</p>
+      <p x-show="$store.computerSetup.continuation.host_label">Computer: <strong x-text="$store.computerSetup.continuation.host_label"></strong></p>
+      <p role="status" x-text="$store.computerSetup.continuation.state === 'confirmed' ? 'Confirmed. Review and allow the selected access in Launcher.' : $store.computerSetup.continuation.state === 'cancelled' ? 'Setup request cancelled.' : 'Waiting for the other device.'"></p>
+      <button type="button" class="button" x-show="$store.computerSetup.continuation.state === 'claimed'" :disabled="$store.computerSetup.busy" @click="$store.computerSetup.change('confirm')">Confirm this computer</button>
+      <button type="button" class="button" x-show="$store.computerSetup.continuation.state !== 'cancelled'" :disabled="$store.computerSetup.busy" @click="$store.computerSetup.change('cancel')">Cancel setup request</button>
+    </div></template>
+  </details>
+</section></template></div>
+<style>
+.a0-setup{color:var(--color-text);max-width:48rem;margin:auto;padding:clamp(12px,3vw,24px)}
+.a0-setup p{line-height:1.5}.a0-setup-steps{list-style:none;padding:0;margin:24px 0}.a0-setup-steps li{padding:16px 0;border-top:1px solid var(--color-border)}
+.a0-setup-step-title{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}.a0-setup small{opacity:.7}.a0-setup summary{cursor:pointer;min-height:44px;align-content:center}
+.a0-setup-actions{display:flex;gap:20px;align-items:center;flex-wrap:wrap}.a0-setup-handoff{margin-top:20px}.a0-setup label{display:inline-flex;gap:8px;min-height:44px;align-items:center;margin-right:16px}
+.a0-setup-code{font-size:1.4rem;letter-spacing:.12em;user-select:all;overflow-wrap:anywhere}.a0-setup button{min-height:44px}.a0-setup-status{border-left:2px solid var(--color-border);padding-left:12px}
+</style></body></html>

@@ -29,6 +29,9 @@ _BASE_FEATURES = [
     "remote_file_tree",
     "token_status",
     "launcher_gateway",
+    "host_tasks_v1",
+    "host_viewer_v1",
+    "host_setup_v1",
     "launcher_gateway_file_write",
 ]
 

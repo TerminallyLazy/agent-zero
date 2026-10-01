@@ -16,8 +16,15 @@ DOCKER_BROWSER_RECOVERY_HELP = (
 
 async def get_tool_runtime(agent: Any):
     context_id = str(agent.context.id)
+    from plugins._a0_connector.helpers.host_targets import pinned_candidate, HostTargetError
+    pinned = pinned_candidate(context_id)
+    if pinned == []:
+        raise HostTargetError("Host target changed. Review Computer before further host actions.")
     config = get_browser_config(agent=agent)
     backend = str(config.get(RUNTIME_BACKEND_KEY) or "container").strip()
+
+    if pinned is not None and backend != "host_required":
+        raise HostTargetError("This chat is bound to a host. Container browser fallback is disabled.")
 
     if backend == "container":
         return await get_container_runtime(context_id)

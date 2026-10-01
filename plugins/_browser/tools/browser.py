@@ -464,6 +464,11 @@ class Browser(Tool):
             "context_id": chat_context_id or browser_context_id,
             "browser_context_id": browser_context_id,
         }
+        from plugins._a0_connector.helpers.host_targets import capture_identity
+        snapshot.update(capture_identity(chat_context_id))
+        snapshot["captured_at"] = time.time()
+        snapshot["source"] = "browser"
+        snapshot["outcome"] = "capture_received"
         update_payload: dict[str, Any] = {"browser_snapshot": snapshot}
         if local_path:
             uri = f"img://{local_path}&t={time.time()}"
